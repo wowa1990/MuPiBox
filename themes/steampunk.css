@@ -1,0 +1,110 @@
+.ion-page .home-header, .ion-page .home-content, .ion-page .medialist-header, .ion-page .medialist-content, .ion-page .player-header, .ion-page .player-content{
+        --ion-color-light: transparent !important;
+}
+
+.ion-page {
+        background-image: url("/theme-data/steampunk/steampunk-bg.jpg") !important;
+        background-size: cover !important;
+}
+
+@font-face {
+        font-family: "Shadow of Xizor";
+        src: url("/theme-data/steampunk/akaPosse.ttf") format("truetype");
+}
+
+
+.home-content .ion-text-nowrap, .medialist-content .ion-text-nowrap {
+        font-family: "Shadow of Xizor" !important;
+        font-size:170% !important;
+        color:#fd7f39 !important;
+}
+
+body .home-content, body .medialist-content, body .player-content{
+        --ion-background-color: transparent !important;
+}
+
+.home-content .circle-card img{
+        margin:auto !important;
+        display:block !important;
+        border-radius:50% !important;
+}
+
+.home-content .circle-card {
+        border-radius: 0px !important;
+        border: 0px solid transparent !important;
+        padding: 2.85rem !important;
+        background-color: transparent !important;
+        background-image: url("/theme-data/steampunk/steampunk-gear.png") !important;
+        background-size: 240px 240px !important;
+        display: flex;
+        justify-content: center;
+        box-shadow:0 0 0 0 !important;
+}
+
+.home-header .ion-color-light, .medialist-header .ion-color-light, .player-header .ion-color-light, .player-content .ion-color-light {
+        background-image: url("/theme-data/steampunk/steampunk-header.jpg") !important;
+        background-size: cover !important;
+}
+
+
+.medialist-content ion-card-header, .medialist-content ion-card{
+        background: transparent !important;
+}
+
+.medialist-content ion-card-header, .home-content ion-card-header{
+        border: 0 !important;
+        background: transparent !important;
+        max-height:60px !important;
+        background-image: url("/theme-data/steampunk/steampunk-header.jpg") !important;
+}
+
+.medialist-content .media-card {
+        margin-bottom:0px !important;
+        padding-bottom:0px !important;
+}
+
+.player-content ion-col ion-button {
+        height: 70px !important;
+        /* background-color:rgba(255,255,255,.1) !important;*/
+        margin-bottom:-35px !important;
+}
+
+.player-content ion-item{
+        background-image: url("/theme-data/steampunk/steampunk-header.jpg") !important;
+        --background: transparent !important;
+        box-shadow: 0 0 0 0 !imporant;
+}
+
+.player-content ion-range{
+        --knob-background: #C84700;
+        --bar-background-active: #C84700;
+        --bar-background: rgba(255,255,255,.3) !important;
+}
+
+.player-header ion-icon, .player-content ion-icon, .home-header ion-icon, .medialist-header ion-icon {
+        color: #fd7f39 !important;
+}
+
+.player-header .ion-activatable, .home-header .ion-activatable, .medialist-header .ion-activatable {
+        --background-hover-opacity: 0.3 !important;
+        --indicator-height: 4px !important;
+        --ion-color-contrast: #C84700 !important;
+}
+
+.medialist-header ion-title, .player-header ion-title {
+        color: #fd7f39 !important;
+        font-family: "Shadow of Xizor" !important;
+        font-size:170% !important;
+}
+
+.medialist-header ion-back-button, .player-header ion-back-button {
+        color: #fd7f39 !important;
+}
+
+body .edit-header, body .add-header, body .wifi-header {
+	--ion-color-light: #054b61 !important;
+}
+
+ion-spinner{
+        color: #fd7f39 !important;
+}

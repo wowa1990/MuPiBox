@@ -1,0 +1,30 @@
+/*
+BG body{--ion-background-color: #ccac8c;
+FG --ion-color-light: #553c2b;
+*/
+
+ion-range{
+    --knob-background: #553c2b;
+    --bar-background-active: #553c2b;
+    --bar-background: #553c2b;
+}
+
+body{
+	--ion-color-light: #553c2b !important;
+	--ion-item-background: transparent !important;
+}
+.md body{
+	--ion-background-color: #ccac8c !important;
+}
+
+ion-card {
+    --background: #553c2b !important;
+}
+
+ion-card-title.ion-text-nowrap.truncate-text {
+/*	color: #000000 !important;*/
+}
+
+ion-spinner{
+        color: #ccac8c !important;
+}

@@ -1,0 +1,43 @@
+/*
+BG body{--ion-background-color: #44afe2;
+FG --ion-color-light: #054b61;
+*/
+
+ion-range{
+    --knob-background: #054b61;
+    --bar-background-active: #054b61;
+    --bar-background: #054b61;
+}
+
+body{
+	--ion-color-light: #054b61 !important;
+	--ion-item-background: transparent !important;
+}
+.md body{
+	--ion-background-color: #44afe2 !important;
+}
+
+ion-card {
+    --background: #054b61 !important;
+}
+
+ion-card-title.ion-text-nowrap.truncate-text {
+/*	color: #000000 !important;*/
+}
+
+.mupi-loading-spinner{
+        #border-radius: 50% !important;
+        #background-color: #054b61;
+        #padding:2px;
+}
+
+ion-spinner{
+        #background-image: url('mupi.png') !important;
+        color: #44afe2 !important;
+        #width: 170px !important;
+        #height: 170px !important;
+        #background-size: 70%;
+        #background-position: center; 
+        #background-repeat: no-repeat;
+        #background-attachment: fixed;
+}

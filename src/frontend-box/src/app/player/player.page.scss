@@ -1,0 +1,78 @@
+ion-back-button {
+    --min-height: 70px;
+    --min-width: 120px;
+    --icon-font-size: 30px;
+}
+
+.cover-card {
+    margin-top: 20px;
+    width: 350px;
+    height: 350px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.cover-card img {
+    width: 350px;
+    max-width: 350px !important;
+    min-width: 350px !important;
+    margin: 0 auto !important;
+}
+
+.toolbar-album {
+	width: 650px;
+}
+
+.toolbar-tracktitle {
+	width: 650px;
+}
+
+.toolbar-tracknumber {
+	min-width: 80px;
+	max-width: 150px;
+}
+
+.truncate-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.small-icon {
+    font-size: 30px !important;
+}
+
+.controls {
+    .slider-row {
+        margin-top: 20px;
+        padding-left: 15px;
+        padding-right: 15px;
+
+        ion-range {
+            --bar-height: 6px;
+            --knob-size: 25px;
+            --knob-border-radius: 50%;
+            --bar-border-radius: 20px;
+            --knob-box-shadow: 0px 0px 0px 3px #fff;
+        }
+    }
+
+    .controls-row {
+        margin-top: 10px;
+
+        ion-button {
+            --padding-start: 35px;
+            --padding-end: 35px;
+            --padding-top: 20px;
+            --padding-bottom: 20px;
+            font-size: 30px !important;
+        }
+    }
+}
+
+.volume-button {
+    --background: #262626;
+}
+
+.mupihat-icon-container {
+    padding-right: 20px;
+}
