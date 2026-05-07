@@ -326,28 +326,14 @@ export class PlayerPage implements OnInit {
         return
       }
     } else if (this.media.type === 'library') {
+      // Backend handles the track jump (single atomic pt_step) and the seek
+      // internally — see playListAtTrack in spotify-control.js. Replaces the
+      // previous N×setTimeout(skipNext) loop, which was audible.
       this.media.category = this.media.resumelocalalbum
-      const success = await this.playerService.playMedia(this.media)
+      const success = await this.playerService.resumeLibraryMedia(this.media)
       if (!success) {
-        this.logService.error('[PlayerPage] Failed to start local library playback')
+        this.logService.error('[PlayerPage] Failed to resume local library playback')
         return
-      }
-      let j = 1
-      for (let i = 1; i < this.media.resumelocalcurrentTracknr; i++) {
-        setTimeout(() => {
-          this.skipNext()
-          j = i + 1
-          if (j === this.media.resumelocalcurrentTracknr) {
-            setTimeout(() => {
-              this.playerService.seekPosition(this.media.resumelocalprogressTime)
-            }, 2000)
-          }
-        }, 2000)
-      }
-      if (this.media.resumelocalcurrentTracknr === 1) {
-        setTimeout(() => {
-          this.playerService.seekPosition(this.media.resumelocalprogressTime)
-        }, 2000)
       }
     } else if (this.media.type === 'rss') {
       const success = await this.playerService.playMedia(this.media)

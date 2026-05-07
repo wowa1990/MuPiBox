@@ -1221,6 +1221,29 @@ function playMe() {
   }
 }
 
+// Library resume: jump straight to track N (1-indexed) and seek to its
+// position percentage. The previous frontend approach fired N skipNext
+// commands in close succession, which made mplayer play short fragments
+// of every intermediate track ("tick-tick-tick…" when resuming a long
+// audiobook). A single mplayer `pt_step (N-1)` is atomic — no audible
+// fragments. The two setTimeouts here cover the fact that mplayer doesn't
+// emit a "playlist loaded" event we can hook; empirically ~1.2s is enough
+// for the m3u parse plus the first track to start.
+function playListAtTrack(playedList, trackNr, progressPct) {
+  log.debug(
+    `${nowDate.toLocaleString()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
+  )
+  playList(playedList)
+  if (trackNr > 1) {
+    setTimeout(() => {
+      player.exec('pt_step', [trackNr - 1])
+    }, 1200)
+  }
+  if (progressPct > 1) {
+    setTimeout(() => player.seekPercent(progressPct), trackNr > 1 ? 2400 : 1200)
+  }
+}
+
 function playList(playedList) {
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
@@ -1601,7 +1624,23 @@ app.use((req, res) => {
   if (command.dir.includes('library')) {
     currentMeta.currentPlayer = 'mplayer'
     currentMeta.currentType = 'local'
-    playList(command.name)
+    // /musicsearch/library/resume/<cat:artist:title:trackNr:progressPct>
+    // Falls back to plain playList() if the suffix doesn't parse — this
+    // keeps the route forward-safe if the frontend ever sends a malformed
+    // resume URL, and isn't a regression because the only writer of this
+    // path is player.service.resumeLibraryMedia.
+    if (command.dir.includes('library/resume')) {
+      const parts = command.name.split(':')
+      const progressPct = Number.parseFloat(parts[parts.length - 1])
+      const trackNr = Number.parseInt(parts[parts.length - 2], 10)
+      if (parts.length >= 5 && Number.isFinite(progressPct) && Number.isFinite(trackNr) && trackNr >= 1) {
+        playListAtTrack(parts.slice(0, parts.length - 2).join(':'), trackNr, progressPct)
+      } else {
+        playList(command.name)
+      }
+    } else {
+      playList(command.name)
+    }
   }
 
   if (command.dir.includes('radio')) {
