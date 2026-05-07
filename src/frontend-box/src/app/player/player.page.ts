@@ -76,7 +76,6 @@ export class PlayerPage implements OnInit {
   resumemedia: Media
   albumStop: AlbumStop
   resumePlay = false
-  resumeIndex: number
   resumeTimer = 0
   resumeAdded = false
   cover = ''
@@ -399,16 +398,15 @@ export class PlayerPage implements OnInit {
       this.resumemedia.resumerssprogressTime = this.currentPlayedLocal?.progressTime || 0
     }
     this.resumemedia.category = 'resume'
-    if (this.resumemedia.index !== undefined) {
-      this.resumeIndex = this.resumemedia.index
-      this.resumemedia.index = undefined
-    }
-    if (this.resumePlay || this.resumeAdded) {
-      this.mediaService.editRawResumeAtIndex(this.resumeIndex, this.resumemedia)
-    } else {
-      this.mediaService.addRawResume(this.resumemedia)
+    this.resumemedia.index = undefined
+    // /api/addresume is a stable upsert via composite key (type +
+    // playlistid|showid|audiobookid|id || artist::title) — no need to
+    // remember an array index or distinguish add vs. edit on the client.
+    this.mediaService.addRawResume(this.resumemedia)
+    if (!this.resumeAdded && !this.resumePlay) {
+      // First save of a fresh listening session — trim the resume list to
+      // its configured cap. Skip when resumePlay because no append happens.
       this.resumeAdded = true
-      this.resumeIndex = 99
       setTimeout(() => {
         this.playerService.sendCmd(PlayerCmds.MAXRESUME)
       }, 2000)

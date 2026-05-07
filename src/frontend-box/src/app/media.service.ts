@@ -283,18 +283,6 @@ export class MediaService {
     })
   }
 
-  editRawResumeAtIndex(index: number, data: Media) {
-    const url = `${this.getApiBackendUrl()}/editresume`
-    const body = {
-      index,
-      data,
-    }
-
-    this.http.post(url, body, { responseType: 'text' }).subscribe((response) => {
-      this.response = response
-    })
-  }
-
   addRawResume(media: Media) {
     const url = `${this.getApiBackendUrl()}/addresume`
 

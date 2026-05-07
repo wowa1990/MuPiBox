@@ -611,49 +611,6 @@ app.post('/api/edit', (req, res) => {
   })
 })
 
-app.post('/api/editresume', (req, res) => {
-  if (fs.existsSync(resumeLock)) {
-    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume resume.json is locked`)
-    res.status(200).send('locked')
-    return
-  }
-  try {
-    fs.openSync(resumeLock, 'w')
-  } catch (err) {
-    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume failed to acquire lock:`, err)
-    res.status(200).send('error')
-    return
-  }
-  readResumeOrRecover('/api/editresume', (data) => {
-    const incomingKey = resumeKeyOf(req.body.data)
-    const existingIndex = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
-    if (existingIndex !== -1) {
-      data[existingIndex] = req.body.data
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced (key=${incomingKey}).`)
-    } else if (Number.isInteger(req.body.index) && req.body.index >= 0 && data.length > 0) {
-      // Frontend uses index=99 as a sentinel for "just added, dunno actual index";
-      // with the composite-key match above, that path now finds the real entry.
-      // Fall back to splice only if the caller really gave us a valid index — and
-      // never on an empty array.
-      const indexToReplace = Math.min(req.body.index, data.length - 1)
-      data.splice(indexToReplace, 1, req.body.data)
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced at index ${indexToReplace} (no key match).`)
-    } else {
-      data.push(req.body.data)
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry appended (no key match, no usable index, key=${incomingKey}).`)
-    }
-    jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
-      releaseLock(resumeLock, '/api/editresume')
-      if (writeError) {
-        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume write failed:`, writeError)
-        res.status(500).send('error')
-        return
-      }
-      res.status(200).send('ok')
-    })
-  })
-})
-
 app.get('/api/spotify/config', (_req, res) => {
   if (config?.spotify === undefined) {
     res.status(500).send('Could load spotify config.')
