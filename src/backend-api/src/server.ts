@@ -310,17 +310,23 @@ app.post('/api/quiethours/now', async (req, res) => {
 })
 
 app.get('/api/activeresume', (_req, res) => {
-  if (fs.existsSync(activeresumeFile)) {
-    jsonfile.readFile(activeresumeFile, (error, data) => {
-      if (error) {
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/activeresume read active_resume.json`)
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-        res.json([])
-      } else {
-        res.json(data)
-      }
-    })
+  // active_resume.json is a symlink that scripts/mupibox/check_network.sh
+  // creates the first time the network state is determined. Until that runs
+  // (briefly after boot) the symlink is missing — without an explicit empty
+  // response the request hung silently and the resume page stuck on Loading.
+  if (!fs.existsSync(activeresumeFile)) {
+    res.json([])
+    return
   }
+  jsonfile.readFile(activeresumeFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/activeresume read active_resume.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      res.json([])
+    } else {
+      res.json(data)
+    }
+  })
 })
 
 app.get('/api/network', (_req, res) => {
