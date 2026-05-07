@@ -38,7 +38,7 @@ import { CurrentMediaService } from '../current-media.service'
 import type { CurrentMPlayer } from '../current.mplayer'
 import type { CurrentSpotify } from '../current.spotify'
 import { LogService } from '../log.service'
-import type { Media } from '../media'
+import { isResumeEntry, type Media } from '../media'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { PlayerCmds, PlayerService } from '../player.service'
@@ -112,7 +112,7 @@ export class PlayerPage implements OnInit {
 
     if (this.router.currentNavigation()?.extras.state?.media) {
       this.media = this.router.currentNavigation().extras.state.media
-      if (this.media.category === 'resume') {
+      if (isResumeEntry(this.media)) {
         this.resumePlay = true
       }
       this.isExternalPlayback = false
@@ -338,7 +338,14 @@ export class PlayerPage implements OnInit {
       // Backend handles the track jump (single atomic pt_step) and the seek
       // internally — see playListAtTrack in spotify-control.js. Replaces the
       // previous N×setTimeout(skipNext) loop, which was audible.
-      this.media.category = this.media.resumelocalalbum
+      //
+      // Legacy entries (category overwritten with 'resume', original stashed
+      // in resumelocalalbum) need their real category restored before the
+      // backend can build the playlist path. New entries (isResume=true)
+      // already carry the original category — leave it alone.
+      if (this.media.category === 'resume' && this.media.resumelocalalbum) {
+        this.media.category = this.media.resumelocalalbum
+      }
       const success = await this.playerService.resumeLibraryMedia(this.media)
       if (!success) {
         this.logService.error('[PlayerPage] Failed to resume local library playback')
@@ -401,13 +408,22 @@ export class PlayerPage implements OnInit {
       this.resumemedia.resumespotifyprogress_ms = this.currentPlayedSpotify?.progress_ms || 0
       this.resumemedia.resumespotifyduration_ms = this.currentPlayedSpotify?.item.duration_ms || 0
     } else if (this.resumemedia.type === 'library') {
+      // resumelocalalbum stays for downgrade-safety: an older client still
+      // depends on it to recover the original category from a legacy-style
+      // entry. New readers prefer category directly.
       this.resumemedia.resumelocalalbum = this.resumemedia.category
       this.resumemedia.resumelocalcurrentTracknr = this.currentPlayedLocal?.currentTracknr || 0
       this.resumemedia.resumelocalprogressTime = this.currentPlayedLocal?.progressTime || 0
     } else if (this.resumemedia.type === 'rss') {
       this.resumemedia.resumerssprogressTime = this.currentPlayedLocal?.progressTime || 0
     }
-    this.resumemedia.category = 'resume'
+    // If we inherited a legacy category='resume' marker (in-memory artefact
+    // from a clicked-resume-card flow that didn't restore), recover the real
+    // category before persisting the new-format entry.
+    if (this.resumemedia.category === 'resume' && this.resumemedia.resumelocalalbum) {
+      this.resumemedia.category = this.resumemedia.resumelocalalbum
+    }
+    this.resumemedia.isResume = true
     this.resumemedia.index = undefined
     // /api/addresume is a stable upsert via composite key (type +
     // playlistid|showid|audiobookid|id || artist::title) — no need to

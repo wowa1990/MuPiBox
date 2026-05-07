@@ -7,7 +7,7 @@ import type { AlbumStop } from './albumstop'
 import type { Artist } from './artist'
 import type { CurrentMPlayer } from './current.mplayer'
 import type { CurrentSpotify } from './current.spotify'
-import type { CategoryType, Media, MediaInfoCache } from './media'
+import { isResumeEntry, type CategoryType, type Media, type MediaInfoCache } from './media'
 import { Mupihat } from './mupihat'
 import type { Network } from './network'
 import { NetworkService } from './network.service'
@@ -460,13 +460,13 @@ export class MediaService {
                 .pipe(overwriteArtist(item)),
               iif(
                 // Get media by show
-                () => !!(item.showid && item.showid.length > 0 && item.category !== 'resume'),
+                () => !!(item.showid && item.showid.length > 0 && !isResumeEntry(item)),
                 this.spotifyService
                   .getMediaByShowID(item.showid, item.category, item.index, item)
                   .pipe(overwriteArtist(item)),
                 iif(
                   // Get media by show supporting resume
-                  () => !!(item.showid && item.showid.length > 0 && item.category === 'resume'),
+                  () => !!(item.showid && item.showid.length > 0 && isResumeEntry(item)),
                   this.spotifyService
                     .getMediaByEpisode(
                       item.showid,
@@ -502,7 +502,7 @@ export class MediaService {
                       ),
                     iif(
                       // Get media by rss feed
-                      () => !!(item.type === 'rss' && item.id.length > 0 && item.category !== 'resume'),
+                      () => !!(item.type === 'rss' && item.id.length > 0 && !isResumeEntry(item)),
                       this.rssFeedService
                         .getRssFeed(item.id, item.category, item.index, item)
                         .pipe(overwriteArtist(item)),

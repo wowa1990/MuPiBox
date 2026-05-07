@@ -23,6 +23,7 @@ export function buildResumeMedia(
     resume.resumespotifyprogress_ms = spotify?.progress_ms || 0
     resume.resumespotifyduration_ms = spotify?.item?.duration_ms || 0
   } else if (resume.type === 'library') {
+    // resumelocalalbum kept for downgrade-safety; new readers prefer category.
     resume.resumelocalalbum = resume.category
     resume.resumelocalcurrentTracknr = local?.currentTracknr || 0
     resume.resumelocalprogressTime = local?.progressTime || 0
@@ -30,7 +31,13 @@ export function buildResumeMedia(
     resume.resumerssprogressTime = local?.progressTime || 0
   }
 
-  resume.category = 'resume'
+  // Recover the original category if we inherited the legacy in-memory
+  // 'resume' marker (e.g. AppComponent saver runs while currentMedia was
+  // populated from a clicked-resume-card flow).
+  if (resume.category === 'resume' && resume.resumelocalalbum) {
+    resume.category = resume.resumelocalalbum
+  }
+  resume.isResume = true
   resume.index = undefined
   return resume
 }
