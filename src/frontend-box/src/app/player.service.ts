@@ -159,6 +159,20 @@ export class PlayerService {
     return true
   }
 
+  // Library resume: hand the target track + position to the backend in one
+  // request so mplayer can do a single atomic pt_step instead of the page
+  // playing audible fragments of every intermediate track during an N-skip
+  // sequence. Position is a percentage (0–100), rounded — sub-percent
+  // precision is irrelevant for a resume hint.
+  async resumeLibraryMedia(media: Media): Promise<boolean> {
+    const trackNr = media.resumelocalcurrentTracknr || 1
+    const progressPct = Math.round(media.resumelocalprogressTime || 0)
+    const url = `musicsearch/library/resume/${encodeURIComponent(media.category)}:${encodeURIComponent(media.artist)}:${encodeURIComponent(media.title)}:${trackNr}:${progressPct}`
+    this.currentMediaService.set(media)
+    this.sendRequest(url)
+    return true
+  }
+
   private say(text: string) {
     this.getConfig().subscribe((config) => {
       let url = `say/${encodeURIComponent(text)}`
