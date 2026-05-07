@@ -216,7 +216,13 @@ export class PlayerPage implements OnInit {
     this.currentMediaService.markPlaying(activelyPlaying)
     if (this.playing) {
       this.resumeTimer++
-      if (this.resumeTimer % 30 === 0) {
+      // Cadence drives SD-card wear: a full resume.json rewrite per save.
+      // 60s gives ±60s position recovery in the worst case (kid pulls power
+      // cord with no clean shutdown), which beats abusing the SD card.
+      // Cap-transition and on-leave saves cover the "we know about to stop"
+      // moments precisely, so the cadence only needs to handle the rare
+      // hard-power-loss case.
+      if (this.resumeTimer % 60 === 0) {
         this.saveResumeFiles()
       }
     }
@@ -363,12 +369,13 @@ export class PlayerPage implements OnInit {
     }
   }
 
-  // The 30s saveResumeFiles cadence in updateProgress() is fine for normal use, but it
-  // can be up to 30 seconds stale when playback is cut off (playtime cap or quiet
-  // hours window). Save immediately on the entry transition to grace and to blocked
-  // so the resume entry captures (close to) the actual stop position. In the last
-  // minute before the playtime limit, also save more frequently so the grace-entry
-  // save isn't itself stale.
+  // Save immediately on the entry transition to grace and to blocked so the
+  // resume entry captures (close to) the actual stop position. The previous
+  // implementation also boosted the cadence to 5s in the last minute before
+  // the cap as a safety net, but the transition save is reliable (player.page
+  // here AND AppComponent's global effect both fire on the same status edge),
+  // and that safety net was costing ~12 extra SD-card rewrites per cap event
+  // for a ±5s position improvement that the kid won't notice.
   private checkPlaytimeForResume() {
     const status = this.playtimeService.status()
     if (!status.enabled) {
@@ -380,14 +387,6 @@ export class PlayerPage implements OnInit {
       if (cur === 'grace' || cur === 'blocked') {
         this.saveResumeFiles()
       }
-    } else if (
-      cur === 'normal' &&
-      this.playing &&
-      status.playtime.enabled &&
-      status.playtime.remainingSeconds <= 60 &&
-      this.resumeTimer % 5 === 0
-    ) {
-      this.saveResumeFiles()
     }
     this.prevPlaytimeState = cur
   }
