@@ -473,6 +473,41 @@ const resumeKeyOf = (m: { type?: string; id?: string; playlistid?: string; showi
     m?.playlistid || m?.showid || m?.audiobookid || m?.id || `${m?.artist || ''}::${m?.title || ''}`,
   ].join('|')
 
+// Resilient resume.json reader. ENOENT (fresh box, file not yet created) and
+// JSON parse errors both used to leave the endpoint stuck — every save would
+// 200 "error" until somebody manually fixed the file. Now: missing file is
+// treated as "[]"; corrupt file is moved aside to resume.json.bak.<epoch>
+// (so it can still be inspected) and the live save proceeds against an empty
+// array. The contract is "next save lands no matter what" — losing one
+// session of accumulated resume entries on rare corruption beats wedging the
+// feature for the rest of the box's lifetime.
+const readResumeOrRecover = (context: string, cb: (data: any[]) => void) => {
+  jsonfile.readFile(resumeFile, (error, data) => {
+    if (!error) {
+      cb(Array.isArray(data) ? data : [])
+      return
+    }
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      cb([])
+      return
+    }
+    const backupPath = `${resumeFile}.bak.${Date.now()}`
+    fs.rename(resumeFile, backupPath, (renameErr) => {
+      if (renameErr) {
+        console.error(
+          `${new Date().toLocaleString()}: [MuPiBox-Server] ${context} - resume.json unreadable and archive failed (${renameErr.message}); starting fresh.`,
+        )
+      } else {
+        console.warn(
+          `${new Date().toLocaleString()}: [MuPiBox-Server] ${context} - resume.json was unreadable, archived to ${backupPath} and starting fresh. Original error: ${error.message}`,
+        )
+      }
+      cb([])
+    })
+  })
+}
+
 app.post('/api/addresume', (req, res) => {
   if (fs.existsSync(resumeLock)) {
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume resume.json is locked`)
@@ -486,14 +521,7 @@ app.post('/api/addresume', (req, res) => {
     res.status(200).send('error')
     return
   }
-  jsonfile.readFile(resumeFile, (error, data) => {
-    if (error) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/addresume read resume.json`)
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-      releaseLock(resumeLock, '/api/addresume')
-      res.status(200).send('error')
-      return
-    }
+  readResumeOrRecover('/api/addresume', (data) => {
     const incomingKey = resumeKeyOf(req.body)
     const index = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
     if (index !== -1) {
@@ -596,14 +624,7 @@ app.post('/api/editresume', (req, res) => {
     res.status(200).send('error')
     return
   }
-  jsonfile.readFile(resumeFile, (error, data) => {
-    if (error) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/editresume read resume.json`)
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-      releaseLock(resumeLock, '/api/editresume')
-      res.status(200).send('error')
-      return
-    }
+  readResumeOrRecover('/api/editresume', (data) => {
     const incomingKey = resumeKeyOf(req.body.data)
     const existingIndex = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
     if (existingIndex !== -1) {
