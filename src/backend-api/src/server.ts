@@ -437,48 +437,70 @@ app.post('/api/add', (req, res) => {
   }
 })
 
-app.post('/api/addresume', (req, res) => {
-  try {
-    if (fs.existsSync(resumeLock)) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume resume.json is locked`)
-      res.status(200).send('locked')
-    } else {
-      fs.openSync(resumeLock, 'w')
-      jsonfile.readFile(resumeFile, (error, data) => {
-        if (error) {
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/add read resume.json`)
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-          res.status(200).send('error')
-        } else {
-          // Index des vorhandenen Eintrags mit derselben "id" finden
-          const index = data.findIndex((item: { id: any }) => item.id === req.body.id)
-
-          if (index !== -1) {
-            // Wenn der Eintrag vorhanden ist, ersetze ihn
-            data[index] = req.body
-            console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Entry with id ${req.body.id} replaced.`)
-          } else {
-            // Wenn der Eintrag nicht vorhanden ist, füge ihn hinzu
-            data.push(req.body)
-            console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] New entry with id ${req.body.id} added.`)
-          }
-
-          jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (error) => {
-            if (error) throw error
-            res.status(200).send('ok')
-          })
-        }
-      })
-      fs.unlink(resumeLock, (err) => {
-        if (err) throw err
-        console.log(
-          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume - resume.json unlocked, locked file deleted!`,
-        )
-      })
+// Lock cleanup — used in addresume/editresume to ensure the lock is always
+// removed once the read+write cycle has finished (success OR error).
+// Previously the unlink ran outside the readFile callback, so the lock was gone
+// before the write started — two concurrent calls could clobber each other.
+const releaseResumeLock = (context: string) => {
+  fs.unlink(resumeLock, (err) => {
+    if (err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] ${context} - failed to unlink resume lock:`, err)
     }
-  } catch (err) {
-    console.error(err)
+  })
+}
+
+// Stable composite key for resume entries. Plain `id` matching is unreliable
+// because Library/RSS items often don't carry an `id`; without a stable key
+// every id-less save would either overwrite the first id-less entry or pile
+// up duplicates. Mirror the resolution order frontend uses to dispatch
+// playback (playlistid/showid/audiobookid/id), and fall back to artist::title
+// as a last resort.
+const resumeKeyOf = (m: { type?: string; id?: string; playlistid?: string; showid?: string; audiobookid?: string; artist?: string; title?: string }) =>
+  [
+    m?.type || '',
+    m?.playlistid || m?.showid || m?.audiobookid || m?.id || `${m?.artist || ''}::${m?.title || ''}`,
+  ].join('|')
+
+app.post('/api/addresume', (req, res) => {
+  if (fs.existsSync(resumeLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume resume.json is locked`)
+    res.status(200).send('locked')
+    return
   }
+  try {
+    fs.openSync(resumeLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  jsonfile.readFile(resumeFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/addresume read resume.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      releaseResumeLock('/api/addresume')
+      res.status(200).send('error')
+      return
+    }
+    const incomingKey = resumeKeyOf(req.body)
+    const index = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
+    if (index !== -1) {
+      data[index] = req.body
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced (key=${incomingKey}).`)
+    } else {
+      data.push(req.body)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry added (key=${incomingKey}).`)
+    }
+    jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
+      releaseResumeLock('/api/addresume')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      res.status(200).send('ok')
+    })
+  })
 })
 
 app.post('/api/delete', (req, res) => {
@@ -548,51 +570,53 @@ app.post('/api/edit', (req, res) => {
 })
 
 app.post('/api/editresume', (req, res) => {
-  try {
-    if (fs.existsSync(resumeLock)) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume resume.json is locked`)
-      res.status(200).send('locked')
-    } else {
-      fs.openSync(resumeLock, 'w')
-      jsonfile.readFile(resumeFile, (error, data) => {
-        if (error) {
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/editresume read resume.json`)
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-          res.status(200).send('error')
-        } else {
-          // Prüfe, ob die ID bereits im Array existiert
-          const existingIndex = data.findIndex((item: { id: any }) => item.id === req.body.data.id)
-
-          if (existingIndex !== -1) {
-            // Ersetze den vorhandenen Eintrag mit derselben ID
-            data[existingIndex] = req.body.data
-            console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Entry with id ${req.body.data.id} replaced.`)
-          } else {
-            // Bestimme den zu verwendenden Index basierend auf der Array-Länge
-            const indexToReplace = Math.min(req.body.index, data.length - 1)
-
-            // Ersetze den Eintrag am berechneten Index oder füge hinzu
-            data.splice(indexToReplace, 1, req.body.data)
-            console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Entry at index ${indexToReplace} replaced.`)
-          }
-
-          // Speichere die geänderten Daten zurück in die Datei
-          jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (error) => {
-            if (error) throw error
-            res.status(200).send('ok')
-          })
-        }
-      })
-      fs.unlink(resumeLock, (err) => {
-        if (err) throw err
-        console.log(
-          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume - resume.json unlocked, locked file deleted!`,
-        )
-      })
-    }
-  } catch (err) {
-    console.error(err)
+  if (fs.existsSync(resumeLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume resume.json is locked`)
+    res.status(200).send('locked')
+    return
   }
+  try {
+    fs.openSync(resumeLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  jsonfile.readFile(resumeFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/editresume read resume.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      releaseResumeLock('/api/editresume')
+      res.status(200).send('error')
+      return
+    }
+    const incomingKey = resumeKeyOf(req.body.data)
+    const existingIndex = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
+    if (existingIndex !== -1) {
+      data[existingIndex] = req.body.data
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced (key=${incomingKey}).`)
+    } else if (Number.isInteger(req.body.index) && req.body.index >= 0 && data.length > 0) {
+      // Frontend uses index=99 as a sentinel for "just added, dunno actual index";
+      // with the composite-key match above, that path now finds the real entry.
+      // Fall back to splice only if the caller really gave us a valid index — and
+      // never on an empty array.
+      const indexToReplace = Math.min(req.body.index, data.length - 1)
+      data.splice(indexToReplace, 1, req.body.data)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced at index ${indexToReplace} (no key match).`)
+    } else {
+      data.push(req.body.data)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry appended (no key match, no usable index, key=${incomingKey}).`)
+    }
+    jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
+      releaseResumeLock('/api/editresume')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      res.status(200).send('ok')
+    })
+  })
 })
 
 app.get('/api/spotify/config', (_req, res) => {
