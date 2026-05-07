@@ -136,19 +136,23 @@ app.get('/api/data', (_req, res) => {
 })
 
 app.get('/api/resume', (_req, res) => {
-  if (fs.existsSync(resumeFile)) {
-    tryReadFile(resumeFile)
-      .then((data) => {
-        res.json(data)
-      })
-      .catch((error) => {
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/resume read resume.json`)
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-        res.status(500).send('Internal Server Error')
-      })
-  } else {
-    res.status(404).send(`File Not Found: ${resumeFile}`)
+  // Mirror /api/data and /api/activeresume: callers always expect an array.
+  // Until the first save resume.json doesn't exist (created on demand by
+  // check_network.sh or by the first /api/addresume), and the previous 404
+  // crashed callers that did `.length` / `.findIndex` on the response.
+  if (!fs.existsSync(resumeFile)) {
+    res.json([])
+    return
   }
+  tryReadFile(resumeFile)
+    .then((data) => {
+      res.json(data)
+    })
+    .catch((error) => {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/resume read resume.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      res.json([])
+    })
 })
 
 app.get('/api/mupihat', (_req, res) => {
