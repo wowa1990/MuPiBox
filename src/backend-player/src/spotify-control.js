@@ -878,7 +878,7 @@ function setAccessToken(token) {
 /*called in all error cases*/
 /*token expired and no_device error are handled explicitly*/
 function handleSpotifyError(err, from) {
-  if (err.body.error?.status === 401) {
+  if (err?.body?.error?.status === 401) {
     log.debug(`${nowDate.toLocaleString()}: access token expired, refreshing...`)
     log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
     counter.counterrorAccessToken++
@@ -888,7 +888,7 @@ function handleSpotifyError(err, from) {
     if (currentMeta.activeSpotifyId !== '0') {
       refreshToken()
     }
-  } else if (err.body.error?.status === 400) {
+  } else if (err?.body?.error?.status === 400) {
     log.debug(`${nowDate.toLocaleString()}: invalid id`)
     log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
     log.debug(`${nowDate.toLocaleString()}: ${err}`)
@@ -899,7 +899,7 @@ function handleSpotifyError(err, from) {
     if (currentMeta.activeSpotifyId !== '0') {
       setActiveDevice()
     }
-  } else if (err.body.error?.status === 429) {
+  } else if (err?.body?.error?.status === 429) {
     log.debug(`${nowDate.toLocaleString()}: To many requests on th spotify web api`)
     log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
     log.debug(`${nowDate.toLocaleString()}: ${err}`)
