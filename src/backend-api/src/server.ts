@@ -415,46 +415,48 @@ app.post('/api/addwlan', (req, res) => {
 })
 
 app.post('/api/add', (req, res) => {
-  try {
-    if (fs.existsSync(dataLock)) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/add data.json is locked`)
-      res.status(200).send('locked')
-    } else {
-      fs.openSync(dataLock, 'w')
-      jsonfile.readFile(dataFile, (error, data) => {
-        if (error) {
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/add read data.json`)
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-          res.status(200).send('error')
-        } else {
-          data.push(req.body)
-
-          jsonfile.writeFile(dataFile, data, { spaces: 4 }, (error) => {
-            if (error) throw error
-            res.status(200).send('ok')
-          })
-        }
-      })
-      fs.unlink(dataLock, (err) => {
-        if (err) throw err
-        console.log(
-          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/add - data.json unlocked, locked file deleted!`,
-        )
-      })
-    }
-  } catch (err) {
-    console.error(err)
+  if (fs.existsSync(dataLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/add data.json is locked`)
+    res.status(200).send('locked')
+    return
   }
+  try {
+    fs.openSync(dataLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/add failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  jsonfile.readFile(dataFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/add read data.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      releaseLock(dataLock, '/api/add')
+      res.status(200).send('error')
+      return
+    }
+    data.push(req.body)
+    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+      releaseLock(dataLock, '/api/add')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/add write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      res.status(200).send('ok')
+    })
+  })
 })
 
-// Lock cleanup — used in addresume/editresume to ensure the lock is always
-// removed once the read+write cycle has finished (success OR error).
-// Previously the unlink ran outside the readFile callback, so the lock was gone
-// before the write started — two concurrent calls could clobber each other.
-const releaseResumeLock = (context: string) => {
-  fs.unlink(resumeLock, (err) => {
+// Lock cleanup — used by every read-modify-write endpoint (data.json + resume.json)
+// to ensure the lock is always removed once the read+write cycle has finished
+// (success OR error). The historical pattern called fs.unlink outside the async
+// readFile callback, so the lock was gone before the write started — two
+// concurrent calls could clobber each other.
+const releaseLock = (lockPath: string, context: string) => {
+  fs.unlink(lockPath, (err) => {
     if (err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] ${context} - failed to unlink resume lock:`, err)
+      console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] ${context} - failed to unlink lock:`, err)
     }
   })
 }
@@ -488,7 +490,7 @@ app.post('/api/addresume', (req, res) => {
     if (error) {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/addresume read resume.json`)
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-      releaseResumeLock('/api/addresume')
+      releaseLock(resumeLock, '/api/addresume')
       res.status(200).send('error')
       return
     }
@@ -502,7 +504,7 @@ app.post('/api/addresume', (req, res) => {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry added (key=${incomingKey}).`)
     }
     jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
-      releaseResumeLock('/api/addresume')
+      releaseLock(resumeLock, '/api/addresume')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume write failed:`, writeError)
         res.status(500).send('error')
@@ -514,69 +516,71 @@ app.post('/api/addresume', (req, res) => {
 })
 
 app.post('/api/delete', (req, res) => {
-  try {
-    if (fs.existsSync(dataLock)) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete data.json is locked`)
-      res.status(200).send('locked')
-    } else {
-      fs.openSync(dataLock, 'w')
-      jsonfile.readFile(dataFile, (error, data) => {
-        if (error) {
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/delete read data.json`)
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-          res.status(200).send('error')
-        } else {
-          data.splice(req.body.index, 1)
-
-          jsonfile.writeFile(dataFile, data, { spaces: 4 }, (error) => {
-            if (error) throw error
-            res.status(200).send('ok')
-          })
-        }
-      })
-      fs.unlink(dataLock, (err) => {
-        if (err) throw err
-        console.log(
-          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete - data.json unlocked, locked file deleted!`,
-        )
-      })
-    }
-  } catch (err) {
-    console.error(err)
+  if (fs.existsSync(dataLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete data.json is locked`)
+    res.status(200).send('locked')
+    return
   }
+  try {
+    fs.openSync(dataLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  jsonfile.readFile(dataFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/delete read data.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      releaseLock(dataLock, '/api/delete')
+      res.status(200).send('error')
+      return
+    }
+    data.splice(req.body.index, 1)
+    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+      releaseLock(dataLock, '/api/delete')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      res.status(200).send('ok')
+    })
+  })
 })
 
 app.post('/api/edit', (req, res) => {
-  try {
-    if (fs.existsSync(dataLock)) {
-      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit data.json is locked`)
-      res.status(200).send('locked')
-    } else {
-      fs.openSync(dataLock, 'w')
-      jsonfile.readFile(dataFile, (error, data) => {
-        if (error) {
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/edit read data.json`)
-          console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-          res.status(200).send('error')
-        } else {
-          data.splice(req.body.index, 1, req.body.data)
-
-          jsonfile.writeFile(dataFile, data, { spaces: 4 }, (error) => {
-            if (error) throw error
-            res.status(200).send('ok')
-          })
-        }
-      })
-      fs.unlink(dataLock, (err) => {
-        if (err) throw err
-        console.log(
-          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit - data.json unlocked, locked file deleted!`,
-        )
-      })
-    }
-  } catch (err) {
-    console.error(err)
+  if (fs.existsSync(dataLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit data.json is locked`)
+    res.status(200).send('locked')
+    return
   }
+  try {
+    fs.openSync(dataLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  jsonfile.readFile(dataFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/edit read data.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      releaseLock(dataLock, '/api/edit')
+      res.status(200).send('error')
+      return
+    }
+    data.splice(req.body.index, 1, req.body.data)
+    jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
+      releaseLock(dataLock, '/api/edit')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/edit write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      res.status(200).send('ok')
+    })
+  })
 })
 
 app.post('/api/editresume', (req, res) => {
@@ -596,7 +600,7 @@ app.post('/api/editresume', (req, res) => {
     if (error) {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/editresume read resume.json`)
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-      releaseResumeLock('/api/editresume')
+      releaseLock(resumeLock, '/api/editresume')
       res.status(200).send('error')
       return
     }
@@ -618,7 +622,7 @@ app.post('/api/editresume', (req, res) => {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry appended (no key match, no usable index, key=${incomingKey}).`)
     }
     jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {
-      releaseResumeLock('/api/editresume')
+      releaseLock(resumeLock, '/api/editresume')
       if (writeError) {
         console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/editresume write failed:`, writeError)
         res.status(500).send('error')
