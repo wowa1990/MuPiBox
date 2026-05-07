@@ -204,6 +204,16 @@ export class PlayerPage implements OnInit {
     // takeUntilDestroyed-bound subscriptions in ngOnInit — read them
     // directly here instead of re-subscribing on every tick.
     this.playing = !this.currentPlayedLocal?.pause
+    // Drive CurrentMediaService's active-listening counter from here —
+    // determined per-tick from the actual SDK state for Spotify or mplayer
+    // state for local content. The service used to subscribe to current$/
+    // local$ itself, but those subscriptions kept the Spotify SDK polling
+    // hot from app bootstrap and broke Connect device activation.
+    const activelyPlaying =
+      this.media?.type === 'spotify'
+        ? this.currentPlayedSpotify?.is_playing === true
+        : this.currentPlayedLocal?.playing === true
+    this.currentMediaService.markPlaying(activelyPlaying)
     if (this.playing) {
       this.resumeTimer++
       // Cadence drives SD-card wear: a full resume.json rewrite per save.
