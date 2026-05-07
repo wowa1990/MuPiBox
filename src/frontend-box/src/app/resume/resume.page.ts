@@ -97,7 +97,11 @@ export class ResumePage extends SwiperIonicEventsHelper {
             break
           }
         }
-        clickedMedia.category = 'resume'
+        // Signals "open in resume mode" to the player page. The legacy path
+        // also overwrote `category` with 'resume' here; keep the real
+        // category intact so library playback can build its path without
+        // having to reconstruct it from resumelocalalbum.
+        clickedMedia.isResume = true
         const navigationExtras: NavigationExtras = {
           state: {
             media: clickedMedia,

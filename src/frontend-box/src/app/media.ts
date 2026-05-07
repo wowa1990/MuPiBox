@@ -21,6 +21,11 @@ export interface Media {
   cover?: string
   type: string
   category: CategoryType
+  // Marks this Media as a resume entry. New code uses this flag exclusively;
+  // the historical convention of overwriting `category` with the literal
+  // 'resume' is still recognised on read for entries written by older
+  // versions, but no longer produced.
+  isResume?: boolean
   artistcover?: string
   shuffle?: boolean
   aPartOfAll?: boolean
@@ -37,6 +42,13 @@ export interface Media {
   resumelocalprogressTime?: number
   resumerssprogressTime?: number
 }
+
+// Reads as "is this Media a resume entry?" — true for entries written by the
+// new isResume-flag path AND for legacy entries where category was overwritten
+// with 'resume'. Use everywhere instead of bare category comparisons so the
+// same filter works through the migration window.
+export const isResumeEntry = (m: Pick<Media, 'isResume' | 'category'> | null | undefined): boolean =>
+  !!m && (m.isResume === true || m.category === 'resume')
 
 // Cache interface for storing album/playlist/show/audiobook information
 export interface MediaInfoCache {
