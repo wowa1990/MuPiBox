@@ -2,11 +2,10 @@ import { HttpClient } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, Signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone'
-import { distinctUntilChanged, interval, map, Observable, switchMap } from 'rxjs'
+import { distinctUntilChanged, firstValueFrom, interval, map, Observable, switchMap } from 'rxjs'
+import { take } from 'rxjs/operators'
 import { environment } from 'src/environments/environment'
 import { CurrentMediaService } from './current-media.service'
-import type { CurrentMPlayer } from './current.mplayer'
-import type { CurrentSpotify } from './current.spotify'
 import { DisplayManagerService } from './display-manager.service'
 import { ExternalPlaybackNavigatorService } from './external-playback-navigator.service'
 import { MediaService } from './media.service'
@@ -28,11 +27,6 @@ export class AppComponent {
   protected monitorOff: Signal<boolean>
   protected playtimeBlocked: Signal<boolean>
 
-  // Latest state snapshots — kept fresh by ngOnInit subscriptions on
-  // mediaService.current$/local$ so the resume-on-cap effect can read them
-  // synchronously when a transition fires.
-  private latestSpotify: CurrentSpotify | null = null
-  private latestLocal: CurrentMPlayer | null = null
   // Track previous playtime state to detect normal -> grace/blocked transitions.
   // 'unknown' on first tick avoids spurious save before we know the baseline.
   private prevPlaytimeState: PlaytimePlayState | 'unknown' = 'unknown'
@@ -59,22 +53,22 @@ export class AppComponent {
       return s.enabled === true && s.state === 'blocked'
     })
 
-    // Keep player-state snapshots fresh. AppComponent is the root component
-    // and lives for the kiosk's lifetime, so these subscriptions never need
-    // teardown; they also cause MediaService to keep its shared polling alive.
-    this.mediaService.current$.subscribe((s) => {
-      this.latestSpotify = s
-    })
-    this.mediaService.local$.subscribe((l) => {
-      this.latestLocal = l
-    })
-
     // Global resume-on-cap: when playtime/quiet hours transitions
     // normal -> grace or normal -> blocked, persist a resume entry for the
     // currently-playing Media. This is what makes "weiterhören wo aufgehört"
     // work even if the user listens from the home page (player page unmounted,
     // its in-page saver inert). Backend's composite-key dedup means the entry
     // overwrites any existing resume for the same item.
+    //
+    // Player-state snapshots (current$/local$) are read on-demand via
+    // firstValueFrom — eagerly subscribing here previously kept the shared
+    // mediaService observables (and the Spotify SDK's getCurrentState
+    // polling) hot from app bootstrap, which interfered with Spotify Connect
+    // device activation. Now the upstream is only subscribed during the
+    // brief moment of saving on cap.
+    //
+    // Gated on shouldPersistResume() so a wrong-cover-touch right before a
+    // cap doesn't leave a stale entry in the resume swiper.
     effect(() => {
       const status = playtimeService.status()
       if (!status.enabled) {
@@ -86,11 +80,25 @@ export class AppComponent {
       this.prevPlaytimeState = cur
       if (prev === 'unknown' || prev === cur) return
       if (cur !== 'grace' && cur !== 'blocked') return
-
-      const source = this.currentMediaService.get()
-      if (!source) return
-      const resumeMedia = buildResumeMedia(source, this.latestSpotify, this.latestLocal)
-      this.mediaService.addRawResume(resumeMedia)
+      if (!this.currentMediaService.shouldPersistResume()) return
+      void this.persistResumeOnCap()
     })
+  }
+
+  private async persistResumeOnCap(): Promise<void> {
+    const source = this.currentMediaService.get()
+    if (!source) return
+    // One-shot reads: subscribe long enough to grab the latest cached
+    // emission (or the next one if the upstream isn't running) and
+    // unsubscribe. Player.page keeps the upstream hot while it's mounted,
+    // so when the user is in the player view this resolves immediately
+    // from the shareReplay buffer; from the home page it spins the
+    // upstream up briefly (one tick of interval(1000)) and tears it down.
+    const [spotify, local] = await Promise.all([
+      firstValueFrom(this.mediaService.current$.pipe(take(1))).catch(() => null),
+      firstValueFrom(this.mediaService.local$.pipe(take(1))).catch(() => null),
+    ])
+    const resumeMedia = buildResumeMedia(source, spotify, local)
+    this.mediaService.addRawResume(resumeMedia)
   }
 }
