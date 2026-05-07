@@ -543,6 +543,49 @@ app.post('/api/addresume', (req, res) => {
   })
 })
 
+// Drop a single resume entry by composite key. Used by the backend-player
+// when a library playlist finishes naturally (mplayer playlist-finish) so
+// "weiterhören" doesn't keep offering the position of an album the kid has
+// listened all the way through. Body shape mirrors a Media (only the key
+// fields matter — type + one of playlistid/showid/audiobookid/id, or
+// artist::title as a fallback). Idempotent: if no entry matches, 200 ok.
+app.post('/api/deleteresume', (req, res) => {
+  if (fs.existsSync(resumeLock)) {
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/deleteresume resume.json is locked`)
+    res.status(200).send('locked')
+    return
+  }
+  try {
+    fs.openSync(resumeLock, 'w')
+  } catch (err) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/deleteresume failed to acquire lock:`, err)
+    res.status(200).send('error')
+    return
+  }
+  readResumeOrRecover('/api/deleteresume', (data) => {
+    const targetKey = resumeKeyOf(req.body)
+    const remaining = data.filter((item: any) => resumeKeyOf(item) !== targetKey)
+    if (remaining.length === data.length) {
+      releaseLock(resumeLock, '/api/deleteresume')
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/deleteresume no entry matched (key=${targetKey}).`)
+      res.status(200).send('ok')
+      return
+    }
+    jsonfile.writeFile(resumeFile, remaining, { spaces: 4 }, (writeError) => {
+      releaseLock(resumeLock, '/api/deleteresume')
+      if (writeError) {
+        console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/deleteresume write failed:`, writeError)
+        res.status(500).send('error')
+        return
+      }
+      console.log(
+        `${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry removed (key=${targetKey}, ${data.length - remaining.length} match(es)).`,
+      )
+      res.status(200).send('ok')
+    })
+  })
+})
+
 app.post('/api/delete', (req, res) => {
   if (fs.existsSync(dataLock)) {
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/delete data.json is locked`)
