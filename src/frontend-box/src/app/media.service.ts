@@ -501,8 +501,14 @@ export class MediaService {
                         overwriteArtist(item),
                       ),
                     iif(
-                      // Get media by rss feed
-                      () => !!(item.type === 'rss' && item.id.length > 0 && !isResumeEntry(item)),
+                      // Get media by rss feed.
+                      // MED-10: previously gated on `!isResumeEntry(item)` —
+                      // RSS resume entries skipped enrichment and rendered
+                      // with whatever stale title/cover/episode-list was
+                      // saved at last play. Drop the gate so resume entries
+                      // also get fresh feed data; overwriteArtist preserves
+                      // the user-visible artist label.
+                      () => !!(item.type === 'rss' && item.id.length > 0),
                       this.rssFeedService
                         .getRssFeed(item.id, item.category, item.index, item)
                         .pipe(overwriteArtist(item)),
