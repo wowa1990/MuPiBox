@@ -46,6 +46,16 @@ if (!muPiBoxConfig) {
 // Watch the directory containing the resolved file (the local path is typically a symlink
 // to /etc/mupibox/mupiboxconfig.json on the box). Watching the directory rather than the
 // symlinked file is what makes atomic-rename writes (admin uses `mv tmp dest`) trigger.
+//
+// History: an earlier version of this watcher had no 'error' listener, no debounce, and
+// blindly read mid-write. On an admin save (`sudo mv` from /tmp into /etc/mupibox/) the
+// rename briefly produced EACCES (file owned by www-data while move was in flight) and/or
+// ENOENT (cross-fs mv = unlink + create, with a window where the path didn't exist). The
+// readFileSync errors were caught — but the FSWatcher itself emitted three rapid-fire
+// 'change' events for the same atomic save, and on box restarts where the symlink target
+// got rebuilt, the FSWatcher emitted an 'error' event with no listener attached, which
+// Node turns into an uncaught exception → process exit. pm2 saw 5 crash-restarts per
+// 30 minutes, manifesting as audio glitches every few minutes.
 function setupMupiBoxConfigWatch() {
   let watchDir
   let watchFile
@@ -60,20 +70,59 @@ function setupMupiBoxConfigWatch() {
     )
     return
   }
-  try {
-    fs.watch(watchDir, { persistent: false }, (_event, filename) => {
-      if (!filename || filename.toString() !== watchFile) return
+  // Re-watch on watcher failure (e.g. directory replaced during update). Capped at one
+  // reattach per 5s so a permanently broken setup just disables live-reload silently.
+  let lastReattach = 0
+  const startWatch = () => {
+    let watcher
+    try {
+      watcher = fs.watch(watchDir, { persistent: false }, (_event, filename) => {
+        if (!filename || filename.toString() !== watchFile) return
+        scheduleReload()
+      })
+    } catch (err) {
+      console.warn(`${new Date().toLocaleString()}: [Config] fs.watch failed (live-reload disabled):`, err)
+      return
+    }
+    watcher.on('error', (err) => {
+      console.warn(`${new Date().toLocaleString()}: [Config] Watcher error, attempting reattach:`, err)
+      try {
+        watcher.close()
+      } catch {
+        // best-effort
+      }
+      const now = Date.now()
+      if (now - lastReattach > 5000) {
+        lastReattach = now
+        setTimeout(startWatch, 250)
+      } else {
+        console.warn(`${new Date().toLocaleString()}: [Config] Watcher reattach skipped (rate-limited), live-reload disabled until next pm2 restart`)
+      }
+    })
+    console.log(`${new Date().toLocaleString()}: [Config] Watching ${watchDir}/${watchFile} for live-reload`)
+  }
+
+  // Debounce: a single `sudo mv` from PHP fires three FSWatcher events in quick
+  // succession (rename, attribute change, possibly chmod). Coalesce them into one
+  // re-read so the log isn't spammed with three "Reloaded" lines per save, and the
+  // mid-write race window narrows (we wait until everyone's done writing before reading).
+  let reloadTimer = null
+  const scheduleReload = () => {
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => {
+      reloadTimer = null
       const fresh = readMupiBoxConfigFromDisk()
       if (fresh) {
         muPiBoxConfig = fresh
         console.log(`${new Date().toLocaleString()}: [Config] Reloaded mupiboxconfig.json (live)`)
       }
-      // On parse failure we keep the old in-memory copy — fs.watch can fire mid-write.
-    })
-    console.log(`${new Date().toLocaleString()}: [Config] Watching ${watchDir}/${watchFile} for live-reload`)
-  } catch (err) {
-    console.warn(`${new Date().toLocaleString()}: [Config] fs.watch failed (live-reload disabled):`, err)
+      // On parse failure we keep the old in-memory copy. fs.watch can still fire
+      // mid-write occasionally even with debounce, so a parse error here is normal
+      // and silently ignored — the next event will pick up the final state.
+    }, 100)
   }
+
+  startWatch()
 }
 setupMupiBoxConfigWatch()
 
