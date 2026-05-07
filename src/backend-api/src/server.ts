@@ -122,17 +122,22 @@ app.get('/api/rssfeed', async (req, res) => {
 })
 
 app.get('/api/data', (_req, res) => {
-  if (fs.existsSync(activedataFile)) {
-    jsonfile.readFile(activedataFile, (error, data) => {
-      if (error) {
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/data read active_data.json`)
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-        res.json([])
-      } else {
-        res.json(data)
-      }
-    })
+  // Mirror /api/resume: when active_data.json is missing the frontend would
+  // otherwise hang on its loading spinner, because the previous code's missing
+  // else-branch never sent a response.
+  if (!fs.existsSync(activedataFile)) {
+    res.json([])
+    return
   }
+  jsonfile.readFile(activedataFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/data read active_data.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      res.json([])
+    } else {
+      res.json(data)
+    }
+  })
 })
 
 app.get('/api/resume', (_req, res) => {
@@ -156,17 +161,22 @@ app.get('/api/resume', (_req, res) => {
 })
 
 app.get('/api/mupihat', (_req, res) => {
-  if (fs.existsSync(mupihat)) {
-    jsonfile.readFile(mupihat, (error, data) => {
-      if (error) {
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/mupihat read mupihat.json`)
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-        res.json([])
-      } else {
-        res.json(data)
-      }
-    })
+  // Same hang-without-file as /api/data: a box without a MuPiHAT board
+  // simply has no /tmp/mupihat.json — return an empty object rather than
+  // letting the request stall.
+  if (!fs.existsSync(mupihat)) {
+    res.json({})
+    return
   }
+  jsonfile.readFile(mupihat, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/mupihat read mupihat.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      res.json({})
+    } else {
+      res.json(data)
+    }
+  })
 })
 
 // Playback time tracking written by backend-player to /tmp/playtime.json (tmpfs).
@@ -426,17 +436,21 @@ app.get('/api/albumstop', (_req, res) => {
 })
 
 app.get('/api/wlan', (_req, res) => {
-  if (fs.existsSync(wlanFile)) {
-    jsonfile.readFile(wlanFile, (error, data) => {
-      if (error) {
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/wlan read wlan.json`)
-        console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
-        res.json([])
-      } else {
-        res.json(data)
-      }
-    })
+  // Same shape as /api/data and /api/mupihat — empty array when the file
+  // hasn't been written yet, instead of an open connection that never closes.
+  if (!fs.existsSync(wlanFile)) {
+    res.json([])
+    return
   }
+  jsonfile.readFile(wlanFile, (error, data) => {
+    if (error) {
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Error /api/wlan read wlan.json`)
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
+      res.json([])
+    } else {
+      res.json(data)
+    }
+  })
 })
 
 app.post('/api/addwlan', (req, res) => {
@@ -446,8 +460,18 @@ app.post('/api/addwlan', (req, res) => {
     if (error) out = []
     out.push(req.body)
 
-    jsonfile.writeFile(wlanFile, out, { spaces: 4 }, (error) => {
-      if (error) throw error
+    jsonfile.writeFile(wlanFile, out, { spaces: 4 }, (writeError) => {
+      // The previous code did `if (writeError) throw error` — async-throw
+      // inside a node-style callback isn't catchable by Express, so it
+      // crashed the entire backend-api process. Send a 500 instead.
+      if (writeError) {
+        console.error(
+          `${new Date().toLocaleString()}: [MuPiBox-Server] /api/addwlan write failed:`,
+          writeError,
+        )
+        res.status(500).send('Failed to persist WLAN entry')
+        return
+      }
       res.status(200).send('ok')
     })
   })
