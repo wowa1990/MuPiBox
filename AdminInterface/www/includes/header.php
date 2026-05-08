@@ -38,10 +38,33 @@
 
 	$change=0;
 	$CHANGE_TXT="<div id='lbinfo'><ul id='lbinfo'>";
+
+	// R3-B-1: header.php is included by every admin page and previously
+	// fired three exec()s on every render — `sudo iwgetid -r`,
+	// `sudo iwconfig wlan0`, and the websockify ps-grep below. Each
+	// exec forks a sudo helper and (for iw*) opens a netlink socket;
+	// across navigation that's ~60 wasted forks/min and noticeable lag
+	// on the Pi. Cache results to /tmp with a 5s TTL — fresh enough
+	// that the wifi-quality readout stays current, but coarse enough
+	// to absorb burst navigation.
+	function mupibox_cached_exec($cacheKey, $ttlSeconds, $command) {
+		$cacheFile = '/tmp/.mupibox.headercache.' . $cacheKey;
+		if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttlSeconds) {
+			$cached = @file_get_contents($cacheFile);
+			if ($cached !== false) {
+				return rtrim($cached, "\n");
+			}
+		}
+		$value = (string)exec($command);
+		// Use LOCK_EX so concurrent header renders don't mangle the file.
+		@file_put_contents($cacheFile, $value, LOCK_EX);
+		return $value;
+	}
+
 	$commandSSID="sudo iwgetid -r";
-	$WIFI=exec($commandSSID);
+	$WIFI = mupibox_cached_exec('wifi_ssid', 5, $commandSSID);
 	$commandLQ="sudo iwconfig wlan0 | awk '/Link Quality/{split($2,a,\"=|/\");print int((a[2]/a[3])*100)\"\"}' | tr -d '%'";
-	$LINKQ=exec($commandLQ);
+	$LINKQ = mupibox_cached_exec('wifi_linkq', 5, $commandLQ);
 	
 	// These GET handlers reboot/shutdown the box and run privileged scripts
 	// (restart_kiosk.sh, m3u_generator.sh). They MUST be gated by the login
@@ -175,9 +198,15 @@
 				<a href="<?= $link ?>index.php"><i class="fa fa-fw fa-home"></i> Home</a>
 				<a href="<?= $link ?>content.php"><i class="fa-solid fa-music"></i> MuPiBox</a>				
 <?php
-	$command = "ps -ef | grep websockify | grep -v grep";
-	exec($command, $vncoutput, $vncresult );
-	if( $vncoutput[0] )
+	// R3-B-1: same caching rationale as wifi exec()s above. The
+	// `ps -ef | grep websockify` invocation forks ps + grep on every
+	// page render; cache the boolean result for 5s.
+	$vnc_active = mupibox_cached_exec(
+		'vnc_active',
+		5,
+		"ps -ef | grep websockify | grep -v grep | head -n1"
+	);
+	if ($vnc_active !== '')
 	{
 		echo '<a href="' . $link . 'vnc.php"><i class="fa-solid fa-display"></i> VNC</a>';
 	}
