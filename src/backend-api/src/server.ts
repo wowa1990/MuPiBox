@@ -239,6 +239,7 @@ app.get('/api/resume', (_req, res) => {
   }
   tryReadFile(resumeFile)
     .then((data) => {
+      if (Array.isArray(data)) backfillLastPlayedAt(data, Date.now())
       res.json(data)
     })
     .catch((error) => {
@@ -465,6 +466,12 @@ app.get('/api/activeresume', (_req, res) => {
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] ${error}`)
       res.json([])
     } else {
+      // Lazy back-fill in-memory: legacy entries written before the
+      // lastPlayedAt field gain synthetic stamps so frontend's DESC sort
+      // produces the same visible order as the old blind .reverse() until
+      // a real save persists a fresh stamp. No write here — file gets the
+      // back-fill on the next /api/addresume call.
+      if (Array.isArray(data)) backfillLastPlayedAt(data, Date.now())
       res.json(data)
     }
   })
@@ -624,6 +631,27 @@ const resumeKeyOf = (m: { type?: string; id?: string; playlistid?: string; showi
     m?.playlistid || m?.showid || m?.audiobookid || m?.id || `${m?.artist || ''}::${m?.title || ''}`,
   ].join('|')
 
+// Back-fill lastPlayedAt for legacy resume entries that pre-date the field.
+// Reasoning: the previous addresume implementation did update-in-place when
+// an entry already existed, so an item the user was actively replaying
+// stayed at its original index — and idx 0 typically holds the item that
+// was last replayed in-place. Set synthetic stamps so idx 0 gets the
+// LARGEST stamp (most-recently-updated) and idx N the smallest. After
+// frontend's DESC sort that places the user's last-replayed item at
+// position 1 (left). Real saves use Date.now(), which is always larger
+// than these synthetic stamps, so a fresh playback always wins.
+// Idempotent: no-ops once every entry has a numeric stamp.
+function backfillLastPlayedAt(data: any[], now: number): void {
+  const baseTime = now - data.length * 1000 - 60000
+  const lastIdx = data.length - 1
+  data.forEach((entry: any, idx: number) => {
+    if (typeof entry.lastPlayedAt !== 'number') {
+      // Invert: idx 0 → largest stamp (lastIdx ms), idx N → smallest.
+      entry.lastPlayedAt = baseTime + (lastIdx - idx)
+    }
+  })
+}
+
 // Resilient resume.json reader. ENOENT (fresh box, file not yet created) and
 // JSON parse errors both used to leave the endpoint stuck — every save would
 // 200 "error" until somebody manually fixed the file. Now: missing file is
@@ -673,13 +701,19 @@ app.post('/api/addresume', (req, res) => {
     return
   }
   readResumeOrRecover('/api/addresume', (data) => {
+    const now = Date.now()
     const incomingKey = resumeKeyOf(req.body)
+    backfillLastPlayedAt(data, now)
+    // Always stamp the incoming entry — it was just played now, so it
+    // should sort to position 1 on the resume page after frontend's
+    // DESC sort by lastPlayedAt.
+    const incoming = { ...req.body, lastPlayedAt: now }
     const index = data.findIndex((item: any) => resumeKeyOf(item) === incomingKey)
     if (index !== -1) {
-      data[index] = req.body
+      data[index] = incoming
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry replaced (key=${incomingKey}).`)
     } else {
-      data.push(req.body)
+      data.push(incoming)
       console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Resume entry added (key=${incomingKey}).`)
     }
     jsonfile.writeFile(resumeFile, data, { spaces: 4 }, (writeError) => {

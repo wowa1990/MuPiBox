@@ -426,9 +426,18 @@ export class MediaService {
 
   public fetchActiveResumeData(): Observable<Media[]> {
     // Category is irrelevant if 'resume' is set to true.
+    // Sort by lastPlayedAt DESC so "most recently played" is at position 1.
+    // Previously the page used a blind `.reverse()` of the array, which
+    // matches the file insertion order — but addresume updates existing
+    // entries in place (preserving their position) so a freshly-played
+    // album never moved to the top until it was a *new* entry. Items
+    // without a timestamp (legacy entries pre-migration) sort to 0 and
+    // land at the bottom; the backend back-fills synthetic stamps
+    // preserving original order on the next addresume so this is
+    // self-healing.
     return this.updateMedia(`${this.getApiBackendUrl()}/activeresume`, true, 'resume').pipe(
       map((media: Media[]) => {
-        return media.reverse()
+        return [...media].sort((a, b) => (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0))
       }),
     )
   }
@@ -439,18 +448,25 @@ export class MediaService {
 
   // Get the media data for the current category from the server
   private updateMedia(url: string, resume: boolean, category: CategoryType): Observable<Media[]> {
-    // Custom rxjs pipe to override artist.
+    // Custom rxjs pipe applied to every iif-branch's service-call output.
+    // Carries the original item's user-relevant fields onto the Media that
+    // the spotify/rss/library service builds out of upstream API data:
+    // - artist: optional user-defined override
+    // - lastPlayedAt: ResumePage sorts DESC by this; spotify.service's
+    //   getMediaByID etc. don't accept it as a param, so without this carry
+    //   the field gets dropped on every resume entry that goes through a
+    //   service call. fetchActiveResumeData's sort then sees zeros and the
+    //   user's most-recently-played item ends up at a random swiper position.
+    // - isResume: marks resume entries; same loss-on-service-call risk.
     const overwriteArtist =
       (item: Media) =>
       (source$: Observable<Media[]>): Observable<Media[]> => {
         return source$.pipe(
-          // If the user entered an user-defined artist name in addition to a query,
-          // overwrite orignal artist from spotify.
           map((items) => {
-            if (item.artist?.length > 0) {
-              for (const currentItem of items) {
-                currentItem.artist = item.artist
-              }
+            for (const currentItem of items) {
+              if (item.artist?.length > 0) currentItem.artist = item.artist
+              if (typeof item.lastPlayedAt === 'number') currentItem.lastPlayedAt = item.lastPlayedAt
+              if (item.isResume === true) currentItem.isResume = true
             }
             return items
           }),

@@ -47,6 +47,14 @@ export interface Media {
   // instead of silently vanishing — callers / templates can render it
   // greyed-out or with an "unavailable" badge later.
   unavailable?: boolean
+  // Set by /api/addresume to Date.now() on every save. Frontend sorts the
+  // resume page by this DESC so "most recently played" lands at position 1
+  // even when the entry was already in the file (addresume's update-in-
+  // place pattern leaves the array index untouched). Optional because
+  // pre-existing entries written before this field was introduced will be
+  // back-filled lazily by the backend with synthetic stamps preserving
+  // file order.
+  lastPlayedAt?: number
 }
 
 // Reads as "is this Media a resume entry?" — true for entries written by the
