@@ -1,3 +1,16 @@
+<!--
+  H2: collapse 22 separate `(spotify$ | async)` and 6 separate
+  `(local$ | async)` async-pipe subscribers down to one each via @let.
+  Each polling tick previously triggered 28 individual subscriptions
+  + 28 micro-tasks on default change-detection; on the RPi-Chromium
+  kiosk that was visible CD jank during playback. @let keeps the
+  default CD strategy (no need for markForCheck() audit across this
+  component's many subscribe-bodies) but uses one shared subscription
+  per stream.
+-->
+@let spotify = spotify$ | async;
+@let local = local$ | async;
+
 <ion-header class="player-header">
   <ion-toolbar color="light">
     <ion-buttons slot="start">
@@ -5,15 +18,15 @@
     </ion-buttons>
     <ion-title class="toolbar-album">
       @if (media.type ==='spotify' && currentPlayedSpotify?.currently_playing_type !== 'episode') {
-        <div>{{(spotify$ | async)?.item.album.name}}</div>
+        <div>{{spotify?.item.album.name}}</div>
       } @else {
-        @if (media.showid && (spotify$ | async)?.show_details) {
-          <div>{{(spotify$ | async)?.show_details?.name}}</div>
-        } @else if (media.audiobookid && (spotify$ | async)?.audiobook) {
-          <div>{{(spotify$ | async)?.audiobook?.name}}</div>
+        @if (media.showid && spotify?.show_details) {
+          <div>{{spotify?.show_details?.name}}</div>
+        } @else if (media.audiobookid && spotify?.audiobook) {
+          <div>{{spotify?.audiobook?.name}}</div>
         } @else {
           @if (media.type ==='library') {
-            <div>{{(local$ | async)?.album}}</div>
+            <div>{{local?.album}}</div>
           } @else {
             @if (media.type ==='rss') {
               <div>{{media.artist}}</div>
@@ -26,15 +39,15 @@
     </ion-title>
     <ion-title class="toolbar-tracktitle">
       @if (media.type ==='spotify' && currentPlayedSpotify?.currently_playing_type !== 'episode') {
-        <div>{{(spotify$ | async)?.item.name}}</div>
+        <div>{{spotify?.item.name}}</div>
       } @else {
-        @if (media.showid && (spotify$ | async)?.show_details) {
-          <div>{{(spotify$ | async)?.item?.name}}</div>
-        } @else if (media.audiobookid && (spotify$ | async)?.audiobook) {
-          <div>{{(spotify$ | async)?.item?.name}}</div>
+        @if (media.showid && spotify?.show_details) {
+          <div>{{spotify?.item?.name}}</div>
+        } @else if (media.audiobookid && spotify?.audiobook) {
+          <div>{{spotify?.item?.name}}</div>
         } @else {
           @if (media.type ==='library') {
-            <div>{{(local$ | async)?.currentTrackname}}</div>
+            <div>{{local?.currentTrackname}}</div>
           } @else {
             @if (media.type ==='rss') {
               <div>{{media.title}}</div>
@@ -46,23 +59,23 @@
       }
     </ion-title>
     <ion-title class="toolbar-tracknumber" slot="end">
-      <div>{{(local$ | async)?.volume}}%</div>
+      <div>{{local?.volume}}%</div>
       @if (media.type ==='library') {
-        <div>{{(local$ | async)?.currentTracknr}}/{{(local$ | async)?.totalTracks}}</div>
+        <div>{{local?.currentTracknr}}/{{local?.totalTracks}}</div>
       } @else {
         @if (media.type ==='spotify') {
-          @if (media.playlistid && (spotify$ | async)?.playlist?.total_tracks && (spotify$ | async)?.playlist?.total_tracks > 0) {
+          @if (media.playlistid && spotify?.playlist?.total_tracks && spotify?.playlist?.total_tracks > 0) {
             <!-- Playlist -->
-            <div>{{(spotify$ | async)?.playlist?.current_track_position}}/{{(spotify$ | async)?.playlist?.total_tracks}}</div>
-          } @else if (media.showid && (spotify$ | async)?.show_details) {
+            <div>{{spotify?.playlist?.current_track_position}}/{{spotify?.playlist?.total_tracks}}</div>
+          } @else if (media.showid && spotify?.show_details) {
             <!-- Show/Podcast -->
-            <div>{{(spotify$ | async)?.show_details?.current_episode_position}}/{{(spotify$ | async)?.show_details?.total_episodes}}</div>
-          } @else if (media.audiobookid && (spotify$ | async)?.audiobook) {
+            <div>{{spotify?.show_details?.current_episode_position}}/{{spotify?.show_details?.total_episodes}}</div>
+          } @else if (media.audiobookid && spotify?.audiobook) {
             <!-- Audiobook -->
-            <div>{{(spotify$ | async)?.audiobook?.current_chapter_position}}/{{(spotify$ | async)?.audiobook?.total_chapters}}</div>
-          } @else if (currentPlayedSpotify?.currently_playing_type !== 'episode' && (spotify$ | async)?.item.album.total_tracks > 0) {
+            <div>{{spotify?.audiobook?.current_chapter_position}}/{{spotify?.audiobook?.total_chapters}}</div>
+          } @else if (currentPlayedSpotify?.currently_playing_type !== 'episode' && spotify?.item.album.total_tracks > 0) {
             <!-- Regular album -->
-            <div>{{(spotify$ | async)?.item.track_number}}/{{(spotify$ | async)?.item.album.total_tracks}}</div>
+            <div>{{spotify?.item.track_number}}/{{spotify?.item.album.total_tracks}}</div>
           } @else {
             <!-- Fallback - no track info available -->
             <div></div>
