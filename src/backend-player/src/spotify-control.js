@@ -200,7 +200,7 @@ player.on('metadata', (val) => {
   console.log('track metadata is', val)
   //currentMeta.currentTracknr = parseInt(val.Comment?.split(',').pop(), 10);
   currentMeta.currentTracknr = currentMeta.currentTracknr + 1
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
+  log.debug(`${now()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
   if (currentMeta.currentType !== 'rss' && currentMeta.currentType !== 'radio') {
     currentMeta.currentTrackname = val.Title
   }
@@ -295,12 +295,12 @@ function deleteResumeForFinishedLibraryAlbum() {
     (response) => {
       response.resume() // drain
       log.debug(
-        `${nowDate.toLocaleString()}: [Spotify Control] deleteresume status=${response.statusCode} for ${rawPath}`,
+        `${now()}: [Spotify Control] deleteresume status=${response.statusCode} for ${rawPath}`,
       )
     },
   )
   req.on('error', (err) => {
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] deleteresume failed: ${err.message}`)
+    log.debug(`${now()}: [Spotify Control] deleteresume failed: ${err.message}`)
   })
   req.write(body)
   req.end()
@@ -327,7 +327,11 @@ setInterval(() => {
 }, 5000)
 
 let activeDevice = null
-const nowDate = new Date()
+// AR5-4: was `const nowDate = new Date()` evaluated once at module-load.
+// All 86 log templates that used `${now()}` printed
+// the boot timestamp on every line, making production debugging useless.
+// Use a fresh Date per call so timestamps reflect the actual event.
+const now = () => new Date().toLocaleString()
 const volumeStart = 99
 let playerstate
 let spotifyRunning = false
@@ -858,7 +862,7 @@ function writeplayerstatePlay() {
       console.error(err)
       return
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Write play to /tmp/playerstate`)
+    log.debug(`${now()}: [Spotify Control] Write play to /tmp/playerstate`)
   })
 }
 
@@ -869,7 +873,7 @@ function writeplayerstatePause() {
       console.error(err)
       return
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Write play to /tmp/playerstate`)
+    log.debug(`${now()}: [Spotify Control] Write play to /tmp/playerstate`)
   })
 }
 
@@ -907,14 +911,14 @@ async function refreshTokenApi() {
       return apiAccessToken.accessToken
     },
     (err) => {
-      log.debug(`${nowDate.toLocaleString()}: Could not refresh access token`, err)
+      log.debug(`${now()}: Could not refresh access token`, err)
       throw err
     },
   )
 }
 
 function setAccessToken(token) {
-  log.debug(`${nowDate.toLocaleString()}: The access token has been refreshed!`)
+  log.debug(`${now()}: The access token has been refreshed!`)
   counter.countfreshAccessToken++
   if (config.server.logLevel === 'debug') {
     writeCounter()
@@ -933,8 +937,8 @@ function setAccessToken(token) {
 /*token expired and no_device error are handled explicitly*/
 function handleSpotifyError(err, from) {
   if (err?.body?.error?.status === 401) {
-    log.debug(`${nowDate.toLocaleString()}: access token expired, refreshing...`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+    log.debug(`${now()}: access token expired, refreshing...`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterrorAccessToken++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -943,9 +947,9 @@ function handleSpotifyError(err, from) {
       refreshToken()
     }
   } else if (err?.body?.error?.status === 400) {
-    log.debug(`${nowDate.toLocaleString()}: invalid id`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
+    log.debug(`${now()}: invalid id`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: ${err}`)
     counter.counterrorInvalidID++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -954,9 +958,9 @@ function handleSpotifyError(err, from) {
       setActiveDevice()
     }
   } else if (err?.body?.error?.status === 429) {
-    log.debug(`${nowDate.toLocaleString()}: To many requests on th spotify web api`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
+    log.debug(`${now()}: To many requests on th spotify web api`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: ${err}`)
     counter.counterrorToManyRequest++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -965,9 +969,9 @@ function handleSpotifyError(err, from) {
     //
     //},2000)
   } else if (err.toString().includes('NO_ACTIVE_DEVICE')) {
-    log.debug(`${nowDate.toLocaleString()}: no active device, setting the first one found to active`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
-    log.debug(`${nowDate.toLocaleString()}: playID: ${currentMeta.activeSpotifyId}`)
+    log.debug(`${now()}: no active device, setting the first one found to active`)
+    log.debug(`${now()}: Error from: ${from}`)
+    log.debug(`${now()}: playID: ${currentMeta.activeSpotifyId}`)
     counter.counterrorNoActivDevice++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -976,9 +980,9 @@ function handleSpotifyError(err, from) {
       setActiveDevice()
     }
   } else if (err.toString().includes('Device not found')) {
-    log.debug(`${nowDate.toLocaleString()}: Device not found: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+    log.debug(`${now()}: Device not found: ${err}`)
+    log.debug(`${now()}: ${err}`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterror++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -989,18 +993,18 @@ function handleSpotifyError(err, from) {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback play deviceID`)
+        log.debug(`${now()}: [Spotify Control] Transfering playback play deviceID`)
         writeplayerstatePlay()
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'ack')
       },
     )
   } else {
-    log.debug(`${nowDate.toLocaleString()}: an error occured: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: ${err}`)
-    log.debug(`${nowDate.toLocaleString()}: Error from: ${from}`)
+    log.debug(`${now()}: an error occured: ${err}`)
+    log.debug(`${now()}: ${err}`)
+    log.debug(`${now()}: Error from: ${from}`)
     counter.counterror++
     if (config.server.logLevel === 'debug') {
       writeCounter()
@@ -1021,15 +1025,15 @@ function setActiveDevice() {
         const availableDevices = data.body.devices
         if (availableDevices && availableDevices.length > 0) {
           activeDevice = availableDevices[0].id
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Auto-selected device: ${activeDevice}`)
+          log.debug(`${now()}: [Spotify Control] Auto-selected device: ${activeDevice}`)
           // Now transfer playback to the selected device
           transferPlaybackToActiveDevice()
         } else {
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] No available devices found`)
+          log.debug(`${now()}: [Spotify Control] No available devices found`)
         }
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Error getting devices: ${err}`)
+        log.debug(`${now()}: [Spotify Control] Error getting devices: ${err}`)
         handleSpotifyError(err, 'getMyDevices')
       },
     )
@@ -1046,7 +1050,7 @@ function transferPlaybackToActiveDevice() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback to ${activeDevice}`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback to ${activeDevice}`)
       if (currentMeta.activeSpotifyId.includes('spotify:')) {
         if (currentMeta.pause) {
           play()
@@ -1072,7 +1076,7 @@ function pause() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback paused`)
+        log.debug(`${now()}: [Spotify Control] Playback paused`)
         writeplayerstatePause()
       },
       (err) => {
@@ -1098,7 +1102,7 @@ function stop() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback stopped`)
+        log.debug(`${now()}: [Spotify Control] Playback stopped`)
         writeplayerstatePause()
       },
       (err) => {
@@ -1123,7 +1127,7 @@ function stop() {
     currentMeta.currentPlayer = ''
     currentMeta.pause = false
     spotifyRunning = false
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback stopped`)
+    log.debug(`${now()}: [Spotify Control] Playback stopped`)
   }
 }
 
@@ -1135,7 +1139,7 @@ function play() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         currentMeta.pause = false
         writeplayerstatePlay()
       },
@@ -1168,7 +1172,7 @@ function next() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Skip to next`)
+        log.debug(`${now()}: [Spotify Control] Skip to next`)
       },
       (err) => {
         handleSpotifyError(err, 'next')
@@ -1189,7 +1193,7 @@ function previous() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Skip to previous`)
+        log.debug(`${now()}: [Spotify Control] Skip to previous`)
       },
       (err) => {
         handleSpotifyError(err, 'previous')
@@ -1199,7 +1203,7 @@ function previous() {
     if (currentMeta.currentTracknr > 1) {
       currentMeta.currentTracknr = currentMeta.currentTracknr - 2
     }
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
+    log.debug(`${now()}: [Spotify Control] Current Tracknr: ${currentMeta.currentTracknr}`)
     player.previous()
   }
 }
@@ -1211,7 +1215,7 @@ function shuffleon() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Toggle Shuffle`)
+      log.debug(`${now()}: [Spotify Control] Toggle Shuffle`)
     },
     (err) => {
       handleSpotifyError(err, 'shuffleon')
@@ -1226,7 +1230,7 @@ function shuffleoff() {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Toggle Shuffle`)
+      log.debug(`${now()}: [Spotify Control] Toggle Shuffle`)
     },
     (err) => {
       handleSpotifyError(err, 'shuffleoff')
@@ -1235,11 +1239,11 @@ function shuffleoff() {
 }
 
 function playMe() {
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
+  log.debug(`${now()}: [Spotify Control] Spotify play ${currentMeta.activeSpotifyId}`)
   resumeOffset = currentMeta.activeSpotifyId.split(':')[3]
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify resume ${resumeOffset}`)
+  log.debug(`${now()}: [Spotify Control] Spotify resume ${resumeOffset}`)
   if (resumeOffset > 0) resumeOffset--
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Spotify offset ${resumeOffset}`)
+  log.debug(`${now()}: [Spotify Control] Spotify offset ${resumeOffset}`)
   resumeProgess = currentMeta.activeSpotifyId.split(':')[4]
   tmp = currentMeta.activeSpotifyId.split(':')
   contextUri = `${tmp[0]}:${tmp[1]}:${tmp[2]}`
@@ -1253,7 +1257,7 @@ function playMe() {
   // Add device_id if we have an active device
   if (activeDevice) {
     playOptions.device_id = activeDevice
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playing on device: ${activeDevice}`)
+    log.debug(`${now()}: [Spotify Control] Playing on device: ${activeDevice}`)
   }
 
   if (contextUri.split(':')[1] === 'episode') {
@@ -1264,7 +1268,7 @@ function playMe() {
         if (config.server.logLevel === 'debug') {
           writeCounter()
         }
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         writeplayerstatePlay()
         spotifyRunning = true
         if (hasConfiguredTelegram())
@@ -1272,7 +1276,7 @@ function playMe() {
         //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'playMe')
       },
     )
@@ -1287,7 +1291,7 @@ function playMe() {
     playOptions.context_uri = contextUri
     spotifyApi.play(playOptions).then(
       (_data) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback started`)
+        log.debug(`${now()}: [Spotify Control] Playback started`)
         counter.countplay++
         if (config.server.logLevel === 'debug') {
           writeCounter()
@@ -1299,7 +1303,7 @@ function playMe() {
         //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_Spotify.py');
       },
       (err) => {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Playback error${err}`)
+        log.debug(`${now()}: [Spotify Control] Playback error${err}`)
         handleSpotifyError(err, 'playMe')
       },
     )
@@ -1323,7 +1327,7 @@ function playMe() {
 // for the m3u parse plus the first track to start.
 function playListAtTrack(playedList, trackNr, progressPct) {
   log.debug(
-    `${nowDate.toLocaleString()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
+    `${now()}: [Spotify Control] Library resume — track ${trackNr}, pct ${progressPct}, list ${playedList}`,
   )
   playList(playedList)
   if (trackNr > 1) {
@@ -1340,12 +1344,12 @@ function playList(playedList) {
   //let playedTitel = playedList.split('album:').pop();
   playedTitelmod = decodeURI(playedList).replace(/:/g, '/')
   //playedTitelmod = playedTitel.replace(/%20/g," ");
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedTitelmod}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedTitelmod}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.playList(`/home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: /home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
+  log.debug(`${now()}: /home/dietpi/MuPiBox/media/${playedTitelmod}/playlist.m3u`)
   currentMeta.currentTracknr = 0
   currentMeta.path = playedTitelmod
 
@@ -1370,21 +1374,21 @@ function playList(playedList) {
 
 function playFile(playedFile) {
   const playedTitel = `${playedFile}.mp3`
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedTitel}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedTitel}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.play(`/home/dietpi/MuPiBox/tts_files/${playedTitel}`)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
+  log.debug(`${now()}: /home/dietpi/MuPiBox/tts_files/${playedTitel}`)
 }
 
 function playURL(playedURL) {
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Starting currentMeta.playing:${playedURL}`)
+  log.debug(`${now()}: [Spotify Control] Starting currentMeta.playing:${playedURL}`)
   //currentMeta.playing = true;
   writeplayerstatePlay()
   player.play(playedURL)
   player.setVolume(volumeStart)
-  log.debug(`${nowDate.toLocaleString()}: ${playedURL}`)
+  log.debug(`${now()}: ${playedURL}`)
   if (hasConfiguredTelegram())
     cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_send_message.py "Start playing stream"')
   //if (hasConfiguredTelegram()) cmdCall('/usr/bin/python3 /usr/local/bin/mupibox/telegram_Track_RSS_Radio.py');
@@ -1394,7 +1398,7 @@ function playURL(playedURL) {
 function seek(progress) {
   let currentProgress = 0
   let targetProgress = 0
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Setting progress to ${progress}`)
+  log.debug(`${now()}: [Spotify Control] Setting progress to ${progress}`)
   if (currentMeta.currentPlayer === 'spotify') {
     if (progress > 1) {
       spotifyApi.seek(progress).then(
@@ -1403,7 +1407,7 @@ function seek(progress) {
           if (config.server.logLevel === 'debug') {
             writeCounter()
           }
-          log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Progress is ${progress}`)
+          log.debug(`${now()}: [Spotify Control] Progress is ${progress}`)
         },
         (err) => {
           handleSpotifyError(err, 'seek')
@@ -1419,7 +1423,7 @@ function seek(progress) {
           }
           currentProgress = data.body.progress_ms
           log.debug(
-            `${nowDate.toLocaleString()}: [Spotify Control]Current progress for active device is ${currentProgress}`,
+            `${now()}: [Spotify Control]Current progress for active device is ${currentProgress}`,
           )
           if (progress) targetProgress = currentProgress + 30000
           else targetProgress = currentProgress - 30000
@@ -1432,7 +1436,7 @@ function seek(progress) {
                 if (config.server.logLevel === 'debug') {
                   writeCounter()
                 }
-                log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Setting progress to ${targetProgress}`)
+                log.debug(`${now()}: [Spotify Control] Setting progress to ${targetProgress}`)
               },
               (err) => {
                 handleSpotifyError(err, 'seek')
@@ -1480,7 +1484,7 @@ function deleteLocal(deleteFile) {
     // standard %xx-encoding the frontend produces.
     decoded = decodeURIComponent(deleteFile)
   } catch (err) {
-    log.warn(`${nowDate.toLocaleString()}: [deleteLocal] decode failed for ${deleteFile}: ${err?.message || err}`)
+    log.warn(`${now()}: [deleteLocal] decode failed for ${deleteFile}: ${err?.message || err}`)
     return
   }
   // Frontend uses ':' as a path-segment separator (e.g. "audiobook:Foo:Bar")
@@ -1491,20 +1495,20 @@ function deleteLocal(deleteFile) {
   // to an absolute path that's no longer under MEDIA_ROOT — we just
   // reject anything that doesn't end up inside the root.
   if (!fullPath.startsWith(MEDIA_ROOT)) {
-    log.warn(`${nowDate.toLocaleString()}: [deleteLocal] path-traversal attempt rejected: ${relPath} → ${fullPath}`)
+    log.warn(`${now()}: [deleteLocal] path-traversal attempt rejected: ${relPath} → ${fullPath}`)
     return
   }
   // Don't shell out to a non-existent target — that's the symptom of
   // either a glitched frontend call or an active probe.
   if (!fs.existsSync(fullPath)) {
-    log.warn(`${nowDate.toLocaleString()}: [deleteLocal] target does not exist, refusing: ${fullPath}`)
+    log.warn(`${now()}: [deleteLocal] target does not exist, refusing: ${fullPath}`)
     return
   }
-  log.debug(`${nowDate.toLocaleString()}: rm -r ${fullPath}`)
+  log.debug(`${now()}: rm -r ${fullPath}`)
   const execFile = require('node:child_process').execFile
   execFile('rm', ['-r', fullPath], (e, stdout, stderr) => {
     if (e instanceof Error) {
-      log.warn(`${nowDate.toLocaleString()}: [deleteLocal] rm failed: ${e.message}`)
+      log.warn(`${now()}: [deleteLocal] rm failed: ${e.message}`)
       return
     }
     if (stdout) console.log('stdout', stdout)
@@ -1513,20 +1517,20 @@ function deleteLocal(deleteFile) {
 }
 
 function cmdCall(cmd) {
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]Cmd  ${cmd}`)
+  log.debug(`${now()}: [Spotify Control]Cmd  ${cmd}`)
   return new Promise((resolve, reject) => {
     childProcess.exec(cmd, (error, standardOutput, standardError) => {
       if (error) {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control]error ${error}`)
+        log.debug(`${now()}: [Spotify Control]error ${error}`)
         reject()
         return
       }
       if (standardError) {
-        log.debug(`${nowDate.toLocaleString()}: [Spotify Control]StandardError ${standardError}`)
+        log.debug(`${now()}: [Spotify Control]StandardError ${standardError}`)
         reject(standardError)
         return
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control]StandardOutput ${standardOutput}`)
+      log.debug(`${now()}: [Spotify Control]StandardOutput ${standardOutput}`)
       resolve(standardOutput)
     })
   })
@@ -1564,11 +1568,11 @@ async function setVolume(volume) {
       const { stdout } = await _execAsync(cmdVolume)
       actualVolume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
     } catch (e) {
-      log.warn(`${nowDate.toLocaleString()}: [setVolume] amixer read failed, skipping op:`, e?.message || e)
+      log.warn(`${now()}: [setVolume] amixer read failed, skipping op:`, e?.message || e)
       return
     }
     if (Number.isNaN(actualVolume)) {
-      log.warn(`${nowDate.toLocaleString()}: [setVolume] amixer returned unparseable volume, skipping op`)
+      log.warn(`${now()}: [setVolume] amixer returned unparseable volume, skipping op`)
       return
     }
     currentMeta.volume = actualVolume
@@ -1587,7 +1591,7 @@ async function setVolume(volume) {
     }
   }).catch((err) => {
     // Don't let one failed op poison the queue for subsequent ops.
-    log.warn(`${nowDate.toLocaleString()}: [setVolume] op failed:`, err?.message || err)
+    log.warn(`${now()}: [setVolume] op failed:`, err?.message || err)
   })
 
   return _volumeOpQueue
@@ -1600,10 +1604,10 @@ async function transferPlayback(id) {
       if (config.server.logLevel === 'debug') {
         writeCounter()
       }
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback to ${id}`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback to ${id}`)
     },
     (err) => {
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Transfering playback error.`)
+      log.debug(`${now()}: [Spotify Control] Transfering playback error.`)
       handleSpotifyError(err, id, 'transferPlayback')
     },
   )
@@ -1611,14 +1615,14 @@ async function transferPlayback(id) {
 
 function downloadTTS(name) {
   const namedl = name
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] TTS Name: ${namedl} in ${config.ttsLanguage}`)
+  log.debug(`${now()}: [Spotify Control] TTS Name: ${namedl} in ${config.ttsLanguage}`)
   googleTTS
     .getAudioBase64(namedl, { lang: config.ttsLanguage, slow: false })
     .then((base64) => {
       console.log({ base64 })
       const buffer = Buffer.from(base64, 'base64')
       const filename = `/home/dietpi/MuPiBox/tts_files/${namedl}.mp3`
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] TTS Filename: ${filename}`)
+      log.debug(`${now()}: [Spotify Control] TTS Filename: ${filename}`)
       fs.writeFileSync(filename, buffer, { encoding: 'base64' })
       playFile(namedl)
     })
@@ -1631,17 +1635,17 @@ async function useSpotify(command) {
   const dir = command.dir
   const newdevice = dir.split('/')[1]
 
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Stored device: ${activeDevice}, Requested: ${newdevice}`)
+  log.debug(`${now()}: [Spotify Control] Stored device: ${activeDevice}, Requested: ${newdevice}`)
 
   // Update active device (will be used in playMe() via device_id parameter)
   if (newdevice !== 'current') {
     activeDevice = newdevice
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Device set to: ${activeDevice}`)
+    log.debug(`${now()}: [Spotify Control] Device set to: ${activeDevice}`)
   } else {
     // Reset device to let Spotify use the currently active device
     activeDevice = null
     log.debug(
-      `${nowDate.toLocaleString()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
+      `${now()}: [Spotify Control] Using current active Spotify device (no device_id specified)`,
     )
   }
 
@@ -1659,7 +1663,7 @@ app.get('/getDevices', (_req, res) => {
         writeCounter()
       }
       const availableDevices = data.body.devices
-      log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Getting available devices...`)
+      log.debug(`${now()}: [Spotify Control] Getting available devices...`)
       res.send(availableDevices)
     },
     (err) => {
@@ -1747,8 +1751,8 @@ app.get('/spotify/token', (_req, res) => {
 /*commands are as defined in sonos-kids-controller and mapped spotify calls*/
 app.use((req, res) => {
   const command = path.parse(req.url)
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]name: ${command.name}`)
-  log.debug(`${nowDate.toLocaleString()}: [Spotify Control]dir: ${command.dir}`)
+  log.debug(`${now()}: [Spotify Control]name: ${command.name}`)
+  log.debug(`${now()}: [Spotify Control]dir: ${command.dir}`)
 
   // Playtime / Quiet-Hours: refuse new playback when either is restricting.
   // Pause/stop/volume/system commands fall through normally.
@@ -1820,7 +1824,7 @@ app.use((req, res) => {
     let nameTTS = dir.split('say/').pop()
     nameTTS = decodeURIComponent(nameTTS)
     nameTTS = nameTTS.replace(/\//g, ' ')
-    log.debug(`${nowDate.toLocaleString()}: [Spotify Control] Say: ${nameTTS}`)
+    log.debug(`${now()}: [Spotify Control] Say: ${nameTTS}`)
     const filename = `/home/dietpi/MuPiBox/tts_files/${nameTTS}.mp3`
     try {
       if (fs.existsSync(filename)) {
@@ -1874,5 +1878,5 @@ app.use((req, res) => {
 
 server.listen(config.server.port)
 console.log(
-  `${nowDate.toLocaleString()}: [mupibox-backend-player] Server started at http://localhost:${config.server.port}`,
+  `${now()}: [mupibox-backend-player] Server started at http://localhost:${config.server.port}`,
 )
