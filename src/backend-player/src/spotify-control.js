@@ -306,10 +306,15 @@ function deleteResumeForFinishedLibraryAlbum() {
   req.end()
 }
 
+// H1: amixer was forked once per second to mirror the system volume into
+// currentMeta.volume. setVolume() already pushes the new value into
+// currentMeta.volume directly when the user changes it; the periodic poll
+// is only there to catch external changes (e.g. someone running amixer
+// over SSH). 5s is plenty for that — fewer fork+exec syscalls is worth
+// far more than 5s of staleness on a value the kid never touches.
 setInterval(() => {
   const cmdVolume = "/usr/bin/amixer sget Master | grep 'Right:'"
-  const exec = require('node:child_process').exec
-  exec(cmdVolume, (e, stdout, _stderr) => {
+  childProcess.exec(cmdVolume, (e, stdout, _stderr) => {
     if (e instanceof Error) {
       // TODO: Get this to run in development.
       if (process.env.NODE_ENV === 'development') {
@@ -319,7 +324,7 @@ setInterval(() => {
     }
     currentMeta.volume = Number.parseInt(stdout.split('[')[1].split('%')[0], 10)
   })
-}, 1000)
+}, 5000)
 
 let activeDevice = null
 const nowDate = new Date()
@@ -1351,8 +1356,7 @@ function playList(playedList) {
   setTimeout(() => {
     const cmdtotalTracks = `find "/home/dietpi/MuPiBox/media/${decodeURIComponent(currentMeta.path)}" -type f -name "*.mp3" -or -name "*.flac" -or -name "*.m4a" -or -name "*.wma" -or -name "*.wav"| wc -l`
     console.log(cmdtotalTracks)
-    const exec = require('node:child_process').exec
-    exec(cmdtotalTracks, (e, stdout, stderr) => {
+    childProcess.exec(cmdtotalTracks, (e, stdout, stderr) => {
       if (e instanceof Error) {
         console.error(e)
         throw e
