@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { Injectable } from '@angular/core'
 import { catchError, EMPTY, firstValueFrom, from, Observable, of } from 'rxjs'
-import { concatMap, map, scan, switchMap, take, takeLast, timeout } from 'rxjs/operators'
+import { map, mergeMap, scan, switchMap, take, takeLast, timeout } from 'rxjs/operators'
 import { environment } from 'src/environments/environment'
 import { LogService } from './log.service'
 import type { CategoryType, Media } from './media'
@@ -146,9 +146,16 @@ export class SpotifyService {
           )
         }
 
-        // Combine first page with all additional pages
+        // Combine first page with all additional pages.
+        // Phase-7.6: was concatMap (strict sequential) — for an artist
+        // with ~28 albums (pageSize=10) this was 28 round-trips of
+        // ~40ms each, blocking the medialist render. mergeMap with
+        // concurrency 8 pipelines the requests through the backend
+        // event-loop. Resulting array order is no longer page-aligned,
+        // but medialist.page sorts on the client (localeCompare) before
+        // render so the user-visible order is unchanged.
         return from(additionalPageObservables).pipe(
-          concatMap((obs) => obs),
+          mergeMap((obs) => obs, 8),
           scan((acc: T[], pageItems: T[]) => [...acc, ...pageItems], firstPageItems),
           takeLast(1),
         )
