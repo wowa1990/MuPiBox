@@ -13,6 +13,7 @@ import type { Network } from './network'
 import { NetworkService } from './network.service'
 import { RssFeedService } from './rssfeed.service'
 import { SpotifyService } from './spotify.service'
+import type { ExtraDataMedia } from './utils'
 import type { WLAN } from './wlan'
 
 @Injectable({
@@ -329,6 +330,30 @@ export class MediaService {
 
   // Collect albums from a given artist in the current category
   public fetchMediaFromArtist(artist: Artist, category: CategoryType): Observable<Media[]> {
+    // Fast path for Spotify artists: we already know the artistid from the
+    // navigation state, so call getMediaByArtistID directly. Previously this
+    // ran fetchMedia(category) which loads EVERY item in the category — for
+    // a library with 8 spotify-artists + 7 spotify-albums + 143 library
+    // entries the page fired ~55 backend calls just to filter Benjamin
+    // Blümchen out at the end. Direct call is 6 backend calls (with QW1+QW2
+    // pagination) and no other items contend for the event loop.
+    const cm = artist.coverMedia
+    if (cm.type === 'spotify' && cm.artistid && cm.artistid.length > 0) {
+      const extra: ExtraDataMedia = {
+        artistcover: cm.artistcover,
+        shuffle: cm.shuffle,
+        aPartOfAll: cm.aPartOfAll,
+        aPartOfAllMin: cm.aPartOfAllMin,
+        aPartOfAllMax: cm.aPartOfAllMax,
+        sorting: cm.sorting,
+        lastPlayedAt: cm.lastPlayedAt,
+      }
+      return this.spotifyService.getMediaByArtistID(cm.artistid, category, 0, extra)
+    }
+    // Library/local entries fall back to the original load-then-filter path
+    // because multiple data.json rows may share the same artist name (each
+    // album its own row), and there's no single API call that retrieves
+    // them as a group.
     return this.fetchMedia(category).pipe(
       map((media: Media[]) => {
         return media.filter((currentMedia) => currentMedia.artist === artist.name)
