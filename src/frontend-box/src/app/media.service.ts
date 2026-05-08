@@ -529,13 +529,18 @@ export class MediaService {
                       ),
                     iif(
                       // Get media by rss feed.
-                      // MED-10: previously gated on `!isResumeEntry(item)` —
-                      // RSS resume entries skipped enrichment and rendered
-                      // with whatever stale title/cover/episode-list was
-                      // saved at last play. Drop the gate so resume entries
-                      // also get fresh feed data; overwriteArtist preserves
-                      // the user-visible artist label.
-                      () => !!(item.type === 'rss' && item.id.length > 0),
+                      // MED-10 attempted to enrich RSS resume entries with
+                      // fresh feed data, but the `id` of a RSS resume entry
+                      // is the *episode's MP3 URL*, not the channel feed
+                      // URL — the enrichment fetch streamed the MP3 audio
+                      // (multi-MB) into the rss-parser path before MED-2's
+                      // size-cap aborted with 413. Six RSS resume entries
+                      // = ~24 s freeze on the resume page. Reinstate the
+                      // resume-skip gate: every persisted field needed for
+                      // the resume tile (title, cover, artistcover, release
+                      // date, duration, progress) is already on disk; no
+                      // network round-trip needed for resume rendering.
+                      () => !!(item.type === 'rss' && item.id.length > 0 && !isResumeEntry(item)),
                       this.rssFeedService
                         .getRssFeed(item.id, item.category, item.index, item)
                         .pipe(overwriteArtist(item)),

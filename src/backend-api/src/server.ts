@@ -164,6 +164,36 @@ app.get('/api/rssfeed', async (req, res) => {
     res.status(403).send('Private / loopback hosts are not allowed')
     return
   }
+  // Defence-in-depth: probe with HEAD before the full GET.
+  // Without this, calling /api/rssfeed with a non-RSS URL (e.g. a multi-MB
+  // MP3 episode link as the frontend's RSS-resume code briefly did) streamed
+  // the entire binary body into memory before the 5MB body-cap aborted with
+  // 413 — ~4s wasted per request. HEAD lets us reject by content-type or
+  // advertised content-length in <500ms.
+  // Native fetch (not ky) — ky was silently failing on the 301-redirect
+  // chain in this codepath. HEAD is best-effort: some origin servers
+  // reject HEAD with 405/501. On non-2xx or network error during HEAD we
+  // fall through to the existing GET path; the 10s timeout + 5MB body
+  // cap still bound the worst case.
+  try {
+    const head = await fetch(rssUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    })
+    const ct = head.headers.get('content-type') || ''
+    if (ct && !/xml|rss/i.test(ct)) {
+      res.status(415).send(`Unsupported content-type: ${ct}`)
+      return
+    }
+    const cl = Number.parseInt(head.headers.get('content-length') || '0', 10)
+    if (cl > 5_000_000) {
+      res.status(413).send('Response too large (per content-length)')
+      return
+    }
+  } catch {
+    // HEAD failed — fall through to GET.
+  }
   ky.get(rssUrl, { timeout: 10000 })
     .text()
     .then((response) => {
