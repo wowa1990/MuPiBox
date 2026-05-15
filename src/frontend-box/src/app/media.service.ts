@@ -405,14 +405,14 @@ export class MediaService {
         }
 
         // Process regular media with artist grouping
-        const mediaCounts = regularMedia.reduce((tempCounts, currentMedia) => {
+        const mediaCounts = regularMedia.reduce<Record<string, number>>((tempCounts, currentMedia) => {
           tempCounts[currentMedia.artist] = (tempCounts[currentMedia.artist] || 0) + 1
           return tempCounts
         }, {})
 
         const covers = regularMedia
           .sort((a, b) => (a.title <= b.title ? -1 : 1))
-          .reduce((tempCovers, currentMedia) => {
+          .reduce<Record<string, string>>((tempCovers, currentMedia) => {
             if (/* currentMedia.type === 'library' &&  */ currentMedia.artistcover) {
               if (!tempCovers[currentMedia.artist]) {
                 tempCovers[currentMedia.artist] = currentMedia.artistcover
@@ -427,7 +427,7 @@ export class MediaService {
 
         const coverMedia = regularMedia
           .sort((a, b) => (a.title <= b.title ? -1 : 1))
-          .reduce((tempMedia, currentMedia) => {
+          .reduce<Record<string, Media>>((tempMedia, currentMedia) => {
             if (!tempMedia[currentMedia.artist]) {
               tempMedia[currentMedia.artist] = currentMedia
             }

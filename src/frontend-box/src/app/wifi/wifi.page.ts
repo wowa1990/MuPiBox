@@ -153,7 +153,7 @@ export class WifiPage implements OnInit, AfterViewInit, OnDestroy {
     this.validate()
   }
 
-  handleLayoutChange(button) {
+  handleLayoutChange(button: string) {
     const currentLayout = this.keyboard.options.layoutName
     let layout: string
 

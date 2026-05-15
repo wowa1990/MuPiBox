@@ -83,7 +83,7 @@ export class PlayerService {
     this.sendRequest(cmd)
   }
 
-  seekPosition(pos) {
+  seekPosition(pos: number) {
     const seekpos = `seekpos:${pos}`
     this.sendRequest(seekpos)
   }

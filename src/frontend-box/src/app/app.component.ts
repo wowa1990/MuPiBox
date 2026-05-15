@@ -105,8 +105,8 @@ export class AppComponent {
     // from the shareReplay buffer; from the home page it spins the
     // upstream up briefly (one tick of interval(1000)) and tears it down.
     const [spotify, local] = await Promise.all([
-      firstValueFrom(this.mediaService.current$.pipe(take(1))).catch(() => null),
-      firstValueFrom(this.mediaService.local$.pipe(take(1))).catch(() => null),
+      firstValueFrom(this.mediaService.current$.pipe(take(1))).catch((): null => null),
+      firstValueFrom(this.mediaService.local$.pipe(take(1))).catch((): null => null),
     ])
     const resumeMedia = buildResumeMedia(source, spotify, local)
     this.mediaService.addRawResume(resumeMedia)

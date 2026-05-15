@@ -19,7 +19,7 @@ export namespace Utils {
     // sees only zeros and the resume page falls back to mergeMap-completion
     // order — which makes the most-recently-played item appear at a random
     // position (typically the right end of the swiper).
-    const keys = [
+    const keys: (keyof ExtraDataMedia)[] = [
       'artistcover',
       'shuffle',
       'aPartOfAll',
@@ -30,7 +30,8 @@ export namespace Utils {
     ]
     for (const key of keys) {
       if (source[key] != null) {
-        target[key] = source[key]
+        // biome-ignore lint/suspicious/noExplicitAny: copying typed-key values between Media subsets — narrow union is verbose without runtime benefit
+        ;(target as any)[key] = source[key]
       }
     }
   }
