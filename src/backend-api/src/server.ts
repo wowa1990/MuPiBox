@@ -726,6 +726,44 @@ const resumeKeyOf = (m: { type?: string; id?: string; playlistid?: string; showi
     m?.playlistid || m?.showid || m?.audiobookid || m?.id || `${m?.artist || ''}::${m?.title || ''}`,
   ].join('|')
 
+// AR5-18: when mplayer fires playlist-finish, backend-player POSTs
+// /api/deleteresume to remove the now-completed album from the resume list.
+// At the same instant the frontend's player page notices the playback ended
+// and POSTs /api/addresume to save "where we last were". The file lock here
+// serialises the two writes, but the order is non-deterministic: if
+// addresume wins after deleteresume, the resume entry gets resurrected and
+// the kid is offered "weiterhören" at the very last second of an album that
+// just finished — defeating the whole point of deleteresume on playlist-end.
+//
+// Mitigation: track recently-deleted composite keys for a short rejection
+// window. While a key is in this map, an addresume for that key is silently
+// skipped (still 200 ok). 2.5s comfortably covers the worst case: mplayer
+// playlist-finish → backend-player HTTP → /api/deleteresume → frontend
+// observes paused state → /api/addresume, with SD-induced delays.
+const RESUME_REJECT_AFTER_DELETE_MS = 2500
+const recentResumeDeletes = new Map<string, number>()
+const noteResumeDeleted = (key: string) => {
+  recentResumeDeletes.set(key, Date.now())
+}
+const wasResumeJustDeleted = (key: string): boolean => {
+  const stamp = recentResumeDeletes.get(key)
+  if (stamp === undefined) return false
+  if (Date.now() - stamp > RESUME_REJECT_AFTER_DELETE_MS) {
+    recentResumeDeletes.delete(key)
+    return false
+  }
+  return true
+}
+// Tidy the map every minute so a long-running backend doesn't accumulate
+// keys forever. Lookups already self-expire, but stale entries hold memory
+// until they're looked up — a periodic sweep bounds the worst case.
+setInterval(() => {
+  const cutoff = Date.now() - RESUME_REJECT_AFTER_DELETE_MS
+  for (const [k, t] of recentResumeDeletes) {
+    if (t < cutoff) recentResumeDeletes.delete(k)
+  }
+}, 60_000).unref?.()
+
 // Back-fill lastPlayedAt for legacy resume entries that pre-date the field.
 // Reasoning: the previous addresume implementation did update-in-place when
 // an entry already existed, so an item the user was actively replaying
@@ -796,6 +834,17 @@ app.post('/api/addresume', (req, res) => {
   readResumeOrRecover('/api/addresume', (data) => {
     const now = Date.now()
     const incomingKey = resumeKeyOf(req.body)
+    // AR5-18: if backend-player just told us this album finished naturally
+    // (POST /api/deleteresume within the last RESUME_REJECT_AFTER_DELETE_MS),
+    // refuse to recreate the entry that the frontend's paused-state observer
+    // is now racing to save. Respond ok so the frontend doesn't treat the
+    // skip as a failure.
+    if (wasResumeJustDeleted(incomingKey)) {
+      releaseLock(resumeLock, '/api/addresume')
+      console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] /api/addresume skipped (key=${incomingKey} was just deleted on playlist-finish).`)
+      res.status(200).send('ok')
+      return
+    }
     backfillLastPlayedAt(data, now)
     // Always stamp the incoming entry — it was just played now, so it
     // should sort to position 1 on the resume page after frontend's
@@ -840,6 +889,10 @@ app.post('/api/deleteresume', (req, res) => {
   }
   readResumeOrRecover('/api/deleteresume', (data) => {
     const targetKey = resumeKeyOf(req.body)
+    // AR5-18: even if no entry matched (idempotent path), still mark the
+    // key as recently-deleted. The race window covers the frontend's
+    // pending addresume regardless of whether anything was on disk yet.
+    noteResumeDeleted(targetKey)
     const remaining = data.filter((item: any) => resumeKeyOf(item) !== targetKey)
     if (remaining.length === data.length) {
       releaseLock(resumeLock, '/api/deleteresume')
