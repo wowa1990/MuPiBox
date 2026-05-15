@@ -227,12 +227,24 @@ BATTERYCONFIG=$(/usr/bin/jq -r .mupihat.selected_battery ${CONFIG})
 if [ "$BATTERYCONFIG" == "null" ]; then
 	update_config '.mupihat.selected_battery = $v' --arg v "ENERpower 2S2P 10.000mAh"
 	update_config '.mupihat.battery_types = [
-		{ "name": "Ansmann 2S1P",            "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }},
-		{ "name": "ENERpower 2S2P 10.000mAh","config": { "v_100": "8000", "v_75": "7700", "v_50": "7300", "v_25": "6900", "v_0": "6000", "th_warning": "6500", "th_shutdown": "6150" }},
-		{ "name": "USB-C mode (no battery)", "config": { "v_100": "1",    "v_75": "1",    "v_50": "1",    "v_25": "1",    "v_0": "1",    "th_warning": "0",    "th_shutdown": "0" }},
-		{ "name": "Custom",                  "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }}
+		{ "name": "Ansmann 2S1P",             "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }},
+		{ "name": "ENERpower 2S2P 10.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }},
+		{ "name": "ENERpower 2S3P 15.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }},
+		{ "name": "USB-C mode (no battery)",  "config": { "v_100": "1",    "v_75": "1",    "v_50": "1",    "v_25": "1",    "v_0": "1",    "th_warning": "0",    "th_shutdown": "0" }},
+		{ "name": "Custom",                   "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }}
 	]'
 	update_config '.mupihat.hat_active = false'
+fi
+
+# Idempotent backfill: appends the 2S3P profile to existing boxes that already
+# have a battery_types array (pre-2S3P installs). Touches neither selected_battery
+# nor any other entry — user's current profile choice + custom values are preserved.
+HAS_2S3P=$(/usr/bin/jq -r '[.mupihat.battery_types[]?.name] | index("ENERpower 2S3P 15.000mAh")' ${CONFIG})
+if [ "$HAS_2S3P" == "null" ]; then
+	update_config '.mupihat.battery_types += [{
+		"name": "ENERpower 2S3P 15.000mAh",
+		"config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }
+	}]'
 fi
 
 ensure_theme lines
