@@ -638,7 +638,14 @@ export class MediaService {
             ),
           ),
       ),
-      mergeMap((items) => from(items)), // seperate arrays to single observables
+      // L2: cap concurrent inner subscriptions. Upstream is Observable<Observable<Media[]>>
+      // -- one inner Observable per library item, each doing a Spotify/RSS HTTP fetch.
+      // Without a cap, 100+ inner Observables subscribe in parallel and the backend
+      // sees a thundering herd of HTTP requests + Spotify SDK calls. 5 keeps the
+      // Spotify rate-limiter (100 ms minRequestInterval) comfortable -- ~50 req/s
+      // peak, well under quota, and the staggering smooths the cache-write storm
+      // on SD.
+      mergeMap((items) => from(items), 5),
       mergeAll(), // merge everything together
       toArray(), // convert to array
       map((media) => {
