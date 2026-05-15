@@ -43,9 +43,7 @@ if ($_GET['code']) {
 	if (!empty($tokendata["access_token"]) && !empty($tokendata["refresh_token"])) {
 		$data["spotify"]["active"] = true;
 	}
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
     exec("sudo rm {$data['spotify']['cachepath']}/credentials.json");
 	exec("sudo /usr/local/bin/mupibox/./spotify_restart.sh");
@@ -95,9 +93,7 @@ if ($_POST['resetData']) {
 }
 
 if ($change) {
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
 }
 

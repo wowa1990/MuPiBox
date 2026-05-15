@@ -9,6 +9,11 @@
 	// the helpers available for csrf_field() calls deeper in the body.
 	require_once __DIR__ . '/csrf.php';
 
+	// B8: shared save_mupiboxconfig($data) writer with flock serialisation.
+	// Replaces the ~15 inline `file_put_contents+sudo mv` patterns across
+	// admin.php, mupi.php, mupihat.php, spotify.php and smart.php.
+	require_once __DIR__ . '/save_config.php';
+
 	if (isset($_POST['spotifyget']) && $_POST['spotifyget'] === 'saving') {
 		if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
 			$http_url = 'http://' . $_SERVER['HTTP_HOST'] . $_SERVER['PHP_SELF'];
