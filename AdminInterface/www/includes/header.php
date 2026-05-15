@@ -36,10 +36,12 @@
 		$_SESSION['last_activity'] = time(); // Zeit aktualisieren
 	}
 
-	$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-	$data = json_decode($string, true);
-	$loginEnabled = $data['interfacelogin']['state'];
-	$hashedPassword = $data['interfacelogin']['password'];
+	// M5: route through the request-scoped reader so the same file isn't
+	// re-parsed 7× per admin page load. $data stays exposed as a local for
+	// downstream PHP that reads $data directly.
+	$data = mupibox_config();
+	$loginEnabled = $data['interfacelogin']['state'] ?? false;
+	$hashedPassword = $data['interfacelogin']['password'] ?? '';
 
 	$change=0;
 	$CHANGE_TXT="<div id='lbinfo'><ul id='lbinfo'>";

@@ -1,4 +1,22 @@
 <?php
+// M5: request-scoped reader for /etc/mupibox/mupiboxconfig.json. Within a
+// single PHP request, header.php + downstream PHP can read the config many
+// times -- SD cards bill those at 5-20 ms each. Static $cache inside the
+// function persists for the duration of the PHP request, so subsequent
+// reads come from RAM.
+//
+// pass $forceReread = true at call sites that follow an external mutation
+// (exec("sudo conf_update.sh"), backup-restore unzip, etc.) -- those need
+// fresh state since the cached snapshot pre-dates the external write.
+function mupibox_config(bool $forceReread = false): array {
+    static $cache = null;
+    if ($cache === null || $forceReread) {
+        $raw = @file_get_contents('/etc/mupibox/mupiboxconfig.json');
+        $cache = $raw === false ? [] : (json_decode($raw, true) ?? []);
+    }
+    return $cache;
+}
+
 // B8: centralized writer for /etc/mupibox/mupiboxconfig.json with flock
 // serialisation. Replaces ~13 copies of the same pattern in admin.php,
 // mupi.php, mupihat.php, spotify.php and smart.php:

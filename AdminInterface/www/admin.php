@@ -21,8 +21,11 @@
 	// here. In particular the login POST (password=...) must flow through
 	// to header.php so the user can authenticate in the first place.
 	session_start();
-	$__authJson = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-	$__authCfg  = json_decode($__authJson, true);
+	// M5: route the pre-header auth gate through the shared reader so
+	// header.php's later read hits the same static cache rather than
+	// doing a second file_get_contents + json_decode round.
+	require_once __DIR__ . '/includes/save_config.php';
+	$__authCfg  = mupibox_config();
 	$__loginRequired = !empty($__authCfg['interfacelogin']['state']);
 	$__loggedIn      = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
 	if ($__loginRequired && !$__loggedIn && !empty($_POST['submitfile'])) {
@@ -100,8 +103,8 @@
 					$CHANGE_TXT=$CHANGE_TXT."<li>ERROR: Backup rejected (entry outside whitelist: ".htmlspecialchars($badEntry).")</li>";
 					$change=0;
 				} else {
-				$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-				$data = json_decode($string, true);
+				// M5: external command above just mutated the config -- force fresh re-read.
+				$data = mupibox_config(true);
 				$old_version = $data["mupibox"]["version"];
 
 				$command = "sudo unzip -o -a " . escapeshellarg($target_file) . " -d / >> /tmp/restore.log";
@@ -114,8 +117,8 @@
 				$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/conf_update.sh | sudo bash";
 				exec($command, $output, $result );
 
-				$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-				$data = json_decode($string, true);
+				// M5: external command above just mutated the config -- force fresh re-read.
+				$data = mupibox_config(true);
 				$data["mupibox"]["version"] = $old_version;
 				write_json($data);
 
@@ -201,8 +204,8 @@
 		{
 		$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh | sudo bash -s -- stable";
 		exec($command, $output, $result );
-		$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-		$data = json_decode($string, true);
+		// M5: external command above just mutated the config -- force fresh re-read.
+		$data = mupibox_config(true);
 		$change=3;
 		$reboot=1;
 		$CHANGE_TXT=$CHANGE_TXT."<li>Update complete to Version ".$data["mupibox"]["version"]."</li>";
@@ -211,8 +214,8 @@
 		{
 		$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh | sudo bash -s -- beta";
 		exec($command, $output, $result );
-		$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-		$data = json_decode($string, true);
+		// M5: external command above just mutated the config -- force fresh re-read.
+		$data = mupibox_config(true);
 		$change=1;
 		$reboot=1;
 		$data["mupibox"]["version"]=$data["mupibox"]["version"]." BETA";
@@ -223,8 +226,8 @@
 		$command = "cd; curl -L https://raw.githubusercontent.com/splitti/MuPiBox/main/update/start_mupibox_update.sh | sudo bash -s -- dev";
 
 		exec($command, $output, $result );
-		$string = file_get_contents('/etc/mupibox/mupiboxconfig.json', true);
-		$data = json_decode($string, true);
+		// M5: external command above just mutated the config -- force fresh re-read.
+		$data = mupibox_config(true);
 		$change=1;
 		$reboot=1;
 		$data["mupibox"]["version"]=$data["mupibox"]["version"]." DEVELOPMENT";
