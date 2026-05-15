@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
+import fsPromises from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { SpotifyApi } from '@spotify/web-api-ts-sdk'
 import type { ServerConfig } from '../models/server.model'
@@ -31,6 +33,26 @@ export class SpotifyApiService {
   // pruner runs and evicts the oldest 200 by mtime.
   private static readonly CACHE_MAX_FILES = 1000
   private static readonly CACHE_PRUNE_BATCH = 200
+
+  // M4: In-memory LRU layer sitting in front of the SD-backed JSON cache.
+  // getFromCache used to cost 3 sync syscalls (existsSync + statSync +
+  // readFileSync + JSON.parse) on every hit -- 5-30 ms of event-loop block
+  // on SD per call, hundreds of calls during a single artist click.
+  // The Map preserves insertion order; on every get/set we delete-and-
+  // reinsert to keep the most-recent at the tail, so eviction (delete first
+  // key) drops the least-recently-used. memCacheCap is auto-sized to 5% of
+  // available RAM (capped at 500 entries) so the same code stays safe on a
+  // Pi 3 (~100 MB free -> ~50 entries) and a Pi 4 (~3 GB free -> 500).
+  private memCache = new Map<string, CachedSpotifyData>()
+  private memCacheCap: number = Math.max(
+    50,
+    Math.min(
+      500,
+      Math.floor((os.freemem() * 0.05) / (10 * 1024)), // estimate ~10KB per cached entry
+    ),
+  )
+  private memHits = 0
+  private memMisses = 0
 
   // Rate limiting
   private lastRequestTime = 0
@@ -160,16 +182,52 @@ export class SpotifyApiService {
     return this.cacheExpiry.dynamic // Fallback
   }
 
+  // M4: LRU touch -- delete then re-insert so the entry moves to the tail.
+  // Map iteration order is insertion order in V8, so the first key is the
+  // least-recently-used and evictable.
+  private memCacheTouch(cacheKey: string, value: CachedSpotifyData): void {
+    if (this.memCache.has(cacheKey)) {
+      this.memCache.delete(cacheKey)
+    }
+    this.memCache.set(cacheKey, value)
+    while (this.memCache.size > this.memCacheCap) {
+      const oldestKey = this.memCache.keys().next().value
+      if (oldestKey === undefined) break
+      this.memCache.delete(oldestKey)
+    }
+  }
+
   private async getFromCache(cacheKey: string): Promise<{ data: any | null; isStale: boolean }> {
+    // M4: in-memory hit first. Touch-on-get keeps the LRU ordering correct.
+    const memEntry = this.memCache.get(cacheKey)
+    if (memEntry !== undefined) {
+      this.memCache.delete(cacheKey)
+      this.memCache.set(cacheKey, memEntry)
+      this.memHits++
+      const isStale = Date.now() > (memEntry.expiresAt || Date.now())
+      if (isStale) {
+        console.info(`📦 Cache stale (mem) for ${cacheKey}, will update in background`)
+      }
+      // No "Fresh cache hit" log on mem-hit to keep the log volume sane —
+      // mem-hits are the common path; only stale-mem and SD reads log.
+      return { data: memEntry.data, isStale }
+    }
+    this.memMisses++
     try {
       const cacheFile = this.getCacheFilePath(cacheKey)
 
-      if (!fs.existsSync(cacheFile)) {
-        return { data: null, isStale: false }
+      // M3: async read so the event loop stays free while the SD seeks.
+      // ENOENT is the "no cache yet" path -- swallow it and report as miss.
+      let raw: string
+      try {
+        raw = await fsPromises.readFile(cacheFile, 'utf8')
+      } catch (readErr) {
+        if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { data: null, isStale: false }
+        }
+        throw readErr
       }
-
-      const _stats = fs.statSync(cacheFile)
-      const cachedData: CachedSpotifyData = JSON.parse(fs.readFileSync(cacheFile, 'utf8'))
+      const cachedData: CachedSpotifyData = JSON.parse(raw)
 
       const isStale = Date.now() > (cachedData.expiresAt || Date.now())
 
@@ -178,6 +236,10 @@ export class SpotifyApiService {
       } else {
         console.info(`✅ Fresh cache hit for ${cacheKey}`)
       }
+
+      // M4: populate the in-mem layer so the next hit of the same key skips
+      // the SD round-trip entirely.
+      this.memCacheTouch(cacheKey, cachedData)
 
       return { data: cachedData.data, isStale }
     } catch (error) {
@@ -198,7 +260,13 @@ export class SpotifyApiService {
         expiresAt: Date.now() + expiryTime,
       }
 
-      fs.writeFileSync(cacheFile, JSON.stringify(cachedData, null, 2))
+      // M3: async write -- the previous writeFileSync blocked the event loop
+      // 5-30 ms per save on SD, which during a "fetch all albums of an artist"
+      // burst added up to seconds of stutter under high cache-miss load.
+      // M4: also populate the in-memory layer so the next read of the same
+      // key skips the SD round-trip.
+      await fsPromises.writeFile(cacheFile, JSON.stringify(cachedData, null, 2))
+      this.memCacheTouch(cacheKey, cachedData)
       console.info(`💾 Cached data for ${cacheKey}`)
       this.pruneCacheIfNeeded()
     } catch (error) {
