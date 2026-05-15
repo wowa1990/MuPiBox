@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, Signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone'
-import { distinctUntilChanged, firstValueFrom, interval, map, Observable, switchMap } from 'rxjs'
+import { catchError, distinctUntilChanged, firstValueFrom, interval, map, Observable, of, switchMap, timeout } from 'rxjs'
 import { take } from 'rxjs/operators'
 import { environment } from 'src/environments/environment'
 import { CurrentMediaService } from './current-media.service'
@@ -41,9 +41,19 @@ export class AppComponent {
   ) {
     this.monitorOff = toSignal(
       // 1.5s should be enough to be somewhat "recent".
+      // M1: per-tick timeout + catchError so a single 5xx or stalled response
+      // doesn't kill the toSignal observable forever. B11-pattern shared with
+      // media.service's polling streams. Empty Monitor on failure means
+      // monitorOff stays at its last good distinctUntilChanged value (or the
+      // initial false), no spurious overlay.
       interval(1500).pipe(
-        switchMap((): Observable<Monitor> => this.http.get<Monitor>(`${environment.backend.apiUrl}/monitor`)),
-        map((monitor) => monitor.monitor !== 'On'),
+        switchMap((): Observable<Monitor> =>
+          this.http.get<Monitor>(`${environment.backend.apiUrl}/monitor`).pipe(
+            timeout(1000),
+            catchError(() => of({} as Monitor)),
+          ),
+        ),
+        map((monitor) => monitor.monitor !== undefined && monitor.monitor !== 'On'),
         distinctUntilChanged(),
       ),
       { initialValue: false },

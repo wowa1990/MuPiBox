@@ -198,6 +198,13 @@ export class MediaService {
       shareReplay({ bufferSize: 1, refCount: false }),
     )
     // Every 2 seconds should be enough for timely charging update.
+    // M2: refCount=true so the polling stops when no UI is subscribed.
+    // Previously the stream kept hitting /api/mupihat every 2s for the
+    // entire app lifetime even when the mupihat-icon wasn't rendered
+    // (~1800 wasted req/h). The only consumer is mupihat-icon.component,
+    // which switchMaps in only when hat_active === true — so refCount
+    // ensures the upstream interval idles when that icon is unmounted
+    // (any page without the toolbar/footer rendering it).
     this.mupihat$ = interval(2000).pipe(
       switchMap(
         (): Observable<Mupihat> =>
@@ -205,7 +212,7 @@ export class MediaService {
             .get<Mupihat>(`${this.getApiBackendUrl()}/mupihat`)
             .pipe(catchError(() => of({} as Mupihat))),
       ),
-      shareReplay({ bufferSize: 1, refCount: false }),
+      shareReplay({ bufferSize: 1, refCount: true }),
     )
 
     this.initTelegramNotifications()
