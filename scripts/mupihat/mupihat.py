@@ -122,6 +122,11 @@ def periodic_json_dump():
             time.sleep(0.1)  # Allow time for the watchdog reset
             with i2c_lock:
                 hat.read_all_register()
+                # Phase-12: append the current VBAT to the smoothing ring so
+                # battery_percent_granular() sees a moving-average of the
+                # last ~32s instead of a single sample. Cheap, done inside
+                # the lock so we use the value the bulk-read just refreshed.
+                hat.record_vbat_sample(hat.read_Vbat())
             time.sleep(1)  # Allow time for the registers to be updated
             with i2c_lock:
                 if json_flag:
