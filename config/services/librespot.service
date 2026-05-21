@@ -12,6 +12,12 @@ After=pulseaudio.service
 ExecStart=/bin/bash -c 'source /etc/librespot/env-librespot && /usr/bin/librespot -q'
 Restart=always
 RestartSec=12
+# Phase 13b (B4): bound restart attempts. Without a burst limit a
+# repeatedly-failing token (revoked, network outage) caused journal-log
+# spam and SD-wear. 5 attempts per 10 min is enough to recover from a
+# transient connection blip without hammering systemd / journald.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target

@@ -10,6 +10,9 @@ After=network-online.target
 ExecStart=/usr/bin/spotifyd --no-daemon --config-path /etc/spotifyd/spotifyd.conf --initial-volume 100
 Restart=always
 RestartSec=12
+# Phase 13b (B4): bound restart attempts, see librespot.service notes.
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target

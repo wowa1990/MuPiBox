@@ -11,6 +11,13 @@ Type=simple
 TimeoutStopSec=20
 KillMode=process
 Restart=always
-RestartSec=2
+# Phase 13b (B4): RestartSec was 2 — combined with the absent VNC backend
+# this gave a flap loop of ~30 restarts/min, hammering journald and the
+# CPU. 10s + 5 restarts per 5 min lets the kernel-level VNC come up if
+# it's going to come up, but stops the loop in the typical case where
+# VNC simply isn't wired up.
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
 ExecStart=/usr/bin/python3 /usr/bin/websockify --web=/usr/share/novnc 6080 localhost:5900
 ExecStop=/usr/bin/kill $(/usr/bin/pgrep websockify)
