@@ -228,8 +228,8 @@ if [ "$BATTERYCONFIG" == "null" ]; then
 	update_config '.mupihat.selected_battery = $v' --arg v "ENERpower 2S2P 10.000mAh"
 	update_config '.mupihat.battery_types = [
 		{ "name": "Ansmann 2S1P",             "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }},
-		{ "name": "ENERpower 2S2P 10.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }},
-		{ "name": "ENERpower 2S3P 15.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }},
+		{ "name": "ENERpower 2S2P 10.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6600", "vreg": "8300" }},
+		{ "name": "ENERpower 2S3P 15.000mAh", "config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6600", "vreg": "8300" }},
 		{ "name": "USB-C mode (no battery)",  "config": { "v_100": "1",    "v_75": "1",    "v_50": "1",    "v_25": "1",    "v_0": "1",    "th_warning": "0",    "th_shutdown": "0" }},
 		{ "name": "Custom",                   "config": { "v_100": "8100", "v_75": "7800", "v_50": "7400", "v_25": "7000", "v_0": "6700", "th_warning": "7000", "th_shutdown": "6800" }}
 	]'
@@ -243,9 +243,35 @@ HAS_2S3P=$(/usr/bin/jq -r '[.mupihat.battery_types[]?.name] | index("ENERpower 2
 if [ "$HAS_2S3P" == "null" ]; then
 	update_config '.mupihat.battery_types += [{
 		"name": "ENERpower 2S3P 15.000mAh",
-		"config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6500" }
+		"config": { "v_100": "8200", "v_75": "7700", "v_50": "7400", "v_25": "7000", "v_0": "6400", "th_warning": "6700", "th_shutdown": "6600", "vreg": "8300" }
 	}]'
 fi
+
+# Phase 13a: idempotent backfill of the `vreg` (Charge Voltage Limit) field
+# on existing ENERpower profiles. 8300 mV = 4.15 V/cell — Samsung INR21700-50E
+# datasheet says that yields ~3x the cycle count vs. the 4.20 V/cell POR
+# default. Only touches profiles that don't already have a `vreg` key, so
+# user-tuned values in Custom profile (added via Admin-UI in a later phase)
+# are preserved.
+for PROFILE in "ENERpower 2S2P 10.000mAh" "ENERpower 2S3P 15.000mAh"; do
+	HAS_VREG=$(/usr/bin/jq --arg n "$PROFILE" -r '.mupihat.battery_types[] | select(.name == $n) | .config.vreg // "missing"' ${CONFIG})
+	if [ "$HAS_VREG" == "missing" ] || [ "$HAS_VREG" == "null" ]; then
+		update_config '(.mupihat.battery_types[] | select(.name == $n) | .config) += {"vreg": "8300"}' --arg n "$PROFILE"
+	fi
+done
+
+# Phase 13a: idempotent backfill of th_shutdown=6600 mV (was 6500). The old
+# value gave only a 250 mV puffer to the 6000 mV BMS hard-cutoff. Bumping
+# to 6600 mV (3.30 V/cell) is the standard practice for protecting INR21700
+# cells from deep-discharge induced cycle-life loss. Only touches profiles
+# that still hold the legacy 6500 value — user-tuned overrides via Admin-UI
+# stay intact.
+for PROFILE in "ENERpower 2S2P 10.000mAh" "ENERpower 2S3P 15.000mAh"; do
+	TH=$(/usr/bin/jq --arg n "$PROFILE" -r '.mupihat.battery_types[] | select(.name == $n) | .config.th_shutdown' ${CONFIG})
+	if [ "$TH" == "6500" ]; then
+		update_config '(.mupihat.battery_types[] | select(.name == $n) | .config.th_shutdown) = "6600"' --arg n "$PROFILE"
+	fi
+done
 
 ensure_theme lines
 

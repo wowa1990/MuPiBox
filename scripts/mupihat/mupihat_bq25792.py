@@ -237,8 +237,14 @@ class bq25792:
                     self.battery_conf["v_0"] = int(bt["config"]["v_0"])
                     self.battery_conf["th_warning"] = int(bt["config"]["th_warning"])
                     self.battery_conf["th_shutdown"] = int(bt["config"]["th_shutdown"])
+                    # Phase 13a: optional VREG (Charge Voltage Limit) per battery profile.
+                    # When set, write_defaults() applies it to BQ25792 REG01. When
+                    # absent (legacy profiles, USB-C mode, custom-without-vreg),
+                    # the POR default (typ. 8400 mV / 4.20 V/cell) stays active.
+                    vreg_raw = bt["config"].get("vreg")
+                    self.battery_conf["vreg"] = int(vreg_raw) if vreg_raw not in (None, "", "0") else None
                     logging.info("Battery configuration loaded from JSON: %s", self.battery_conf_file)
-                    break            
+                    break
             return 0
         except Exception as _error:
             logging.error("battery_conf_load from JSON failed, use standard configuration, %s", str(_error))
@@ -5689,8 +5695,25 @@ class bq25792:
         reg.set_EN_IBAT(1) # Enable the IBAT discharge current sensing for ADC
         reg.set_EN_EXTILIM(1) # Enable External ILIM_HIZ Input Current Limit pin input
         self.write_register(reg)
-        
-        
+
+        # Phase 13a: apply VREG (Charge Voltage Limit) from the active
+        # battery profile, when configured. 8300 mV = 4.15 V/cell on a 2S
+        # pack — Samsung INR21700-50E datasheet maps that to ~3x the cycle
+        # life vs. the 4.20 V/cell POR default. Profiles without a `vreg`
+        # field (legacy ones, USB-C-only, Custom-without-vreg) keep the
+        # POR default — no behavior change for those users.
+        vreg_mv = self.battery_conf.get("vreg")
+        if vreg_mv:
+            # BQ25792 REG01 spec: 3000-18800 mV range, 10 mV step
+            if 3000 <= vreg_mv <= 18800:
+                vreg_mv_aligned = (vreg_mv // 10) * 10
+                reg = self.REG01_Charge_Voltage_Limit
+                reg.set(vreg_mv_aligned // 10)
+                self.write_register_word(reg)
+                logging.info(f"VREG (Charge Voltage Limit) set to {vreg_mv_aligned} mV from battery profile")
+            else:
+                logging.warning(f"VREG value {vreg_mv} mV out of range (3000-18800), keeping POR default")
+
         self.set_input_current_limit(2200) # 2.2A input current limit
 
         self.mask_all_INTERRUPTS()  

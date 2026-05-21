@@ -46,6 +46,26 @@
 			$validation_error = 'Threshold order violated: v_0 >= th_warning >= th_shutdown required';
 		}
 
+		// Phase 13a: optional `vreg` field (BQ25792 Charge Voltage Limit) for
+		// the Custom profile. Empty -> field is dropped from config -> POR
+		// default (typ. 8400 mV) stays active. Non-empty must fall in the
+		// chip's hardware range 3000-18800 mV. Independent of the 4000-12600
+		// mV range used for the SoC-mapping voltages above because VREG is
+		// the *charger* setting, not a SoC anchor.
+		$vreg_raw = isset($_POST['vreg']) ? trim((string) $_POST['vreg']) : '';
+		if ($validation_error === '' && $vreg_raw !== '') {
+			if (!ctype_digit($vreg_raw)) {
+				$validation_error = "Field 'vreg' is not a positive integer";
+			} else {
+				$vreg_mv = intval($vreg_raw);
+				if ($vreg_mv < 3000 || $vreg_mv > 18800) {
+					$validation_error = "Field 'vreg' = $vreg_mv mV is outside 3000-18800 mV (BQ25792 range)";
+				} else {
+					$values['vreg'] = (string) $vreg_mv;
+				}
+			}
+		}
+
 		if ($validation_error !== '') {
 			$CHANGE_TXT = $CHANGE_TXT . "<li>Custom battery configuration rejected: " . htmlspecialchars($validation_error) . "</li>";
 		} else {
@@ -279,6 +299,19 @@
 				print $desired_config["th_shutdown"];
 	?>"/>
 		</div>
+	<div>
+		<label class="description" for="vreg">vreg in mV (charge voltage limit, optional)</label>
+		<p class="guidelines"><small>
+			BQ25792 Charge Voltage Limit (REG01). Range 3000-18800 mV.<br>
+			2S Li-Ion: 8400 = 4.20V/cell (factory default, shorter life) ·
+			8300 = 4.15V/cell (~3× cycle life recommended) ·
+			8200 = 4.10V/cell (extra-conservative).<br>
+			Leave empty to keep the chip's power-on default.
+		</small></p>
+		<input id="vreg" name="vreg" class="element text medium" type="text" maxlength="5" value="<?php
+			print htmlspecialchars((string)($desired_config["vreg"] ?? ''), ENT_QUOTES);
+		?>"/>
+	</div>
 	<input id="saveForm" class="button_text" type="submit" name="save_custom" value="Save" />
 
    </li>
