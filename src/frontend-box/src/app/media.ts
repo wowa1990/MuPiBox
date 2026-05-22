@@ -55,7 +55,56 @@ export interface Media {
   // back-filled lazily by the backend with synthetic stamps preserving
   // file order.
   lastPlayedAt?: number
+
+  // ─── Phase 14a — Smart-Sync data layer ────────────────────────────────
+  // `source` discriminates user-curated entries from those pulled in by
+  // the Spotify-playlist sync. Optional in TypeScript because pre-migration
+  // entries in data.json don't carry the field yet — use mediaSource(m)
+  // helper below which defaults missing values to 'manual'.
+  source?: 'manual' | 'spotify-sync'
+
+  // Smart-Sync bookkeeping. Only meaningful when source === 'spotify-sync'.
+  spotify_sync_playlists?: string[]   // playlist IDs referencing this item
+  spotify_sync_added?: string          // ISO timestamp, first seen
+  spotify_sync_last_seen?: string      // ISO timestamp, last present in any playlist
+  spotify_sync_mode?: 'album' | 'episode-only'  // see phase14_smart_sync.md §6.3.1
+
+  // Override fields (decision Q8=B). Parents can edit these per item even
+  // when source === 'spotify-sync'; subsequent sync runs touch only the
+  // non-override base field. Frontend renders the effective value via
+  // mediaEffective*(m) helpers below: <field>_override ?? <field>.
+  artist_override?: string
+  title_override?: string
+  category_override?: CategoryType
+  cover_override?: string
+  artistcover_override?: string
 }
+
+// Phase 14a helpers — single point of truth for source + override semantics.
+// Used everywhere instead of bare property access so the migration window
+// (data.json entries without `source`) is transparent to call sites, and
+// override resolution doesn't fan out into ad-hoc `?? `-chains all over
+// the codebase.
+export const mediaSource = (m: Pick<Media, 'source'> | null | undefined): 'manual' | 'spotify-sync' =>
+  m?.source ?? 'manual'
+
+export const isSyncManaged = (m: Pick<Media, 'source'> | null | undefined): boolean =>
+  mediaSource(m) === 'spotify-sync'
+
+export const mediaEffectiveArtist = (m: Pick<Media, 'artist' | 'artist_override'>): string | undefined =>
+  m.artist_override ?? m.artist
+
+export const mediaEffectiveTitle = (m: Pick<Media, 'title' | 'title_override'>): string | undefined =>
+  m.title_override ?? m.title
+
+export const mediaEffectiveCategory = (m: Pick<Media, 'category' | 'category_override'>): CategoryType =>
+  m.category_override ?? m.category
+
+export const mediaEffectiveCover = (m: Pick<Media, 'cover' | 'cover_override'>): string | undefined =>
+  m.cover_override ?? m.cover
+
+export const mediaEffectiveArtistCover = (m: Pick<Media, 'artistcover' | 'artistcover_override'>): string | undefined =>
+  m.artistcover_override ?? m.artistcover
 
 // Reads as "is this Media a resume entry?" — true for entries written by the
 // new isResume-flag path AND for legacy entries where category was overwritten

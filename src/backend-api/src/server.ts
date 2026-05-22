@@ -111,6 +111,51 @@ const LOCK_STALE_MS = 30_000
   }
 })
 
+// Phase 14a — Smart-Sync data-layer migration.
+// Pre-14 library entries have no `source` field. Smart-Sync needs to
+// distinguish manual entries (untouchable) from sync-managed ones, so a
+// missing field is ambiguous. One-shot migration on startup: read
+// data.json, add `source: 'manual'` to every entry that doesn't carry it
+// yet, then atomically write back. Idempotent: subsequent boots no-op
+// when every entry already has the field. Safe to run pre-14 (before
+// any sync runs) because the only possible legacy value IS 'manual'.
+;(() => {
+  try {
+    if (!fs.existsSync(dataFile)) return
+    const raw = fs.readFileSync(dataFile, 'utf8')
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      console.warn(
+        `${new Date().toLocaleString()}: [MuPiBox-Server] startup: data.json parse failed, skipping source-field migration`,
+      )
+      return
+    }
+    if (!Array.isArray(parsed)) return
+    let migrated = 0
+    for (const item of parsed as Array<Record<string, unknown>>) {
+      if (item && typeof item === 'object' && item.source === undefined) {
+        item.source = 'manual'
+        migrated++
+      }
+    }
+    if (migrated === 0) return
+    // Atomic write — same tmp+rename pattern as acquireLock/save flows.
+    const tmpPath = `${dataFile}.tmp.${process.pid}`
+    fs.writeFileSync(tmpPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
+    fs.renameSync(tmpPath, dataFile)
+    console.log(
+      `${new Date().toLocaleString()}: [MuPiBox-Server] startup: source-field migration touched ${migrated} entries in data.json`,
+    )
+  } catch (err) {
+    console.error(
+      `${new Date().toLocaleString()}: [MuPiBox-Server] startup: source-field migration failed (non-fatal, will retry next boot):`,
+      err,
+    )
+  }
+})()
+
 let mupiboxConfigCache: MupiboxConfig | undefined
 let mupiboxConfigLoadPromise: Promise<MupiboxConfig | undefined> | null = null
 
@@ -654,7 +699,15 @@ app.post('/api/add', (req, res) => {
       res.status(200).send('error')
       return
     }
-    data.push(req.body)
+    // Phase 14a: stamp every Add-Page / Telegram / Admin entry with
+    // source='manual'. Smart-Sync uses this discriminator to leave manual
+    // entries untouched. The Spotify-sync service (Phase 14b) sets
+    // source='spotify-sync' on its own writes and bypasses /api/add.
+    const newEntry = { source: 'manual', ...req.body }
+    if (newEntry.source !== 'manual' && newEntry.source !== 'spotify-sync') {
+      newEntry.source = 'manual'
+    }
+    data.push(newEntry)
     jsonfile.writeFile(dataFile, data, { spaces: 4 }, (writeError) => {
       releaseLock(dataLock, '/api/add')
       if (writeError) {
