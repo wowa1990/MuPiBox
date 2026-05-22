@@ -16,6 +16,9 @@ import type { SpotifyValidationRequest, SpotifyValidationResponse } from './mode
 import { CoverCacheService } from './services/cover-cache.service'
 import { SpotifyApiService } from './services/spotify-api.service'
 import { SpotifyMediaInfo } from './services/spotify-media-info.service'
+import { createSpotifySyncRouter } from './spotify-sync/routes'
+import { startScheduler } from './spotify-sync/scheduler'
+import type { RunSyncDeps } from './spotify-sync/state-machine'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -1702,6 +1705,23 @@ const getMupiboxConfig = async (): Promise<MupiboxConfig | undefined> => {
   return await mupiboxConfigLoadPromise
 }
 
+// Phase 14b — Spotify Smart-Sync wiring.
+// Dependency-bundle gives the sync module access to box-level helpers
+// (data-lock, config update, config getter) without making it import
+// server.ts internals directly. mupiboxConfigCache reads synchronously
+// — the 60-s scheduler lead-in (see scheduler.ts) gives the async
+// config load time to populate the cache; if it's still undefined at
+// the first sync tick, loadSpotifySyncConfig falls back to defaults
+// and the sync simply runs against the default prefix.
+const spotifySyncDeps: RunSyncDeps = {
+  dataFile,
+  getMupiboxConfig: () => mupiboxConfigCache,
+  updateMupiboxConfig,
+  acquireDataLock: () => acquireLock(dataLock, '/api/spotify-sync'),
+  releaseDataLock: () => releaseLock(dataLock, '/api/spotify-sync'),
+}
+app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
+
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server
 if (productionServe) {
@@ -1713,4 +1733,8 @@ if (productionServe) {
 if (!testServe) {
   app.listen(8200)
   console.log(`${new Date().toLocaleString()}: [mupibox-backend-api] Server started at http://localhost:8200`)
+  // Spotify-sync scheduler — only in production / dev, not under tests.
+  // Boot-after-60s lead-in inside startScheduler so initial config load
+  // has time to finish before the first sync attempt.
+  startScheduler(spotifySyncDeps)
 }

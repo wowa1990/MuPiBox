@@ -32,10 +32,15 @@ export interface RefreshResult {
   scopes: string[]
 }
 
+/** Failure descriptor returned when refresh fails. */
+export interface RefreshFailure {
+  kind: 'auth' | 'network' | 'rate-limit' | 'internal'
+  reason: string
+  retryAfterSeconds?: number
+}
+
 /** Tagged-union outcome for a refresh attempt. */
-export type RefreshOutcome =
-  | { ok: true; result: RefreshResult }
-  | { ok: false; kind: 'auth' | 'network' | 'rate-limit' | 'internal'; reason: string; retryAfterSeconds?: number }
+export type RefreshOutcome = { ok: true; result: RefreshResult } | ({ ok: false } & RefreshFailure)
 
 /**
  * POST a refresh-token grant to Spotify and parse the response.
@@ -162,13 +167,16 @@ export function tokenStillValid(store: SpotifyTokenStore, slackSeconds = 300): b
 export async function getValidAccessToken(
   store: SpotifyTokenStore,
   updateCfg: (mutate: (cfg: Record<string, unknown>) => void) => Promise<void>,
-): Promise<{ ok: true; token: string; store: SpotifyTokenStore } | { ok: false; outcome: RefreshOutcome }> {
+): Promise<{ ok: true; token: string; store: SpotifyTokenStore } | { ok: false; failure: RefreshFailure }> {
   if (tokenStillValid(store)) {
     return { ok: true, token: store.accessToken, store }
   }
   const outcome = await refreshAccessToken(store)
   if (!outcome.ok) {
-    return { ok: false, outcome }
+    // outcome is the failure variant here; strip the `ok: false` flag
+    // before passing back so the caller doesn't have to re-narrow.
+    const { ok: _ok, ...failure } = outcome
+    return { ok: false, failure }
   }
   const newStore = await persistRefreshedToken(outcome.result, store, updateCfg)
   return { ok: true, token: newStore.accessToken, store: newStore }
