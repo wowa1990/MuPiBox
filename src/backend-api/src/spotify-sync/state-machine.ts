@@ -13,6 +13,7 @@ import { getValidAccessToken, requiresReAuth } from './auth'
 import { loadSpotifySyncConfig, loadSpotifyTokenStore } from './config-loader'
 import { applyDiff } from './apply'
 import { computeSyncDiff } from './diff'
+import { maybeNotifyAfterRun } from './notify'
 import { discoverPlaylists, resolveSyncItems, SpotifyApiException } from './playlists'
 import { readStateFile, writeStateFile } from './state-file'
 import { acquireSyncLock, releaseSyncLock } from './sync-lock'
@@ -66,6 +67,9 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
   const startedAtIso = startedAt.toISOString()
   const previousState = readStateFile(deps.stateFilePath)
   let failureCounters = { ...previousState.failure_counters }
+  // Phase 14d: snapshot of pre-run counters so notify can detect
+  // transitions (first AUTH_FAILED, threshold-crossing for network/internal).
+  const previousFailureCounters = { ...previousState.failure_counters }
 
   const finalise = (
     state: SyncState,
@@ -92,24 +96,31 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
       retryAfterSeconds: extras.retryAfterSeconds,
     }
     // Persist to state file.
-    writeStateFile(
-      {
-        last_sync_start: result.startedAt,
-        last_sync_end: result.endedAt,
-        last_sync_duration_ms: result.durationMs,
-        last_sync_trigger: trigger,
-        last_sync_status: state,
-        playlists_seen: previousState.playlists_seen, // overridden on success below
-        additions_count: result.additions,
-        updates_count: result.updates,
-        removals_count: result.removals,
-        conflicts: counts.conflicts ?? previousState.conflicts,
-        failure_counters: failureCounters,
-        next_scheduled_sync: extras.nextScheduled ?? previousState.next_scheduled_sync,
-        current_state: 'IDLE',
-      },
-      deps.stateFilePath,
-    )
+    const persisted: SyncStateFile = {
+      last_sync_start: result.startedAt,
+      last_sync_end: result.endedAt,
+      last_sync_duration_ms: result.durationMs,
+      last_sync_trigger: trigger,
+      last_sync_status: state,
+      playlists_seen: previousState.playlists_seen, // overridden on success below
+      additions_count: result.additions,
+      updates_count: result.updates,
+      removals_count: result.removals,
+      conflicts: counts.conflicts ?? previousState.conflicts,
+      failure_counters: failureCounters,
+      next_scheduled_sync: extras.nextScheduled ?? previousState.next_scheduled_sync,
+      current_state: 'IDLE',
+    }
+    writeStateFile(persisted, deps.stateFilePath)
+    // Phase 14d: send Telegram push for AUTH_FAILED (immediate), and for
+    // NETWORK/INTERNAL failures crossing the configured threshold.
+    try {
+      maybeNotifyAfterRun(result, persisted, config, previousFailureCounters)
+    } catch (err) {
+      console.warn(
+        `${new Date().toLocaleString()}: [spotify-sync] notify hook threw (non-fatal): ${(err as Error).message}`,
+      )
+    }
     return result
   }
 
@@ -215,25 +226,23 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
     }))
     // Persist the success-path state file with full playlists_seen.
     const endedAt = new Date()
-    writeStateFile(
-      {
-        last_sync_start: startedAtIso,
-        last_sync_end: endedAt.toISOString(),
-        last_sync_duration_ms: endedAt.getTime() - startedAt.getTime(),
-        last_sync_trigger: trigger,
-        last_sync_status: 'COMPLETED',
-        playlists_seen: playlistsSeen,
-        additions_count: applyResult.appliedAdditions,
-        updates_count: applyResult.appliedUpdates,
-        removals_count: applyResult.appliedRemovals,
-        conflicts: diff.conflicts,
-        failure_counters: failureCounters,
-        next_scheduled_sync: new Date(Date.now() + config.polling_interval_seconds * 1000).toISOString(),
-        current_state: 'IDLE',
-      },
-      deps.stateFilePath,
-    )
-    return {
+    const persistedSuccess: SyncStateFile = {
+      last_sync_start: startedAtIso,
+      last_sync_end: endedAt.toISOString(),
+      last_sync_duration_ms: endedAt.getTime() - startedAt.getTime(),
+      last_sync_trigger: trigger,
+      last_sync_status: 'COMPLETED',
+      playlists_seen: playlistsSeen,
+      additions_count: applyResult.appliedAdditions,
+      updates_count: applyResult.appliedUpdates,
+      removals_count: applyResult.appliedRemovals,
+      conflicts: diff.conflicts,
+      failure_counters: failureCounters,
+      next_scheduled_sync: new Date(Date.now() + config.polling_interval_seconds * 1000).toISOString(),
+      current_state: 'IDLE',
+    }
+    writeStateFile(persistedSuccess, deps.stateFilePath)
+    const successResult: RunSyncResult = {
       state: 'COMPLETED',
       trigger,
       startedAt: startedAtIso,
@@ -244,6 +253,16 @@ export async function runSync(trigger: SyncTrigger, deps: RunSyncDeps): Promise<
       removals: applyResult.appliedRemovals,
       conflictsCount: diff.conflicts.length,
     }
+    // Phase 14d: notify only fires for opt-in notify_on_sync or for new
+    // conflicts; counters are reset above so failure-thresholds don't trip.
+    try {
+      maybeNotifyAfterRun(successResult, persistedSuccess, config, previousFailureCounters)
+    } catch (err) {
+      console.warn(
+        `${new Date().toLocaleString()}: [spotify-sync] notify hook (success path) threw: ${(err as Error).message}`,
+      )
+    }
+    return successResult
   } finally {
     releaseSyncLock(deps.syncLockPath)
   }
