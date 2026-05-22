@@ -93,6 +93,64 @@
       </div>
     </section>
 
+    <!-- Settings — dedicated short form for the everyday case (Box-Name,
+         Polling-Intervall, enable toggle). Distinct from the full setup
+         wizard, which is only for the first-time Spotify-App registration. -->
+    <section id="screen-settings" class="screen" hidden>
+      <div class="card">
+        <h2>Smart-Sync-Einstellungen</h2>
+        <p class="dim">Box-Name + Sync-Intervall. Spotify-Verbindung änderst du im Dashboard.</p>
+      </div>
+
+      <div class="card">
+        <h3>Box-Playlist-Name</h3>
+        <p class="dim">Spotify-Playlists, deren Name mit diesem Präfix anfängt, werden von der Box synchronisiert.</p>
+        <div class="form-row">
+          <label for="settings-prefix">Box-Name (= Playlist-Präfix)</label>
+          <input type="text" id="settings-prefix" placeholder="z.B. LeniBox" maxlength="30" autocomplete="off">
+        </div>
+        <p class="dim">Beispiele: <code id="settings-prefix-example-1">LeniBox-Hörspiele</code>, <code id="settings-prefix-example-2">LeniBox-Musik</code></p>
+      </div>
+
+      <div class="card">
+        <h3>Sync-Intervall</h3>
+        <p class="dim">Wie oft die Box automatisch nachschaut, ob in deinen Playlists etwas dazugekommen oder weg ist.</p>
+        <div class="form-row">
+          <label for="settings-interval">Minuten zwischen automatischen Syncs (5–60)</label>
+          <input type="number" id="settings-interval" min="5" max="60" step="1">
+        </div>
+        <p class="dim">Manueller Sync (Button „Jetzt synchronisieren" oder Telegram <code>/resync</code>) ist davon unabhängig.</p>
+      </div>
+
+      <div class="card">
+        <h3>Smart-Sync aktiv</h3>
+        <div class="status-row">
+          <span>Automatischer Sync</span>
+          <label class="toggle">
+            <input type="checkbox" id="settings-enabled">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <p class="dim">Aus → kein automatischer Sync; manuelle Trigger über Telegram/WebApp bleiben aktiv.</p>
+      </div>
+
+      <div class="card">
+        <h3>Erweitert</h3>
+        <p class="dim">Falls du Spotify komplett neu einrichten oder die Developer-App wechseln willst:</p>
+        <div class="actions">
+          <button class="ghost" id="settings-rerun-wizard-btn">🔧 Setup-Wizard erneut durchlaufen</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="actions">
+          <button class="ghost" id="settings-back-btn">← Zurück zum Dashboard</button>
+          <button class="primary" id="settings-save-btn">Speichern</button>
+        </div>
+        <div id="settings-feedback" class="feedback" hidden></div>
+      </div>
+    </section>
+
     <!-- Setup-Wizard -->
     <section id="screen-wizard" class="screen" hidden>
       <div class="card">

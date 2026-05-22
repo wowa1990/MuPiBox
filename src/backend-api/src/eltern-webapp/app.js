@@ -268,6 +268,64 @@ async function logout() {
   location.reload()
 }
 
+/* ---------- settings (Phase 14e polish) ---------- */
+
+async function goSettings() {
+  showScreen('settings')
+  await loadSettings()
+}
+
+async function loadSettings() {
+  const res = await api(`${SYNC_API}/config`)
+  if (!res.ok) {
+    feedback('#settings-feedback', 'error', `Laden fehlgeschlagen: ${res.status}`)
+    return
+  }
+  const cfg = res.body ?? {}
+  $('#settings-prefix').value = cfg.playlist_prefix ?? ''
+  // Backend stores seconds; UI shows minutes — Q6=B default 900s = 15min.
+  $('#settings-interval').value = Math.max(5, Math.min(60, Math.round((cfg.polling_interval_seconds ?? 900) / 60)))
+  $('#settings-enabled').checked = !!cfg.enabled
+  updateSettingsExamples()
+}
+
+function updateSettingsExamples() {
+  const name = $('#settings-prefix').value.trim() || 'LeniBox'
+  setText('#settings-prefix-example-1', `${name}-Hörspiele`)
+  setText('#settings-prefix-example-2', `${name}-Musik`)
+}
+
+async function saveSettings() {
+  const prefix = $('#settings-prefix').value.trim()
+  const intervalMin = Number($('#settings-interval').value)
+  const enabled = $('#settings-enabled').checked
+
+  if (prefix.length < 2 || prefix.length > 30) {
+    feedback('#settings-feedback', 'error', 'Box-Name muss 2-30 Zeichen lang sein.')
+    return
+  }
+  if (!Number.isFinite(intervalMin) || intervalMin < 5 || intervalMin > 60) {
+    feedback('#settings-feedback', 'error', 'Sync-Intervall muss zwischen 5 und 60 Minuten liegen.')
+    return
+  }
+
+  // Save: only send the three fields the user can change here. Backend
+  // ignores anything else and clamps polling_interval_seconds to [300, 3600].
+  const res = await api(`${SYNC_API}/config`, {
+    method: 'POST',
+    body: {
+      enabled,
+      playlist_prefix: prefix,
+      polling_interval_seconds: intervalMin * 60,
+    },
+  })
+  if (res.ok) {
+    feedback('#settings-feedback', 'success', 'Gespeichert. Änderungen greifen ab dem nächsten Sync-Tick.')
+  } else {
+    feedback('#settings-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+  }
+}
+
 /* ---------- wizard ---------- */
 
 function goWizard() {
@@ -383,7 +441,18 @@ async function bootstrap() {
 function wire() {
   $('#logout-btn').addEventListener('click', logout)
   $('#sync-trigger-btn').addEventListener('click', triggerSync)
-  $('#sync-config-btn').addEventListener('click', () => goWizard())
+  // Phase 14e polish: "Einstellungen" -> dedicated short settings screen
+  // (Box-Name + interval + enable toggle), NOT the full setup wizard.
+  $('#sync-config-btn').addEventListener('click', () => goSettings())
+
+  // Settings-screen buttons.
+  $('#settings-back-btn').addEventListener('click', async () => {
+    showScreen('dashboard')
+    await loadDashboard()
+  })
+  $('#settings-save-btn').addEventListener('click', saveSettings)
+  $('#settings-rerun-wizard-btn').addEventListener('click', () => goWizard())
+  $('#settings-prefix').addEventListener('input', updateSettingsExamples)
 
   for (const btn of $$('[data-go-step]')) {
     btn.addEventListener('click', () => setWizardStep(Number(btn.dataset.goStep)))
