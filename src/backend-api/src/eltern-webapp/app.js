@@ -138,15 +138,60 @@ async function loadDashboard() {
     pls.appendChild(div)
   }
 
-  // Konflikte
+  // Konflikte (Phase 14e: jetzt mit Aktions-Button "Vom Sync verwalten lassen")
   const confs = cfg.state?.conflicts ?? []
   $('#conflicts-card').hidden = confs.length === 0
   const list = $('#conflicts-list')
   list.innerHTML = ''
   for (const c of confs) {
     const li = document.createElement('li')
-    li.textContent = `${c.manualArtist ?? '?'} – ${c.manualTitle ?? '?'} (auch in: ${c.inPlaylists.join(', ')})`
+    const meta = document.createElement('div')
+    meta.textContent = `${c.manualArtist ?? '?'} – ${c.manualTitle ?? '?'}`
+    const pl = document.createElement('div')
+    pl.className = 'dim'
+    pl.textContent = `auch in: ${(c.inPlaylists || []).join(', ')}`
+    const actions = document.createElement('div')
+    actions.className = 'actions'
+    addBtn(actions, 'ghost', '🔗 Vom Sync verwalten lassen', () => promoteConflict(c))
+    li.append(meta, pl, actions)
     list.appendChild(li)
+  }
+}
+
+/** POST /api/spotify-sync/conflicts/promote with the conflict's identifier
+ *  pair. On success: reload dashboard so the conflict is gone (item is now
+ *  source='spotify-sync' and will be updated by the next sync). */
+async function promoteConflict(conflict) {
+  const field = conflict.identifierField
+  // The group key is `<prefix>:<id>` (or `compilation:<artistId>:<albumId>`).
+  // For matching against library we need the bare id — same extraction as
+  // the diff module does.
+  let value = ''
+  const groupKey = conflict.groupKey ?? ''
+  if (groupKey.startsWith('compilation:')) {
+    const parts = groupKey.split(':')
+    value = parts[parts.length - 1] ?? ''
+  } else if (groupKey.includes(':')) {
+    value = groupKey.slice(groupKey.indexOf(':') + 1)
+  } else {
+    value = groupKey
+  }
+  if (!field || !value) {
+    feedback('#sync-feedback', 'error', 'Konflikt-Identifier unvollständig.')
+    return
+  }
+  if (!confirm(`„${conflict.manualArtist ?? '?'} – ${conflict.manualTitle ?? '?'}" vom Sync verwalten lassen?\n\nAb sofort werden Titel/Cover/Artist vom Sync aktualisiert. Deine Overrides bleiben erhalten.`)) {
+    return
+  }
+  const res = await api(`${SYNC_API}/conflicts/promote`, {
+    method: 'POST',
+    body: { identifierField: field, identifierValue: value },
+  })
+  if (res.ok) {
+    feedback('#sync-feedback', 'success', 'Eintrag wird ab dem nächsten Sync verwaltet.')
+    await loadDashboard()
+  } else {
+    feedback('#sync-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
   }
 }
 
@@ -255,26 +300,22 @@ function updateWizardExamples() {
 
 async function wizardSaveClientId() {
   const clientId = $('#wizard-client-id').value.trim()
-  if (!clientId || !/^[a-zA-Z0-9]+$/.test(clientId)) {
-    alert('Bitte eine gültige Client ID einfügen (nur Buchstaben + Zahlen).')
+  if (!clientId || !/^[a-zA-Z0-9]+$/.test(clientId) || clientId.length < 16) {
+    alert('Bitte eine gültige Client ID einfügen (mind. 16 Zeichen, nur Buchstaben + Zahlen).')
     return
   }
-  // Persist via the existing spotify section of mupiboxconfig.json.
-  // We don't have a generic /api/eltern/config endpoint yet — reuse the
-  // sync config endpoint which has updateMupiboxConfig wired up. (Phase
-  // 14e will add a dedicated /api/eltern/spotify-credentials endpoint.)
-  // For now: client_id goes via updateMupiboxConfig indirect path —
-  // simplest is to add a tiny helper that POSTS to /api/spotify-sync/config
-  // with an unrecognised field, which gets dropped — so we need a real
-  // endpoint. Workaround: tell the user to use the Admin-UI for now.
-  // TODO 14e: add /api/eltern/spotify-credentials POST endpoint.
-  alert(
-    'Hinweis: Phase-14c speichert Client-ID derzeit noch nicht direkt aus dem Wizard.\n\n' +
-    'Bitte trage die Client-ID einmalig im Admin-Interface unter spotify.php ein, klicke dort den Authorize-Link, dann komm zurück hierher.\n\n' +
-    'Phase 14e wird das nahtloser machen.',
-  )
-  // Auch bei nicht-direktem Save: erlauben weiter zu Schritt 4 — vielleicht hat
-  // der User die ID schon im Admin-UI hinterlegt.
+  // Optional Client-Secret-Feld (Phase 14e — wizard kann auch klassisch
+  // statt PKCE, falls Eltern's Spotify-App sowieso ein Secret hat).
+  // Wizard-UI zeigt das nicht als Pflichtfeld; leerer Wert => PKCE.
+  const clientSecret = ''
+  const res = await api(`${API}/spotify-credentials`, {
+    method: 'POST',
+    body: { clientId, clientSecret },
+  })
+  if (!res.ok) {
+    alert(`Speichern fehlgeschlagen: ${res.body?.error ?? res.status}`)
+    return
+  }
   setWizardStep(4)
 }
 

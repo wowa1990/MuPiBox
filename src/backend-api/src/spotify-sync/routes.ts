@@ -8,6 +8,8 @@
 // Eltern-WebApp setup-wizard — for now we only need status + trigger
 // + config to verify the sync loop works end-to-end.
 
+import * as fs from 'node:fs'
+import { promises as fsPromises } from 'node:fs'
 import { Router } from 'express'
 import { loadSpotifySyncConfig, loadSpotifyTokenStore } from './config-loader'
 import { requiresReAuth, tokenStillValid } from './auth'
@@ -17,6 +19,7 @@ import type { RunSyncDeps } from './state-machine'
 import {
   POLLING_INTERVAL_SECONDS_MAX,
   POLLING_INTERVAL_SECONDS_MIN,
+  type BoxLibraryEntry,
   type SpotifySyncConfig,
 } from './types'
 
@@ -62,6 +65,65 @@ export function createSpotifySyncRouter(deps: RunSyncDeps): Router {
   router.get('/config', (_req, res) => {
     const config = loadSpotifySyncConfig(deps.getMupiboxConfig())
     res.json(config)
+  })
+
+  /**
+   * POST /api/spotify-sync/conflicts/promote
+   * Flip a manual library entry to `source='spotify-sync'` so the next
+   * sync run treats it as managed (and starts updating cover/title/etc.
+   * from the Spotify side). This is the conflict-resolution action
+   * "Vom Sync verwalten lassen" from architecture §7.2.
+   *
+   * Body: { identifierField: 'id'|'artistid'|'showid'|'audiobookid'|'playlistid', identifierValue: string }
+   *
+   * Caller takes the data lock — same pattern as /api/edit. Atomic
+   * write via tmp+rename.
+   */
+  router.post('/conflicts/promote', async (req, res) => {
+    const body = (req.body ?? {}) as { identifierField?: unknown; identifierValue?: unknown }
+    const allowedFields = ['id', 'artistid', 'showid', 'audiobookid', 'playlistid'] as const
+    const field = typeof body.identifierField === 'string' ? body.identifierField : ''
+    const value = typeof body.identifierValue === 'string' ? body.identifierValue : ''
+    if (!(allowedFields as readonly string[]).includes(field) || !value) {
+      res.status(400).json({ error: 'identifierField + identifierValue required' })
+      return
+    }
+    const lockResult = deps.acquireDataLock()
+    if (lockResult === 'locked') {
+      res.status(409).json({ error: 'data.json is locked' })
+      return
+    }
+    if (lockResult === 'error') {
+      res.status(500).json({ error: 'data.json lock acquisition failed' })
+      return
+    }
+    try {
+      const raw = await fsPromises.readFile(deps.dataFile, 'utf8')
+      const library = JSON.parse(raw) as BoxLibraryEntry[]
+      if (!Array.isArray(library)) {
+        res.status(500).json({ error: 'data.json root is not an array' })
+        return
+      }
+      const target = library.find((entry) => entry[field as keyof BoxLibraryEntry] === value)
+      if (!target) {
+        res.status(404).json({ error: 'no library entry matches the identifier' })
+        return
+      }
+      // Promote to sync-managed. Sync state fields get filled on the next
+      // sync run (added/last_seen timestamps via the apply step) — we
+      // just set source here. Empty playlists set so the orphan-removal
+      // doesn't immediately drop it on a sync that runs before discovery.
+      target.source = 'spotify-sync'
+      if (!target.spotify_sync_playlists) target.spotify_sync_playlists = []
+      const tmp = `${deps.dataFile}.tmp.${process.pid}`
+      await fsPromises.writeFile(tmp, `${JSON.stringify(library, null, 2)}\n`, 'utf8')
+      fs.renameSync(tmp, deps.dataFile)
+      res.json({ ok: true, promoted: { field, value } })
+    } catch (err) {
+      res.status(500).json({ error: `failed: ${(err as Error).message}` })
+    } finally {
+      deps.releaseDataLock()
+    }
   })
 
   /** POST /api/spotify-sync/config

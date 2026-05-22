@@ -31,6 +31,9 @@
                 <img draggable="false" ondragstart="return false;"
                      loading="lazy" decoding="async" fetchpriority="low"
                      src="{{currentData.imgSrc | async}}">
+                @if (currentData.badge) {
+                  <span class="card-badge" aria-hidden="true">{{ currentData.badge }}</span>
+                }
               </ion-card>
             </ion-col>
           </ion-row>

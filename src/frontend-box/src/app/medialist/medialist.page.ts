@@ -9,7 +9,7 @@ import { catchError, combineLatest, map, of, switchMap, tap } from 'rxjs'
 import type { Artist } from '../artist'
 import { ArtworkService } from '../artwork.service'
 import { LoadingComponent } from '../loading/loading.component'
-import { CategoryType, Media, MediaSorting } from '../media'
+import { CategoryType, isSyncManaged, Media, MediaSorting } from '../media'
 import { MediaService } from '../media.service'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
@@ -40,9 +40,16 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   protected swiperData: Signal<SwiperData<Media>[]> = computed(() => {
     return this.media()?.map((media) => {
       return {
-        name: media.title,
+        // Phase 14e: display title falls back to title_override when the
+        // parent has customised it via the Eltern-WebApp; keeps the
+        // box-frontend consistent with what the override pattern promises.
+        name: media.title_override ?? media.title,
         imgSrc: this.artworkService.getArtwork(media),
         data: media,
+        // Phase 14e: lock-icon badge on items the Spotify Smart-Sync
+        // manages. Helps parents/kids identify auto-synced entries at a
+        // glance. Manual entries (the default) carry no badge.
+        badge: isSyncManaged(media) ? '🔗' : undefined,
       }
     })
   })

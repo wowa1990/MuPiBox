@@ -175,6 +175,41 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.json({ ok: true })
   })
 
+  /**
+   * POST /api/eltern/spotify-credentials
+   * Persists the user-provided clientId (and optional clientSecret) into
+   * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that
+   * was deferred in Phase 14c.
+   *
+   * Validation: clientId must be base64url-style alphanumeric (Spotify's
+   * format), at least 16 characters. clientSecret optional — when blank
+   * the box flips to PKCE-style refresh in src/spotify-sync/auth.ts.
+   */
+  router.post('/spotify-credentials', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { clientId?: unknown; clientSecret?: unknown }
+    const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : ''
+    const clientSecret = typeof body.clientSecret === 'string' ? body.clientSecret.trim() : ''
+    if (clientId.length < 16 || clientId.length > 64 || !/^[A-Za-z0-9]+$/.test(clientId)) {
+      res.status(400).json({ error: 'clientId must be 16-64 alphanumeric characters' })
+      return
+    }
+    if (clientSecret && (clientSecret.length < 16 || clientSecret.length > 64 || !/^[A-Za-z0-9]+$/.test(clientSecret))) {
+      res.status(400).json({ error: 'clientSecret must be 16-64 alphanumeric characters when provided' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const spotify = ((cfg.spotify as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      spotify.clientId = clientId
+      // Empty secret deliberately persisted as '' so the PKCE branch in
+      // src/spotify-sync/auth.ts picks it up; don't write `undefined`,
+      // because jsonfile collapses that into a missing key and existing
+      // code reads via typeof === 'string'.
+      spotify.clientSecret = clientSecret
+      cfg.spotify = spotify
+    })
+    res.json({ ok: true, mode: clientSecret ? 'classic' : 'pkce' })
+  })
+
   return router
 }
 
