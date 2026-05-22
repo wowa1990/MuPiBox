@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1c20">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/eltern/manifest.json">
+  <link rel="stylesheet" href="/eltern/styles.css">
+  <title>MuPiBox · Eltern-Hub</title>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand">🎵 MuPiBox</div>
+    <button id="logout-btn" class="ghost" hidden>Abmelden</button>
+  </header>
+
+  <main id="app-root">
+    <!-- Loading-State während Session-Check -->
+    <section id="screen-loading" class="screen">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Lade…</p>
+      </div>
+    </section>
+
+    <!-- Wird gezeigt wenn /api/eltern/session 401 zurückgibt -->
+    <section id="screen-no-session" class="screen" hidden>
+      <div class="card">
+        <h2>Anmeldung erforderlich</h2>
+        <p>Diese Seite ist nur über einen gültigen Magic-Link erreichbar.</p>
+        <ul>
+          <li>Über den Telegram-Bot: <code>/eltern-login</code></li>
+          <li>Direkt am Box-Display: Mehrfach-Tap auf Cloud+Batterie-Icons (kommt in Phase 15)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Dashboard mit Sync-Status -->
+    <section id="screen-dashboard" class="screen" hidden>
+      <div class="card">
+        <h2 id="box-title">LeniBox</h2>
+        <p class="dim" id="box-subtitle">Spotify Smart-Sync</p>
+      </div>
+
+      <div class="card" id="spotify-card">
+        <h3>Spotify-Verbindung</h3>
+        <div id="spotify-status" class="status-row">
+          <span class="dim">Lade…</span>
+        </div>
+        <div class="actions" id="spotify-actions"></div>
+      </div>
+
+      <div class="card" id="sync-card">
+        <h3>Smart-Sync</h3>
+        <div class="status-row">
+          <span class="dim">Letzter Sync:</span>
+          <span id="sync-last" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Status:</span>
+          <span id="sync-state" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Nächster Sync:</span>
+          <span id="sync-next" class="value">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Box-Playlist-Prefix:</span>
+          <span id="sync-prefix" class="value">—</span>
+        </div>
+        <div id="sync-counts" class="status-row" hidden>
+          <span class="dim">Zuletzt:</span>
+          <span id="sync-summary" class="value">—</span>
+        </div>
+        <div id="sync-playlists" class="playlists"></div>
+        <div class="actions">
+          <button id="sync-trigger-btn" class="primary">🔄 Jetzt synchronisieren</button>
+          <button id="sync-config-btn" class="ghost">Einstellungen</button>
+        </div>
+        <div id="sync-feedback" class="feedback" hidden></div>
+      </div>
+
+      <div class="card" id="conflicts-card" hidden>
+        <h3>⚠️ Konflikte</h3>
+        <p class="dim">Diese Inhalte sind sowohl manuell als auch in einer LeniBox-Playlist. Manuelle Einträge bleiben unangetastet.</p>
+        <ul id="conflicts-list"></ul>
+      </div>
+
+      <div class="card" id="error-banner" hidden>
+        <h3>Fehler</h3>
+        <p id="error-text"></p>
+      </div>
+    </section>
+
+    <!-- Setup-Wizard -->
+    <section id="screen-wizard" class="screen" hidden>
+      <div class="card">
+        <h2>Spotify-Setup</h2>
+        <p class="dim" id="wizard-step-label">Schritt 1 von 5</p>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-1">
+        <h3>Schritt 1 — Spotify-App anlegen</h3>
+        <p>Bevor MuPiBox mit Spotify reden kann, brauchen wir eine kleine „App" in deinem Spotify-Konto. Keine Sorge — das dauert keine 5 Minuten und kostet nichts.</p>
+        <ol>
+          <li>Öffne in einem neuen Tab: <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify-Developer-Dashboard</a></li>
+          <li>Logge dich mit deinem normalen Spotify-Konto ein.</li>
+          <li>Klicke oben rechts auf <strong>Create app</strong>.</li>
+        </ol>
+        <div class="actions">
+          <button class="primary" data-go-step="2">Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-2" hidden>
+        <h3>Schritt 2 — Felder ausfüllen</h3>
+        <p>Trage in das Spotify-Formular ein:</p>
+        <div class="kv">
+          <label>App name</label>
+          <div class="copyable">
+            <code id="wizard-app-name">LeniBox</code>
+            <button class="ghost copy-btn" data-copy="wizard-app-name">📋</button>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Description</label>
+          <div class="copyable">
+            <code>MuPiBox Smart-Sync</code>
+            <button class="ghost copy-btn" data-copy-text="MuPiBox Smart-Sync">📋</button>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Redirect URI</label>
+          <div class="copyable">
+            <code id="wizard-redirect-uri"></code>
+            <button class="ghost copy-btn" data-copy="wizard-redirect-uri">📋</button>
+          </div>
+        </div>
+        <p class="dim">APIs/SDKs: ☑ Web API. Häkchen bei „I understand and agree" → Save.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="1">← Zurück</button>
+          <button class="primary" data-go-step="3">Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-3" hidden>
+        <h3>Schritt 3 — Client ID kopieren</h3>
+        <p>Klicke in deiner neuen App oben links auf <strong>Settings</strong>.</p>
+        <p>Kopiere den Wert hinter „Client ID":</p>
+        <div class="form-row">
+          <label for="wizard-client-id">Client ID</label>
+          <input type="text" id="wizard-client-id" placeholder="32-Zeichen-Hex …" autocomplete="off">
+        </div>
+        <p class="dim">Client Secret brauchst du nicht — bleibt geheim in deinem Spotify-Konto.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="2">← Zurück</button>
+          <button class="primary" id="wizard-save-client-id">Speichern + Weiter →</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-4" hidden>
+        <h3>Schritt 4 — Verbindung testen</h3>
+        <p>Wir öffnen jetzt die Spotify-Anmeldeseite. Du autorisierst die App, danach kommst du automatisch zurück.</p>
+        <div class="actions">
+          <button class="ghost" data-go-step="3">← Zurück</button>
+          <button class="primary" id="wizard-connect-btn">Mit Spotify verbinden</button>
+        </div>
+      </div>
+
+      <div class="card wizard-step" id="wizard-step-5" hidden>
+        <h3>Schritt 5 — Box-Name + Playlists</h3>
+        <p>So soll deine Box-Playlist heißen (= Prefix für „<strong>NAME-Hörspiele</strong>", „<strong>NAME-Musik</strong>" etc.):</p>
+        <div class="form-row">
+          <label for="wizard-box-name">Box-Name</label>
+          <input type="text" id="wizard-box-name" placeholder="z.B. LeniBox" maxlength="30" autocomplete="off">
+        </div>
+        <p class="dim">Erstelle in Spotify Playlists mit diesem Präfix. Beispiele:</p>
+        <ul class="dim">
+          <li><code id="wizard-example-1">LeniBox-Hörspiele</code></li>
+          <li><code id="wizard-example-2">LeniBox-Musik</code></li>
+          <li><code id="wizard-example-3">LeniBox-Schlafenszeit</code></li>
+        </ul>
+        <div class="actions">
+          <button class="primary" id="wizard-finish-btn">Fertig → Zum Dashboard</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/eltern/app.js"></script>
+</body>
+</html>

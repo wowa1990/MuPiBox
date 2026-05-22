@@ -1,0 +1,18 @@
+{
+  "name": "MuPiBox Eltern-Hub",
+  "short_name": "MuPiBox",
+  "description": "Eltern-Steuerung der MuPiBox",
+  "start_url": "/eltern",
+  "scope": "/eltern",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#1a1c20",
+  "icons": [
+    {
+      "src": "/eltern/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

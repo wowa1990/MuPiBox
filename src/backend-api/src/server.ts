@@ -19,6 +19,8 @@ import { SpotifyMediaInfo } from './services/spotify-media-info.service'
 import { createSpotifySyncRouter } from './spotify-sync/routes'
 import { startScheduler } from './spotify-sync/scheduler'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
+import { buildElternLandingHandler, createElternApiRouter } from './eltern/routes'
+import { startBucketCleanup } from './eltern/middleware'
 
 // Force IPv4 for DNS lookups to avoid EAI_AGAIN errors on Raspberry Pi
 // This fixes issues where IPv6 is misconfigured or not supported
@@ -1722,6 +1724,23 @@ const spotifySyncDeps: RunSyncDeps = {
 }
 app.use('/api/spotify-sync', createSpotifySyncRouter(spotifySyncDeps))
 
+// Phase 14c — Eltern-WebApp routes.
+// JSON API under /api/eltern/* + a magic-link landing handler at /eltern
+// that redeems ?token=... into a session cookie and redirects to /eltern
+// (without the query) so the WebApp shell loads cleanly.
+app.use(
+  '/api/eltern',
+  createElternApiRouter({
+    getMupiboxConfig: () => mupiboxConfigCache,
+    updateMupiboxConfig,
+  }),
+)
+app.get('/eltern', buildElternLandingHandler())
+// Static WebApp assets (HTML/CSS/JS). The landing handler above runs
+// first and either redeems a token (-> redirect) or calls next() so the
+// static middleware below serves the shell.
+app.use('/eltern', express.static(path.join(__dirname, 'eltern-webapp')))
+
 // Catch-all handler: send back Angular's index.html file for any non-API routes
 // This must be placed after all API routes but before starting the server
 if (productionServe) {
@@ -1737,4 +1756,6 @@ if (!testServe) {
   // Boot-after-60s lead-in inside startScheduler so initial config load
   // has time to finish before the first sync attempt.
   startScheduler(spotifySyncDeps)
+  // Eltern-WebApp rate-limit map cleanup tick.
+  startBucketCleanup()
 }
