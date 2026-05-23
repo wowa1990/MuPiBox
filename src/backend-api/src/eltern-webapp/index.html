@@ -174,9 +174,73 @@
 
     <section id="screen-power" class="screen" hidden>
       <div class="card">
-        <h2>Akku &amp; Power</h2>
-        <p>Akku-Stand, Charging-Verlauf, Idle-Shutdown-Einstellungen.</p>
-        <p class="dim">Phase 15i — in Arbeit.</p>
+        <h3>Akku-Stand</h3>
+        <div class="battery-display">
+          <div class="battery-percent" id="power-percent">—</div>
+          <div class="battery-state" id="power-state">Lade…</div>
+        </div>
+        <div class="status-row">
+          <span class="dim">Akku-Spannung</span>
+          <span class="value" id="power-vbat">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">USB-Spannung</span>
+          <span class="value" id="power-vbus">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Akku-Strom</span>
+          <span class="value" id="power-ibat">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Temperatur</span>
+          <span class="value" id="power-temp">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Charger-Status</span>
+          <span class="value" id="power-chargerstatus">—</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Aktives Akku-Profil</h3>
+        <div class="status-row">
+          <span class="dim">Profil</span>
+          <span class="value" id="power-profile-name">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Voll-Spannung (v_100)</span>
+          <span class="value" id="power-profile-v100">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Warnung (th_warning)</span>
+          <span class="value" id="power-profile-warn">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Shutdown (th_shutdown)</span>
+          <span class="value" id="power-profile-shut">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Lade-Schluss (VREG)</span>
+          <span class="value" id="power-profile-vreg">—</span>
+        </div>
+        <p class="dim">Profil-Auswahl + Custom-Werte über Admin-Interface (MuPiHAT-Page).</p>
+      </div>
+
+      <div class="card">
+        <h3>Auto-Shutdown</h3>
+        <p class="dim">Box schaltet sich selbst aus, wenn niemand hört. 0 = nie ausschalten.</p>
+        <div class="form-row">
+          <label for="power-idle-shutdown">Idle-Shutdown nach Minuten (0–1440)</label>
+          <input type="number" id="power-idle-shutdown" min="0" max="1440" step="1">
+        </div>
+        <div class="form-row">
+          <label for="power-idle-display">Display-Off nach Minuten (0–1440)</label>
+          <input type="number" id="power-idle-display" min="0" max="1440" step="1">
+        </div>
+        <div class="actions">
+          <button class="primary" id="power-save-btn">Speichern</button>
+        </div>
+        <div id="power-feedback" class="feedback" hidden></div>
       </div>
     </section>
 

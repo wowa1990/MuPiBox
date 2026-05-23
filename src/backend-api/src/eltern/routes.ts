@@ -176,6 +176,65 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/power-config
+   * Returns idle-shutdown + display-timeout fields from mupiboxconfig.timeout.
+   * Plus the active battery profile name so the WebApp can display it
+   * alongside live mupihat readings. Phase 15i.
+   */
+  router.get('/power-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const timeout = (cfg?.timeout as Record<string, unknown> | undefined) ?? {}
+    const mupihat = (cfg?.mupihat as Record<string, unknown> | undefined) ?? {}
+    const selectedBattery = typeof mupihat.selected_battery === 'string' ? mupihat.selected_battery : ''
+    // Find the active profile's config for the read-only display side
+    const types = Array.isArray(mupihat.battery_types) ? (mupihat.battery_types as Array<Record<string, unknown>>) : []
+    const profile = types.find((p) => p?.name === selectedBattery)
+    res.json({
+      timeout: {
+        // Existing fields are numbers-stored-as-strings in the JSON;
+        // normalise to numbers for the UI side, fall back to defaults
+        // from config/templates/mupiboxconfig.json.
+        idlePiShutdown: Number(timeout.idlePiShutdown ?? 0),
+        idleDisplayOff: Number(timeout.idleDisplayOff ?? 10),
+        pressDelay: Number(timeout.pressDelay ?? 2),
+      },
+      battery: {
+        selected: selectedBattery,
+        profile: (profile?.config as Record<string, unknown> | undefined) ?? null,
+      },
+    })
+  })
+
+  /**
+   * POST /api/eltern/power-config
+   * Updates idlePiShutdown / idleDisplayOff. Values arrive as numbers,
+   * persisted as strings (matches the existing JSON convention from
+   * Phase 1's config). Phase 15i.
+   */
+  router.post('/power-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as { idlePiShutdown?: unknown; idleDisplayOff?: unknown }
+    const mutations: Record<string, string> = {}
+    if (typeof body.idlePiShutdown === 'number' && Number.isFinite(body.idlePiShutdown)) {
+      const v = Math.max(0, Math.min(1440, Math.floor(body.idlePiShutdown)))
+      mutations.idlePiShutdown = String(v)
+    }
+    if (typeof body.idleDisplayOff === 'number' && Number.isFinite(body.idleDisplayOff)) {
+      const v = Math.max(0, Math.min(1440, Math.floor(body.idleDisplayOff)))
+      mutations.idleDisplayOff = String(v)
+    }
+    if (Object.keys(mutations).length === 0) {
+      res.status(400).json({ error: 'no recognised fields in body' })
+      return
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      const timeout = ((cfg.timeout as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      Object.assign(timeout, mutations)
+      cfg.timeout = timeout
+    })
+    res.json({ ok: true, applied: mutations })
+  })
+
+  /**
    * POST /api/eltern/spotify-credentials
    * Persists the user-provided clientId (and optional clientSecret) into
    * mupiboxconfig.json.spotify. This is the wizard-step-3 endpoint that

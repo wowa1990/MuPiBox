@@ -37,7 +37,7 @@ const SECTIONS = {
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
   library:   { title: 'Library',             parent: 'hub', loader: () => {} },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => {} },
-  power:     { title: 'Akku',                parent: 'hub', loader: () => {} },
+  power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => {} },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
   telegram:  { title: 'Telegram',            parent: 'hub', loader: () => {} },
@@ -161,6 +161,83 @@ function formatRelativeFuture(isoString) {
   if (sec < 60) return `in ${sec} s`
   const min = Math.floor(sec / 60)
   return `in ${min} Min`
+}
+
+/* ---------- screen: power (Phase 15i) ---------- */
+
+/** Pulls /api/mupihat (live readings) + /api/eltern/power-config (profile
+ *  + idle timeouts) in parallel, renders the power-section. */
+async function loadPower() {
+  await Promise.all([loadPowerLive(), loadPowerConfig()])
+}
+
+async function loadPowerLive() {
+  try {
+    const res = await fetch('/api/mupihat', { credentials: 'same-origin' })
+    if (!res.ok) return
+    const body = await res.json().catch(() => ({}))
+    // Bat_Percent (Phase 12) is the granular 5%-step value. Fall back to
+    // the legacy Bat_SOC string for older mupihat.py outputs.
+    const pct = body?.Bat_Percent ?? Number.parseInt(String(body?.Bat_SOC ?? '').replace('%', ''), 10)
+    const charging = (body?.IBus ?? 0) > 0
+    const pctEl = $('#power-percent')
+    if (pctEl) {
+      if (Number.isFinite(pct)) {
+        pctEl.textContent = `${charging ? '⚡' : ''}${pct}%`
+        pctEl.classList.remove('low', 'critical')
+        if (pct <= 15) pctEl.classList.add('critical')
+        else if (pct <= 30) pctEl.classList.add('low')
+      } else {
+        pctEl.textContent = '—'
+      }
+    }
+    setText('#power-state', charging ? 'Wird geladen' : (body?.Bat_Stat ?? body?.Charger_Status ?? '—'))
+    setText('#power-vbat', body?.Vbat ? `${body.Vbat} mV` : '—')
+    setText('#power-vbus', body?.Vbus ? `${body.Vbus} mV` : '—')
+    setText('#power-ibat', typeof body?.Ibat === 'number' ? `${body.Ibat} mA` : '—')
+    setText('#power-temp', typeof body?.Temp === 'number' ? `${body.Temp} °C` : '—')
+    setText('#power-chargerstatus', body?.Charger_Status ?? '—')
+  } catch { /* swallow */ }
+}
+
+async function loadPowerConfig() {
+  const res = await api(`${API}/power-config`)
+  if (!res.ok) return
+  const body = res.body ?? {}
+  setText('#power-profile-name', body.battery?.selected ?? '—')
+  const p = body.battery?.profile ?? {}
+  setText('#power-profile-v100', p.v_100 ? `${p.v_100} mV` : '—')
+  setText('#power-profile-warn', p.th_warning ? `${p.th_warning} mV` : '—')
+  setText('#power-profile-shut', p.th_shutdown ? `${p.th_shutdown} mV` : '—')
+  // vreg (Phase 13a) — optional field on the profile. Shows "POR-Default"
+  // when missing so parents see that the box is using the chip's factory
+  // setting rather than a profile-configured limit.
+  setText('#power-profile-vreg', p.vreg ? `${p.vreg} mV` : 'Werks-Default')
+  const t = body.timeout ?? {}
+  $('#power-idle-shutdown').value = t.idlePiShutdown ?? 0
+  $('#power-idle-display').value = t.idleDisplayOff ?? 10
+}
+
+async function savePowerConfig() {
+  const idleShutdown = Number($('#power-idle-shutdown').value)
+  const idleDisplay = Number($('#power-idle-display').value)
+  if (!Number.isFinite(idleShutdown) || idleShutdown < 0 || idleShutdown > 1440) {
+    feedback('#power-feedback', 'error', 'Idle-Shutdown muss zwischen 0 und 1440 Minuten liegen.')
+    return
+  }
+  if (!Number.isFinite(idleDisplay) || idleDisplay < 0 || idleDisplay > 1440) {
+    feedback('#power-feedback', 'error', 'Display-Off muss zwischen 0 und 1440 Minuten liegen.')
+    return
+  }
+  const res = await api(`${API}/power-config`, {
+    method: 'POST',
+    body: { idlePiShutdown: idleShutdown, idleDisplayOff: idleDisplay },
+  })
+  if (res.ok) {
+    feedback('#power-feedback', 'success', 'Gespeichert. Änderungen greifen sofort.')
+  } else {
+    feedback('#power-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+  }
 }
 
 /* ---------- screen: hub overview (Phase 15a) ---------- */
@@ -588,6 +665,9 @@ function wire() {
   $('#settings-save-btn').addEventListener('click', saveSettings)
   $('#settings-rerun-wizard-btn').addEventListener('click', () => goWizard())
   $('#settings-prefix').addEventListener('input', updateSettingsExamples)
+
+  // Phase 15i — Power-screen save.
+  $('#power-save-btn')?.addEventListener('click', savePowerConfig)
 
   for (const btn of $$('[data-go-step]')) {
     btn.addEventListener('click', () => setWizardStep(Number(btn.dataset.goStep)))
