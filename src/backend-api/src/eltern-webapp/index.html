@@ -11,7 +11,10 @@
 </head>
 <body>
   <header class="top-bar">
-    <div class="brand">🎵 MuPiBox</div>
+    <!-- Phase 15a: title swaps between brand (on the hub overview)
+         and section-title with a back button (on every sub-screen). -->
+    <button id="header-back-btn" class="ghost back-btn" hidden aria-label="Zurück">←</button>
+    <div class="brand" id="header-title">🎵 MuPiBox</div>
     <button id="logout-btn" class="ghost" hidden>Abmelden</button>
   </header>
 
@@ -36,8 +39,62 @@
       </div>
     </section>
 
-    <!-- Dashboard mit Sync-Status -->
-    <section id="screen-dashboard" class="screen" hidden>
+    <!-- Hub-Übersicht (Phase 15a). Default-Screen nach Login.
+         Cards führen zu den jeweiligen Sub-Sektionen via Hash-Routing.
+         Sektionen, die noch nicht implementiert sind, zeigen einen
+         „Bald"-Hinweis statt eines Klicks ins Leere. -->
+    <section id="screen-hub" class="screen" hidden>
+      <div class="card hub-greeting">
+        <h2 id="hub-greeting">Hallo!</h2>
+        <p class="dim">Was möchtest du tun?</p>
+      </div>
+
+      <div class="hub-grid">
+        <a href="#sync" class="hub-card" data-section="sync">
+          <span class="hub-card-icon">🎵</span>
+          <span class="hub-card-title">Spotify Smart-Sync</span>
+          <span class="hub-card-sub" id="hub-card-sync-sub">—</span>
+        </a>
+        <a href="#library" class="hub-card" data-section="library">
+          <span class="hub-card-icon">📚</span>
+          <span class="hub-card-title">Library</span>
+          <span class="hub-card-sub">Inhalte verwalten</span>
+        </a>
+        <a href="#caps" class="hub-card" data-section="caps">
+          <span class="hub-card-icon">⏱️</span>
+          <span class="hub-card-title">Spielzeit &amp; Ruhe</span>
+          <span class="hub-card-sub">Limits + Quiet-Hours</span>
+        </a>
+        <a href="#power" class="hub-card" data-section="power">
+          <span class="hub-card-icon">🔋</span>
+          <span class="hub-card-title">Akku</span>
+          <span class="hub-card-sub" id="hub-card-power-sub">—</span>
+        </a>
+        <a href="#wlan" class="hub-card" data-section="wlan">
+          <span class="hub-card-icon">📶</span>
+          <span class="hub-card-title">WLAN</span>
+          <span class="hub-card-sub">Box-Verbindung</span>
+        </a>
+        <a href="#bluetooth" class="hub-card" data-section="bluetooth">
+          <span class="hub-card-icon">🎧</span>
+          <span class="hub-card-title">Bluetooth</span>
+          <span class="hub-card-sub">Kopfhörer &amp; Lautsprecher</span>
+        </a>
+        <a href="#telegram" class="hub-card" data-section="telegram">
+          <span class="hub-card-icon">📞</span>
+          <span class="hub-card-title">Telegram</span>
+          <span class="hub-card-sub">Eltern-Bot</span>
+        </a>
+        <a href="#system" class="hub-card" data-section="system">
+          <span class="hub-card-icon">⚙️</span>
+          <span class="hub-card-title">System</span>
+          <span class="hub-card-sub">Backup, Updates, Logs</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Smart-Sync (war vorher 'screen-dashboard') -->
+    <section id="screen-sync" class="screen" hidden>
       <div class="card">
         <h2 id="box-title">LeniBox</h2>
         <p class="dim" id="box-subtitle">Spotify Smart-Sync</p>
@@ -90,6 +147,69 @@
       <div class="card" id="error-banner" hidden>
         <h3>Fehler</h3>
         <p id="error-text"></p>
+      </div>
+    </section>
+
+    <!-- Stub-Screens für die noch nicht implementierten Sektionen.
+         Phase 15a legt nur das Routing-Skelett; Inhalte kommen pro
+         Section in 15b/c/d/e/f/g/h/i. Jede Stub-Card zeigt klar, dass
+         der Bereich „in Entwicklung" ist + ggf. einen Workaround. -->
+    <section id="screen-library" class="screen" hidden>
+      <div class="card">
+        <h2>Library</h2>
+        <p>Hier sollst du deine Box-Inhalte verwalten — Spotify-Inhalte, lokale Audios, Radio-Streams.</p>
+        <p class="dim">Phase 15e — in Arbeit.</p>
+        <p class="dim">Bis dahin: manueller Add-Page-Modus auf der Box (5× auf Cloud-Icon + 5× auf Batterie-Icon tippen) oder via Telegram-Bot in einer kommenden Phase.</p>
+      </div>
+    </section>
+
+    <section id="screen-caps" class="screen" hidden>
+      <div class="card">
+        <h2>Spielzeit &amp; Ruhe</h2>
+        <p>Tageslimits, Ruhezeiten (Hausaufgaben, Schlafenszeit), Override-Steuerung.</p>
+        <p class="dim">Phase 15h — in Arbeit.</p>
+        <p class="dim">Bis dahin: Telegram-Bot mit <code>/extend</code>, <code>/release</code>, <code>/quietnow</code> oder die existierende Admin-Oberfläche.</p>
+      </div>
+    </section>
+
+    <section id="screen-power" class="screen" hidden>
+      <div class="card">
+        <h2>Akku &amp; Power</h2>
+        <p>Akku-Stand, Charging-Verlauf, Idle-Shutdown-Einstellungen.</p>
+        <p class="dim">Phase 15i — in Arbeit.</p>
+      </div>
+    </section>
+
+    <section id="screen-wlan" class="screen" hidden>
+      <div class="card">
+        <h2>WLAN</h2>
+        <p>Box-WLAN-Verbindung verwalten, neue Netze hinzufügen, Signal-Stärke prüfen.</p>
+        <p class="dim">Phase 15c — braucht Box-Zugriff zur Implementierung.</p>
+      </div>
+    </section>
+
+    <section id="screen-bluetooth" class="screen" hidden>
+      <div class="card">
+        <h2>Bluetooth</h2>
+        <p>Kopfhörer und Lautsprecher koppeln, paired Devices verwalten.</p>
+        <p class="dim">Phase 15d — braucht BT-Hardware zur Implementierung.</p>
+      </div>
+    </section>
+
+    <section id="screen-telegram" class="screen" hidden>
+      <div class="card">
+        <h2>Telegram</h2>
+        <p>Bot-Token, erlaubte Chat-IDs, Push-Notification-Optionen.</p>
+        <p class="dim">Phase 15f — in Arbeit.</p>
+        <p class="dim">Bis dahin: Admin-Interface unter <code>smart.php</code>.</p>
+      </div>
+    </section>
+
+    <section id="screen-system" class="screen" hidden>
+      <div class="card">
+        <h2>System</h2>
+        <p>Backup, System-Update, Logs-Übersicht, Box-Neustart.</p>
+        <p class="dim">Phase 15g — braucht Box-Zugriff zur Implementierung.</p>
       </div>
     </section>
 
