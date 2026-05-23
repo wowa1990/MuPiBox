@@ -156,10 +156,88 @@
          der Bereich „in Entwicklung" ist + ggf. einen Workaround. -->
     <section id="screen-library" class="screen" hidden>
       <div class="card">
-        <h2>Library</h2>
-        <p>Hier sollst du deine Box-Inhalte verwalten — Spotify-Inhalte, lokale Audios, Radio-Streams.</p>
-        <p class="dim">Phase 15e — in Arbeit.</p>
-        <p class="dim">Bis dahin: manueller Add-Page-Modus auf der Box (5× auf Cloud-Icon + 5× auf Batterie-Icon tippen) oder via Telegram-Bot in einer kommenden Phase.</p>
+        <div class="actions" style="margin-top: 0;">
+          <button class="primary" id="library-add-btn">+ Inhalt hinzufügen</button>
+        </div>
+        <div class="form-row">
+          <label for="library-search">Suche</label>
+          <input type="search" id="library-search" placeholder="Artist oder Titel …" autocomplete="off">
+        </div>
+        <div class="filter-pills" id="library-category-filter">
+          <button class="pill active" data-cat="all">Alle</button>
+          <button class="pill" data-cat="audiobook">Hörbuch/-spiel</button>
+          <button class="pill" data-cat="music">Musik</button>
+          <button class="pill" data-cat="other">Sonstiges</button>
+        </div>
+        <div class="filter-pills" id="library-source-filter">
+          <button class="pill active" data-src="all">Alle Quellen</button>
+          <button class="pill" data-src="manual">Manuell</button>
+          <button class="pill" data-src="spotify-sync">Sync</button>
+        </div>
+        <p class="dim" id="library-count">—</p>
+      </div>
+
+      <div class="library-list" id="library-list">
+        <div class="dim" style="padding: 24px; text-align: center;">Lade…</div>
+      </div>
+
+      <!-- Item-Detail-Sheet (overlay) -->
+      <div class="sheet-backdrop" id="library-edit-backdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-header">
+            <h3 id="library-edit-title">Bearbeiten</h3>
+            <button class="ghost back-btn" id="library-edit-close" aria-label="Schließen">×</button>
+          </div>
+          <div class="sheet-body" id="library-edit-body">
+            <!-- Inhalt von openEditSheet() -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Add-Modal (overlay) -->
+      <div class="sheet-backdrop" id="library-add-backdrop" hidden>
+        <div class="sheet" role="dialog" aria-modal="true">
+          <div class="sheet-header">
+            <h3>Inhalt hinzufügen</h3>
+            <button class="ghost back-btn" id="library-add-close" aria-label="Schließen">×</button>
+          </div>
+          <div class="sheet-body">
+            <p class="dim">Klebe einen Spotify-Link ein oder gib direkt Stream-/RSS-URL ein. Box-Library lädt das beim nächsten Wechsel automatisch.</p>
+            <div class="form-row">
+              <label for="library-add-type">Typ</label>
+              <select id="library-add-type">
+                <option value="spotifyURL">Spotify-Link (Album/Künstler/Playlist/Hörbuch)</option>
+                <option value="streamURL">Radio-Stream-URL</option>
+                <option value="rssURL">Podcast-RSS-URL</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="library-add-url">URL</label>
+              <input type="url" id="library-add-url" placeholder="https://open.spotify.com/...">
+            </div>
+            <div class="form-row" id="library-add-label-row">
+              <label for="library-add-label">Künstler/Show-Name (optional)</label>
+              <input type="text" id="library-add-label" placeholder="bleibt leer = aus Spotify übernehmen">
+            </div>
+            <div class="form-row" id="library-add-title-row" hidden>
+              <label for="library-add-title">Titel (für Radio-Streams)</label>
+              <input type="text" id="library-add-title" placeholder="z.B. SWR3">
+            </div>
+            <div class="form-row">
+              <label for="library-add-category">Kategorie</label>
+              <select id="library-add-category">
+                <option value="audiobook">Hörbuch/Hörspiel</option>
+                <option value="music">Musik</option>
+                <option value="other">Sonstiges (Radio/Podcast)</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button class="ghost" id="library-add-cancel">Abbrechen</button>
+              <button class="primary" id="library-add-submit">Hinzufügen</button>
+            </div>
+            <div id="library-add-feedback" class="feedback" hidden></div>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -35,7 +35,7 @@ const SECTIONS = {
   sync:      { title: 'Smart-Sync',          parent: 'hub', loader: () => loadSync() },
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
-  library:   { title: 'Library',             parent: 'hub', loader: () => {} },
+  library:   { title: 'Library',             parent: 'hub', loader: () => loadLibrary() },
   caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => {} },
@@ -161,6 +161,327 @@ function formatRelativeFuture(isoString) {
   if (sec < 60) return `in ${sec} s`
   const min = Math.floor(sec / 60)
   return `in ${min} Min`
+}
+
+/* ---------- screen: library (Phase 15e) ---------- */
+
+const libraryState = {
+  items: [],              // raw library (active_data.json)
+  categoryFilter: 'all',  // 'all' | 'audiobook' | 'music' | 'other'
+  sourceFilter: 'all',    // 'all' | 'manual' | 'spotify-sync'
+  search: '',
+}
+
+async function loadLibrary() {
+  try {
+    const res = await fetch('/api/data', { credentials: 'same-origin' })
+    if (!res.ok) {
+      $('#library-list').innerHTML = `<div class="dim" style="padding:24px;text-align:center;">Laden fehlgeschlagen (${res.status})</div>`
+      return
+    }
+    libraryState.items = await res.json()
+    if (!Array.isArray(libraryState.items)) libraryState.items = []
+    renderLibrary()
+  } catch (err) {
+    $('#library-list').innerHTML = `<div class="dim" style="padding:24px;text-align:center;">Fehler: ${escapeHtml(err.message)}</div>`
+  }
+}
+
+function renderLibrary() {
+  const list = $('#library-list')
+  // Filter pipeline
+  const q = libraryState.search.trim().toLowerCase()
+  let filtered = libraryState.items.filter((m) => {
+    // Skip resume entries — they're internal, not parent-managed.
+    if (m.isResume === true || m.category === 'resume') return false
+    if (libraryState.categoryFilter !== 'all' && m.category !== libraryState.categoryFilter) return false
+    const source = m.source ?? 'manual'
+    if (libraryState.sourceFilter !== 'all' && source !== libraryState.sourceFilter) return false
+    if (q) {
+      const a = (m.artist_override ?? m.artist ?? '').toLowerCase()
+      const t = (m.title_override ?? m.title ?? '').toLowerCase()
+      if (!a.includes(q) && !t.includes(q)) return false
+    }
+    return true
+  })
+
+  setText('#library-count', `${filtered.length} Inhalt${filtered.length === 1 ? '' : 'e'}`)
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="dim" style="padding:24px;text-align:center;">Keine Inhalte für diese Filter.</div>'
+    return
+  }
+
+  list.innerHTML = ''
+  for (const item of filtered) {
+    const el = document.createElement('div')
+    el.className = 'library-item'
+    el.addEventListener('click', () => openLibraryEditSheet(item))
+
+    const cover = document.createElement('img')
+    cover.className = 'library-item-cover'
+    cover.loading = 'lazy'
+    cover.alt = ''
+    const src = item.cover_override ?? item.cover ?? item.artistcover_override ?? item.artistcover ?? ''
+    if (src) cover.src = src
+
+    const meta = document.createElement('div')
+    meta.className = 'library-item-meta'
+    const title = document.createElement('div')
+    title.className = 'library-item-title'
+    title.textContent = item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? '(unbenannt)'
+    const sub = document.createElement('div')
+    sub.className = 'library-item-sub'
+    sub.textContent = item.artist_override ?? item.artist ?? item.type ?? ''
+    meta.append(title, sub)
+
+    const badges = document.createElement('div')
+    badges.className = 'library-item-badges'
+    const cat = item.category_override ?? item.category
+    if (cat) {
+      const b = document.createElement('span')
+      b.className = `library-item-badge ${cat === 'audiobook' ? 'audiobook' : ''}`
+      b.textContent = cat === 'audiobook' ? 'Hörbuch' : cat === 'music' ? 'Musik' : 'Sonst.'
+      badges.appendChild(b)
+    }
+    if ((item.source ?? 'manual') === 'spotify-sync') {
+      const b = document.createElement('span')
+      b.className = 'library-item-badge sync'
+      b.textContent = '🔗 Sync'
+      badges.appendChild(b)
+    }
+
+    el.append(cover, meta, badges)
+    list.appendChild(el)
+  }
+}
+
+function openLibraryEditSheet(item) {
+  const isSync = (item.source ?? 'manual') === 'spotify-sync'
+  const body = $('#library-edit-body')
+  setText('#library-edit-title', item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? 'Bearbeiten')
+  body.innerHTML = ''
+
+  const note = document.createElement('p')
+  note.className = 'dim'
+  note.textContent = isSync
+    ? '🔗 Sync-verwaltet. IDs gelockt — nur Overrides änderbar. Diese Werte bleiben über Sync-Läufe stabil.'
+    : '✏️ Manueller Eintrag. Alle Felder editierbar.'
+  body.appendChild(note)
+
+  const fields = [
+    { key: 'artist_override', fallback: 'artist', label: 'Künstler', isOverride: true },
+    { key: 'title_override', fallback: 'title', label: 'Titel', isOverride: true },
+    { key: 'cover_override', fallback: 'cover', label: 'Cover-URL', isOverride: true },
+    { key: 'artistcover_override', fallback: 'artistcover', label: 'Künstler-Cover-URL', isOverride: true },
+  ]
+  const inputs = {}
+  for (const f of fields) {
+    const row = document.createElement('div')
+    row.className = 'form-row'
+    const lab = document.createElement('label')
+    lab.textContent = f.label + (f.isOverride && isSync ? ' (Override)' : '')
+    lab.setAttribute('for', `library-edit-${f.key}`)
+    const inp = document.createElement('input')
+    inp.type = 'text'
+    inp.id = `library-edit-${f.key}`
+    inp.value = item[f.key] ?? (isSync ? '' : item[f.fallback] ?? '')
+    if (isSync && f.isOverride) {
+      inp.placeholder = `Sync-Wert: ${item[f.fallback] ?? '—'}`
+    }
+    row.append(lab, inp)
+    body.appendChild(row)
+    inputs[f.key] = inp
+  }
+
+  // Category override
+  const catRow = document.createElement('div')
+  catRow.className = 'form-row'
+  const catLab = document.createElement('label')
+  catLab.textContent = 'Kategorie' + (isSync ? ' (Override)' : '')
+  const catSel = document.createElement('select')
+  catSel.id = 'library-edit-category'
+  for (const opt of [
+    { v: '', l: '(Sync-Default)' },
+    { v: 'audiobook', l: 'Hörbuch/Hörspiel' },
+    { v: 'music', l: 'Musik' },
+    { v: 'other', l: 'Sonstiges' },
+  ]) {
+    const o = document.createElement('option')
+    o.value = opt.v
+    o.textContent = opt.l
+    if ((item.category_override ?? (isSync ? '' : item.category)) === opt.v) o.selected = true
+    catSel.appendChild(o)
+  }
+  catRow.append(catLab, catSel)
+  body.appendChild(catRow)
+
+  // Actions
+  const actions = document.createElement('div')
+  actions.className = 'actions'
+  const saveBtn = document.createElement('button')
+  saveBtn.className = 'primary'
+  saveBtn.textContent = 'Speichern'
+  saveBtn.addEventListener('click', async () => {
+    // Build full media body so /api/edit receives a complete entry. Only
+    // change override fields (and base fields if !isSync).
+    const updated = { ...item }
+    for (const f of fields) {
+      const v = inputs[f.key].value.trim()
+      if (isSync) {
+        // Override path only.
+        if (v) updated[f.key] = v
+        else delete updated[f.key]
+      } else {
+        // Manual: write straight to the base field, ignore overrides.
+        if (v) updated[f.fallback] = v
+        else delete updated[f.fallback]
+      }
+    }
+    const catVal = catSel.value
+    if (isSync) {
+      if (catVal) updated.category_override = catVal
+      else delete updated.category_override
+    } else if (catVal) {
+      updated.category = catVal
+    }
+    const res = await fetch('/api/edit', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ index: item.index, ...updated }),
+    })
+    if (res.ok) {
+      closeLibraryEditSheet()
+      await loadLibrary()
+    } else {
+      alert(`Speichern fehlgeschlagen (${res.status}).`)
+    }
+  })
+  actions.appendChild(saveBtn)
+  if (!isSync) {
+    const delBtn = document.createElement('button')
+    delBtn.className = 'danger'
+    delBtn.textContent = 'Löschen'
+    delBtn.addEventListener('click', async () => {
+      if (!confirm(`„${updated_or_label(item)}" wirklich löschen?`)) return
+      const res = await fetch('/api/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index: item.index }),
+      })
+      if (res.ok) {
+        closeLibraryEditSheet()
+        await loadLibrary()
+      } else {
+        alert(`Löschen fehlgeschlagen (${res.status}).`)
+      }
+    })
+    actions.appendChild(delBtn)
+  } else {
+    const hint = document.createElement('p')
+    hint.className = 'dim'
+    hint.style.marginTop = '12px'
+    hint.textContent = 'Löschen geht bei Sync-Items nur über Spotify (Item aus LeniBox-Playlist entfernen). Beim nächsten Sync verschwindet es von der Box.'
+    body.appendChild(hint)
+  }
+  body.appendChild(actions)
+
+  $('#library-edit-backdrop').hidden = false
+}
+
+function updated_or_label(item) {
+  return item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? 'dieses Item'
+}
+
+function closeLibraryEditSheet() {
+  $('#library-edit-backdrop').hidden = true
+}
+
+function openLibraryAddSheet() {
+  // Reset form
+  $('#library-add-url').value = ''
+  $('#library-add-label').value = ''
+  $('#library-add-title').value = ''
+  $('#library-add-category').value = 'audiobook'
+  $('#library-add-type').value = 'spotifyURL'
+  onAddTypeChange()
+  $('#library-add-feedback').hidden = true
+  $('#library-add-backdrop').hidden = false
+}
+function closeLibraryAddSheet() { $('#library-add-backdrop').hidden = true }
+
+function onAddTypeChange() {
+  const type = $('#library-add-type').value
+  $('#library-add-label-row').hidden = (type === 'spotifyURL')
+  $('#library-add-title-row').hidden = (type !== 'streamURL')
+  // Category defaults nach Type
+  if (type === 'streamURL') $('#library-add-category').value = 'other'
+  else if (type === 'rssURL') $('#library-add-category').value = 'other'
+  else $('#library-add-category').value = 'audiobook'
+}
+
+function spotifyIdFromUrl(url, keyword) {
+  const ki = url.indexOf(keyword)
+  if (ki < 0) return null
+  const qi = url.indexOf('?', ki)
+  return qi < 0 ? url.slice(ki + keyword.length) : url.substring(ki + keyword.length, qi)
+}
+
+async function submitLibraryAdd() {
+  const type = $('#library-add-type').value
+  const url = $('#library-add-url').value.trim()
+  const label = $('#library-add-label').value.trim()
+  const title = $('#library-add-title').value.trim()
+  const category = $('#library-add-category').value
+  if (!url) {
+    feedback('#library-add-feedback', 'error', 'URL ist Pflicht.')
+    return
+  }
+  const body = { type: '', category, source: 'manual' }
+  if (type === 'spotifyURL') {
+    if (!url.startsWith('https://open.spotify.com/')) {
+      feedback('#library-add-feedback', 'error', 'Spotify-Link muss mit https://open.spotify.com/ beginnen.')
+      return
+    }
+    body.type = 'spotify'
+    body.spotify_url = url
+    if (url.includes('playlist/')) body.playlistid = spotifyIdFromUrl(url, 'playlist/')
+    else if (url.includes('artist/')) body.artistid = spotifyIdFromUrl(url, 'artist/')
+    else if (url.includes('album/')) body.id = spotifyIdFromUrl(url, 'album/')
+    else if (url.includes('show/')) body.showid = spotifyIdFromUrl(url, 'show/')
+    else if (url.includes('audiobook/')) body.audiobookid = spotifyIdFromUrl(url, 'audiobook/')
+    else {
+      feedback('#library-add-feedback', 'error', 'Unbekannter Spotify-Link-Typ. Erlaubt: playlist/, artist/, album/, show/, audiobook/.')
+      return
+    }
+    if (label) body.artist = label
+  } else if (type === 'streamURL') {
+    body.type = 'radio'
+    body.id = url.startsWith('https://') ? url.replace('https://', 'http://') : url
+    body.artist = label || 'Radio'
+    body.title = title || 'Stream'
+  } else if (type === 'rssURL') {
+    body.type = 'rss'
+    body.id = url.startsWith('https://') ? url.replace('https://', 'http://') : url
+    body.artist = label || 'Podcast'
+  }
+  const res = await fetch('/api/add', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (res.ok) {
+    feedback('#library-add-feedback', 'success', 'Hinzugefügt. Box-Library aktualisiert sich.')
+    setTimeout(async () => {
+      closeLibraryAddSheet()
+      await loadLibrary()
+    }, 600)
+  } else {
+    feedback('#library-add-feedback', 'error', `Fehler ${res.status}`)
+  }
 }
 
 /* ---------- screen: caps (Phase 15h — Spielzeit & Ruhe) ---------- */
@@ -893,6 +1214,40 @@ function wire() {
   $('#caps-extend-btn')?.addEventListener('click', capsExtend)
   $('#caps-release-btn')?.addEventListener('click', capsRelease)
   $('#caps-quietnow-btn')?.addEventListener('click', capsQuietNow)
+
+  // Phase 15e — Library wiring.
+  $('#library-add-btn')?.addEventListener('click', openLibraryAddSheet)
+  $('#library-add-close')?.addEventListener('click', closeLibraryAddSheet)
+  $('#library-add-cancel')?.addEventListener('click', closeLibraryAddSheet)
+  $('#library-add-submit')?.addEventListener('click', submitLibraryAdd)
+  $('#library-add-type')?.addEventListener('change', onAddTypeChange)
+  $('#library-edit-close')?.addEventListener('click', closeLibraryEditSheet)
+  $('#library-search')?.addEventListener('input', (e) => {
+    libraryState.search = e.target.value
+    renderLibrary()
+  })
+  // Filter pills — delegate per-group.
+  $('#library-category-filter')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pill')
+    if (!btn) return
+    for (const p of $$('#library-category-filter .pill')) p.classList.toggle('active', p === btn)
+    libraryState.categoryFilter = btn.dataset.cat
+    renderLibrary()
+  })
+  $('#library-source-filter')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pill')
+    if (!btn) return
+    for (const p of $$('#library-source-filter .pill')) p.classList.toggle('active', p === btn)
+    libraryState.sourceFilter = btn.dataset.src
+    renderLibrary()
+  })
+  // Click on backdrop (outside sheet) closes both overlays.
+  $('#library-edit-backdrop')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeLibraryEditSheet()
+  })
+  $('#library-add-backdrop')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeLibraryAddSheet()
+  })
 
   for (const btn of $$('[data-go-step]')) {
     btn.addEventListener('click', () => setWizardStep(Number(btn.dataset.goStep)))
