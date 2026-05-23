@@ -361,6 +361,84 @@ button.danger {
   color: var(--text-dim);
 }
 
+/* Phase 15h — Caps editor: per-weekday grid for playtime limits, plus
+   quiet-hours schedule editor with add/remove rows. */
+.day-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+@media (min-width: 540px) { .day-grid { grid-template-columns: repeat(4, 1fr); } }
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--card-elevated);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.day-cell label { font-size: 12px; color: var(--text-dim); }
+.day-cell input {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  width: 100%;
+}
+.day-cell input:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+
+.quiet-day {
+  margin-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.quiet-day:last-child { border-bottom: none; }
+.quiet-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.quiet-day-label { font-weight: 600; font-size: 14px; }
+.quiet-window {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+.quiet-window input {
+  background: var(--card-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  width: 100px;
+}
+.quiet-window .arrow { color: var(--text-dim); }
+.quiet-window button.remove {
+  background: transparent;
+  color: var(--danger);
+  border: none;
+  padding: 4px 10px;
+  min-height: auto;
+  font-size: 18px;
+}
+.quiet-add-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 1px dashed rgba(29, 185, 84, 0.4);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  min-height: auto;
+}
+
 /* Tablet+ — slightly larger spacing, but still single column */
 @media (min-width: 640px) {
   main { padding: 24px; }

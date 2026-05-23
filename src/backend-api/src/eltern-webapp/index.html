@@ -164,11 +164,86 @@
     </section>
 
     <section id="screen-caps" class="screen" hidden>
+      <!-- Live-Status -->
       <div class="card">
-        <h2>Spielzeit &amp; Ruhe</h2>
-        <p>Tageslimits, Ruhezeiten (Hausaufgaben, Schlafenszeit), Override-Steuerung.</p>
-        <p class="dim">Phase 15h — in Arbeit.</p>
-        <p class="dim">Bis dahin: Telegram-Bot mit <code>/extend</code>, <code>/release</code>, <code>/quietnow</code> oder die existierende Admin-Oberfläche.</p>
+        <h3>Heute</h3>
+        <div class="status-row">
+          <span class="dim">Spielzeit-Limit aktiv</span>
+          <span class="value" id="caps-playtime-enabled">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Heute verbraucht</span>
+          <span class="value" id="caps-today-used">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Heute übrig</span>
+          <span class="value" id="caps-today-remaining">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Cap-Status</span>
+          <span class="value" id="caps-state">—</span>
+        </div>
+        <div class="status-row">
+          <span class="dim">Ruhe-Status</span>
+          <span class="value" id="caps-quiet-state">—</span>
+        </div>
+      </div>
+
+      <!-- Override-Buttons -->
+      <div class="card">
+        <h3>Sofort-Aktionen</h3>
+        <div class="form-row">
+          <label for="caps-override-minutes">Minuten (1–1440)</label>
+          <input type="number" id="caps-override-minutes" min="1" max="1440" step="5" value="30">
+        </div>
+        <div class="actions">
+          <button class="primary" id="caps-extend-btn">+ Bonus-Zeit</button>
+          <button class="ghost" id="caps-release-btn">🔓 Blocks aufheben</button>
+          <button class="ghost" id="caps-quietnow-btn">⛔ Ruhe sofort</button>
+        </div>
+        <p class="dim">Bonus = +N Min zum heutigen Cap. Blocks aufheben = N Min freie Wiedergabe. Ruhe sofort = N Min Force-Stop.</p>
+        <div id="caps-action-feedback" class="feedback" hidden></div>
+      </div>
+
+      <!-- Per-Day Playtime Limits -->
+      <div class="card">
+        <h3>Tageslimits (Spielzeit)</h3>
+        <p class="dim">Pro Wochentag, in Minuten. 0 = kein Limit an diesem Tag.</p>
+        <div class="status-row">
+          <span>Aktiv</span>
+          <label class="toggle">
+            <input type="checkbox" id="caps-playtime-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div class="day-grid" id="caps-day-grid">
+          <!-- gefüllt von loadCaps() -->
+        </div>
+        <p class="dim">Bonus-Toleranz (Übertretung in Min): <span id="caps-overrun-info">—</span></p>
+      </div>
+
+      <!-- Quiet-Hours Schedule (read + simple add/remove) -->
+      <div class="card">
+        <h3>Ruhe-Zeiten</h3>
+        <div class="status-row">
+          <span>Aktiv</span>
+          <label class="toggle">
+            <input type="checkbox" id="caps-quiet-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <p class="dim">Zeitfenster pro Wochentag, mehrere möglich (z.B. Hausaufgabenzeit + Schlafenszeit). Über Mitternacht via zweitem Fenster.</p>
+        <div class="quiet-schedule" id="caps-quiet-schedule">
+          <!-- gefüllt von loadCaps() -->
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="actions">
+          <button class="ghost" id="caps-back-btn">← Zurück</button>
+          <button class="primary" id="caps-save-btn">Konfiguration speichern</button>
+        </div>
+        <div id="caps-config-feedback" class="feedback" hidden></div>
       </div>
     </section>
 

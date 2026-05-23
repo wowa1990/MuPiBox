@@ -36,7 +36,7 @@ const SECTIONS = {
   settings:  { title: 'Smart-Sync · Optionen', parent: 'sync', loader: () => loadSettings() },
   wizard:    { title: 'Spotify-Setup',       parent: 'sync', loader: () => loadWizard() },
   library:   { title: 'Library',             parent: 'hub', loader: () => {} },
-  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => {} },
+  caps:      { title: 'Spielzeit & Ruhe',    parent: 'hub', loader: () => loadCaps() },
   power:     { title: 'Akku',                parent: 'hub', loader: () => loadPower() },
   wlan:      { title: 'WLAN',                parent: 'hub', loader: () => {} },
   bluetooth: { title: 'Bluetooth',           parent: 'hub', loader: () => {} },
@@ -161,6 +161,224 @@ function formatRelativeFuture(isoString) {
   if (sec < 60) return `in ${sec} s`
   const min = Math.floor(sec / 60)
   return `in ${min} Min`
+}
+
+/* ---------- screen: caps (Phase 15h — Spielzeit & Ruhe) ---------- */
+
+const DAYS = [
+  { key: 'mon', label: 'Mo' },
+  { key: 'tue', label: 'Di' },
+  { key: 'wed', label: 'Mi' },
+  { key: 'thu', label: 'Do' },
+  { key: 'fri', label: 'Fr' },
+  { key: 'sat', label: 'Sa' },
+  { key: 'sun', label: 'So' },
+]
+
+// In-memory caps state — built from /api/eltern/caps-config, mutated by
+// the form, sent back on Save. Keeps a clean separation between live
+// status (re-fetched each render) and config (only re-fetched on entry).
+let capsConfig = null
+
+async function loadCaps() {
+  await Promise.all([loadCapsStatus(), loadCapsConfig()])
+}
+
+async function loadCapsStatus() {
+  try {
+    const res = await fetch('/api/playtime', { credentials: 'same-origin' })
+    if (!res.ok) return
+    const body = await res.json().catch(() => ({}))
+    const pt = body?.playtime ?? body
+    setText('#caps-today-used', pt?.usedMinutes != null ? `${pt.usedMinutes} Min` : '—')
+    setText('#caps-today-remaining', pt?.remainingMinutes != null ? `${pt.remainingMinutes} Min` : '—')
+    setText('#caps-state', pt?.state ?? '—')
+    setText('#caps-playtime-enabled', pt?.enabled ? '✓' : '✗')
+    setText('#caps-quiet-state', body?.quietHours?.state ?? body?.quietHours?.active ?? '—')
+  } catch { /* swallow */ }
+}
+
+async function loadCapsConfig() {
+  const res = await api(`${API}/caps-config`)
+  if (!res.ok) {
+    feedback('#caps-config-feedback', 'error', `Konfig laden fehlgeschlagen: ${res.status}`)
+    return
+  }
+  capsConfig = res.body ?? {}
+  renderCapsDayGrid()
+  renderQuietSchedule()
+  $('#caps-playtime-toggle').checked = !!capsConfig.playtimeLimit?.enabled
+  $('#caps-quiet-toggle').checked = !!capsConfig.quietHours?.enabled
+  setText('#caps-overrun-info', `${capsConfig.playtimeLimit?.maxOverrunMinutes ?? 10}`)
+}
+
+function renderCapsDayGrid() {
+  const grid = $('#caps-day-grid')
+  grid.innerHTML = ''
+  const limits = capsConfig?.playtimeLimit?.limitsMinutes ?? {}
+  for (const { key, label } of DAYS) {
+    const cell = document.createElement('div')
+    cell.className = 'day-cell'
+    const lab = document.createElement('label')
+    lab.textContent = label
+    lab.setAttribute('for', `caps-limit-${key}`)
+    const inp = document.createElement('input')
+    inp.type = 'number'
+    inp.id = `caps-limit-${key}`
+    inp.dataset.day = key
+    inp.min = '0'
+    inp.max = '1440'
+    inp.step = '5'
+    inp.value = limits[key] ?? 60
+    inp.addEventListener('input', () => {
+      const v = Math.max(0, Math.min(1440, Math.floor(Number(inp.value) || 0)))
+      if (!capsConfig.playtimeLimit.limitsMinutes) capsConfig.playtimeLimit.limitsMinutes = {}
+      capsConfig.playtimeLimit.limitsMinutes[key] = v
+    })
+    cell.append(lab, inp)
+    grid.appendChild(cell)
+  }
+}
+
+function renderQuietSchedule() {
+  const root = $('#caps-quiet-schedule')
+  root.innerHTML = ''
+  const schedule = capsConfig?.quietHours?.schedule ?? {}
+  for (const { key, label } of DAYS) {
+    const windows = schedule[key] ?? []
+    const dayEl = document.createElement('div')
+    dayEl.className = 'quiet-day'
+    const header = document.createElement('div')
+    header.className = 'quiet-day-header'
+    const labelSpan = document.createElement('span')
+    labelSpan.className = 'quiet-day-label'
+    labelSpan.textContent = label
+    const addBtn = document.createElement('button')
+    addBtn.className = 'quiet-add-btn'
+    addBtn.textContent = '+ Fenster'
+    addBtn.addEventListener('click', () => {
+      if (!capsConfig.quietHours.schedule) capsConfig.quietHours.schedule = {}
+      const list = capsConfig.quietHours.schedule[key] ?? []
+      list.push({ start: '20:00', end: '07:00' })
+      capsConfig.quietHours.schedule[key] = list
+      renderQuietSchedule()
+    })
+    header.append(labelSpan, addBtn)
+    dayEl.appendChild(header)
+    windows.forEach((w, idx) => {
+      const row = document.createElement('div')
+      row.className = 'quiet-window'
+      const s = document.createElement('input')
+      s.type = 'time'
+      s.value = w.start ?? '20:00'
+      s.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].start = s.value })
+      const arrow = document.createElement('span')
+      arrow.className = 'arrow'
+      arrow.textContent = '→'
+      const e = document.createElement('input')
+      e.type = 'time'
+      e.value = w.end ?? '07:00'
+      e.addEventListener('change', () => { capsConfig.quietHours.schedule[key][idx].end = e.value })
+      const rm = document.createElement('button')
+      rm.className = 'remove'
+      rm.textContent = '×'
+      rm.addEventListener('click', () => {
+        capsConfig.quietHours.schedule[key].splice(idx, 1)
+        renderQuietSchedule()
+      })
+      row.append(s, arrow, e, rm)
+      dayEl.appendChild(row)
+    })
+    root.appendChild(dayEl)
+  }
+}
+
+async function saveCapsConfig() {
+  if (!capsConfig) return
+  // Pull current toggle values into the in-memory config before send.
+  capsConfig.playtimeLimit.enabled = $('#caps-playtime-toggle').checked
+  capsConfig.quietHours.enabled = $('#caps-quiet-toggle').checked
+  const res = await api(`${API}/caps-config`, {
+    method: 'POST',
+    body: {
+      playtimeLimit: {
+        enabled: capsConfig.playtimeLimit.enabled,
+        maxOverrunMinutes: capsConfig.playtimeLimit.maxOverrunMinutes,
+        limitsMinutes: capsConfig.playtimeLimit.limitsMinutes,
+      },
+      quietHours: {
+        enabled: capsConfig.quietHours.enabled,
+        maxOverrunMinutes: capsConfig.quietHours.maxOverrunMinutes,
+        schedule: capsConfig.quietHours.schedule,
+      },
+    },
+  })
+  if (res.ok) {
+    feedback('#caps-config-feedback', 'success', 'Gespeichert. Greift sofort.')
+    loadCapsStatus()
+  } else {
+    feedback('#caps-config-feedback', 'error', res.body?.error ?? `Fehler ${res.status}`)
+  }
+}
+
+function getCapsOverrideMinutes() {
+  const v = Number($('#caps-override-minutes').value)
+  if (!Number.isFinite(v) || v < 1 || v > 1440) {
+    feedback('#caps-action-feedback', 'error', 'Minuten muss zwischen 1 und 1440 liegen.')
+    return null
+  }
+  return v
+}
+
+async function capsExtend() {
+  const mins = getCapsOverrideMinutes()
+  if (mins === null) return
+  const res = await fetch('/api/playtime/extend', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: mins }),
+  })
+  if (res.ok) {
+    feedback('#caps-action-feedback', 'success', `+${mins} Min Bonus hinzugefügt.`)
+    loadCapsStatus()
+  } else {
+    feedback('#caps-action-feedback', 'error', `Fehler ${res.status}`)
+  }
+}
+
+async function capsRelease() {
+  const mins = getCapsOverrideMinutes()
+  if (mins === null) return
+  const res = await fetch('/api/playtime/release', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: mins }),
+  })
+  if (res.ok) {
+    feedback('#caps-action-feedback', 'success', `Override für ${mins} Min aktiv.`)
+    loadCapsStatus()
+  } else {
+    feedback('#caps-action-feedback', 'error', `Fehler ${res.status}`)
+  }
+}
+
+async function capsQuietNow() {
+  const mins = getCapsOverrideMinutes()
+  if (mins === null) return
+  const res = await fetch('/api/quiethours/now', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes: mins }),
+  })
+  if (res.ok) {
+    feedback('#caps-action-feedback', 'success', `Sofort-Stopp für ${mins} Min aktiviert.`)
+    loadCapsStatus()
+  } else {
+    feedback('#caps-action-feedback', 'error', `Fehler ${res.status}`)
+  }
 }
 
 /* ---------- screen: power (Phase 15i) ---------- */
@@ -668,6 +886,13 @@ function wire() {
 
   // Phase 15i — Power-screen save.
   $('#power-save-btn')?.addEventListener('click', savePowerConfig)
+
+  // Phase 15h — Caps-screen actions.
+  $('#caps-back-btn')?.addEventListener('click', () => navigate('hub'))
+  $('#caps-save-btn')?.addEventListener('click', saveCapsConfig)
+  $('#caps-extend-btn')?.addEventListener('click', capsExtend)
+  $('#caps-release-btn')?.addEventListener('click', capsRelease)
+  $('#caps-quietnow-btn')?.addEventListener('click', capsQuietNow)
 
   for (const btn of $$('[data-go-step]')) {
     btn.addEventListener('click', () => setWizardStep(Number(btn.dataset.goStep)))

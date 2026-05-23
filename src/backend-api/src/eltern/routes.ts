@@ -176,6 +176,125 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
+   * GET /api/eltern/caps-config
+   * Returns playtimeLimit + quietHours configuration (per-weekday limits
+   * and schedules) so the WebApp can render the editor. Live status
+   * (today's used/remaining minutes) comes from the existing
+   * /api/playtime endpoint — this one is just the static configuration
+   * side. Phase 15h.
+   */
+  router.get('/caps-config', requireSession, (_req, res) => {
+    const cfg = deps.getMupiboxConfig()
+    const playtime = (cfg?.playtimeLimit as Record<string, unknown> | undefined) ?? {}
+    const quiet = (cfg?.quietHours as Record<string, unknown> | undefined) ?? {}
+    res.json({
+      playtimeLimit: {
+        enabled: playtime.enabled ?? false,
+        maxOverrunMinutes: playtime.maxOverrunMinutes ?? 10,
+        resetHour: playtime.resetHour ?? 0,
+        limitsMinutes: playtime.limitsMinutes ?? {
+          mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60,
+        },
+      },
+      quietHours: {
+        enabled: quiet.enabled ?? false,
+        maxOverrunMinutes: quiet.maxOverrunMinutes ?? 10,
+        schedule: quiet.schedule ?? { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] },
+      },
+    })
+  })
+
+  /**
+   * POST /api/eltern/caps-config
+   * Update the playtimeLimit and quietHours config blocks. Validates the
+   * shape (numeric day-limits 0-1440, schedule windows as {start, end}
+   * HH:MM-strings). Existing /api/playtime/limit endpoint sets one day
+   * at a time; this one is bulk-write for the WebApp's day-grid editor.
+   * Phase 15h.
+   */
+  router.post('/caps-config', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body ?? {}) as {
+      playtimeLimit?: {
+        enabled?: unknown
+        limitsMinutes?: Record<string, unknown>
+        maxOverrunMinutes?: unknown
+      }
+      quietHours?: {
+        enabled?: unknown
+        schedule?: Record<string, unknown>
+        maxOverrunMinutes?: unknown
+      }
+    }
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    // Validate playtimeLimit.limitsMinutes if provided.
+    const validatedLimits: Record<string, number> = {}
+    if (body.playtimeLimit?.limitsMinutes) {
+      for (const day of days) {
+        const v = body.playtimeLimit.limitsMinutes[day]
+        if (v === undefined) continue
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1440) {
+          res.status(400).json({ error: `invalid limitsMinutes.${day}` })
+          return
+        }
+        validatedLimits[day] = Math.floor(v)
+      }
+    }
+    // Validate quietHours.schedule if provided.
+    const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+    const validatedSchedule: Record<string, Array<{ start: string; end: string }>> = {}
+    if (body.quietHours?.schedule) {
+      for (const day of days) {
+        const windows = body.quietHours.schedule[day]
+        if (windows === undefined) continue
+        if (!Array.isArray(windows)) {
+          res.status(400).json({ error: `schedule.${day} must be an array` })
+          return
+        }
+        const accepted: Array<{ start: string; end: string }> = []
+        for (const w of windows) {
+          if (!w || typeof w !== 'object') {
+            res.status(400).json({ error: `schedule.${day} entry must be {start,end}` })
+            return
+          }
+          const start = (w as Record<string, unknown>).start
+          const end = (w as Record<string, unknown>).end
+          if (typeof start !== 'string' || typeof end !== 'string' || !HHMM.test(start) || !HHMM.test(end)) {
+            res.status(400).json({ error: `schedule.${day} times must be HH:MM strings` })
+            return
+          }
+          accepted.push({ start, end })
+        }
+        validatedSchedule[day] = accepted
+      }
+    }
+    await deps.updateMupiboxConfig((cfg) => {
+      if (body.playtimeLimit) {
+        const block = ((cfg.playtimeLimit as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        if (typeof body.playtimeLimit.enabled === 'boolean') block.enabled = body.playtimeLimit.enabled
+        if (typeof body.playtimeLimit.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.playtimeLimit.maxOverrunMinutes)))
+        if (Object.keys(validatedLimits).length > 0) {
+          const lm = ((block.limitsMinutes as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(lm, validatedLimits)
+          block.limitsMinutes = lm
+        }
+        cfg.playtimeLimit = block
+      }
+      if (body.quietHours) {
+        const block = ((cfg.quietHours as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+        if (typeof body.quietHours.enabled === 'boolean') block.enabled = body.quietHours.enabled
+        if (typeof body.quietHours.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.quietHours.maxOverrunMinutes)))
+        if (Object.keys(validatedSchedule).length > 0) {
+          const sched = ((block.schedule as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+          Object.assign(sched, validatedSchedule)
+          block.schedule = sched
+        }
+        cfg.quietHours = block
+      }
+    })
+    res.json({ ok: true })
+  })
+
+  /**
    * GET /api/eltern/power-config
    * Returns idle-shutdown + display-timeout fields from mupiboxconfig.timeout.
    * Plus the active battery profile name so the WebApp can display it
