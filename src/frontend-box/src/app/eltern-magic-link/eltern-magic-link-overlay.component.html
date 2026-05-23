@@ -1,0 +1,13 @@
+@if (svc.visible()) {
+  <div class="magic-link-overlay" (click)="svc.close()">
+    <div class="ml-card" (click)="$event.stopPropagation()">
+      <h2>Eltern-Setup</h2>
+      <p>Mit Smartphone scannen:</p>
+      <img [src]="svc.qrUrl()" alt="QR-Code" class="ml-qr">
+      <p class="ml-fallback">Oder im Browser öffnen:</p>
+      <code class="ml-url">{{ svc.magicLinkUrl() }}</code>
+      <p class="ml-countdown">Verschwindet in {{ svc.countdownSeconds() }} Sek</p>
+      <button class="ml-close" (click)="svc.close()">Schließen</button>
+    </div>
+  </div>
+}

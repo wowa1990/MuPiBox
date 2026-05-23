@@ -12,6 +12,7 @@
 // per-IP.
 
 import { Router } from 'express'
+import QRCode from 'qrcode'
 import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { CSRF_HEADER, SESSION_COOKIE, destroySession, generateMagicLink, redeemMagicLink } from './auth'
 import { ipRateLimit, localNetworkOnly, requireCsrf, requireSession } from './middleware'
@@ -71,6 +72,44 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       expires_in: link.expiresIn,
       url_path: `/eltern?token=${encodeURIComponent(link.token)}`,
     })
+  })
+
+  /**
+   * GET /api/eltern/magic-link/qr?token=<token>
+   * Renders a QR-Code SVG for the magic-link URL. Used by the Box-Frontend
+   * Cloud+Batterie-Tap overlay (Phase 15b): box-frontend POSTs to
+   * /magic-link/generate, receives the token, then loads this endpoint
+   * as <img> to display the QR. No auth — the QR carries the single-use
+   * token in its URL; rendering it on a public endpoint is no risk
+   * (the token is already client-visible via the POST response).
+   */
+  router.get('/magic-link/qr', async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : ''
+    if (!token || !/^[a-f0-9]{32,128}$/i.test(token)) {
+      res.status(400).send('invalid token')
+      return
+    }
+    const host = req.headers.host
+    if (typeof host !== 'string') {
+      res.status(400).send('no host header')
+      return
+    }
+    const url = `http://${host}/eltern?token=${encodeURIComponent(token)}`
+    try {
+      // SVG output — scales without pixel-blur on the box's 7" display.
+      // errorCorrectionLevel=M is the sweet spot for 64-128-char URLs.
+      const svg = await QRCode.toString(url, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 2,
+        color: { dark: '#1a1c20', light: '#ffffff' },
+      })
+      res.setHeader('Content-Type', 'image/svg+xml')
+      res.setHeader('Cache-Control', 'no-store')
+      res.send(svg)
+    } catch (err) {
+      res.status(500).send(`QR-Code generation failed: ${(err as Error).message}`)
+    }
   })
 
   /** GET /api/eltern/session  — does the current request carry a valid

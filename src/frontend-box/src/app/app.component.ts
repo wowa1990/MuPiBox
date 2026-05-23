@@ -12,6 +12,7 @@ import { MediaService } from './media.service'
 import { Monitor } from './monitor'
 import type { PlaytimePlayState } from './playtime.model'
 import { PlaytimeService } from './playtime.service'
+import { ElternMagicLinkOverlayComponent } from './eltern-magic-link/eltern-magic-link-overlay.component'
 import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/playtime-blocked-overlay.component'
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
@@ -20,7 +21,7 @@ import { buildResumeMedia } from './resume-builder'
   selector: 'app-root',
   templateUrl: 'app.component.html',
   styleUrls: ['app.component.scss'],
-  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent],
+  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent, ElternMagicLinkOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent {

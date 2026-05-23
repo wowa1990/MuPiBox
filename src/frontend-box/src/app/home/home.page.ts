@@ -24,6 +24,7 @@ import { catchError, combineLatest, distinctUntilChanged, map, of, switchMap, ta
 
 import type { Artist } from '../artist'
 import { ArtworkService } from '../artwork.service'
+import { ElternMagicLinkService } from '../eltern-magic-link.service'
 import { LoadingComponent } from '../loading/loading.component'
 import type { CategoryType } from '../media'
 import { MediaService } from '../media.service'
@@ -64,6 +65,11 @@ export class HomePage extends SwiperIonicEventsHelper {
     private mediaService: MediaService,
     private artworkService: ArtworkService,
     private router: Router,
+    // Phase 15b: tap-tracking for the Eltern-Hub magic-link gesture.
+    // Stays inert until the precise 5-cloud-then-5-battery sequence
+    // fires, so existing single-tap settingsButtonPressed() behaviour
+    // is unaffected for parents who don't know the gesture.
+    private elternMagicLink: ElternMagicLinkService,
   ) {
     super()
     addIcons({ timerOutline, bookOutline, musicalNotesOutline, radioOutline, cloudOutline, cloudOfflineOutline })
@@ -133,6 +139,14 @@ export class HomePage extends SwiperIonicEventsHelper {
       }
       this.router.navigate(['/medialist'], navigationExtras)
     }
+  }
+
+  protected onCloudTap(): void {
+    this.elternMagicLink.registerCloudTap()
+  }
+
+  protected onBatteryTap(): void {
+    this.elternMagicLink.registerBatteryTap()
   }
 
   protected settingsButtonPressed(): void {

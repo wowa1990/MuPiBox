@@ -1,0 +1,81 @@
+.magic-link-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ml-fade-in 200ms;
+}
+@keyframes ml-fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+.ml-card {
+  background: #1a1c20;
+  border-radius: 14px;
+  padding: 24px;
+  text-align: center;
+  max-width: 90vw;
+  width: 360px;
+  color: #e4e4e7;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.ml-card h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+
+.ml-card p {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.ml-qr {
+  display: block;
+  margin: 12px auto;
+  width: 240px;
+  height: 240px;
+  background: white;
+  border-radius: 8px;
+  padding: 8px;
+  box-sizing: content-box;
+}
+
+.ml-fallback {
+  color: #9ca3af;
+  margin-top: 16px;
+}
+
+.ml-url {
+  display: block;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 4px 0 12px;
+}
+
+.ml-countdown {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 12px 0 16px;
+}
+
+.ml-close {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #e4e4e7;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 40px;
+}
+.ml-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
