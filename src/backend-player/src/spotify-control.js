@@ -30,13 +30,11 @@ const app = express()
 const server = http.createServer(app)
 const player = createPlayer()
 
+// Refuse commands a foreign web page sends through a visitor's browser; CORS only for the box's
+// own pages (was: Access-Control-Allow-Origin * for everyone). See request-guard.js.
+app.use(require('./request-guard').browserGuard)
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(bodyParser.json())
-app.use((_req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept')
-  next()
-})
 
 const spotifyApi = new SpotifyWebApi({
   clientId: config.spotify.clientId,
