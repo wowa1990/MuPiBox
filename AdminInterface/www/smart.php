@@ -1,8 +1,15 @@
 	<?php
 		include ('includes/header.php');
 
-		$command='sudo python3 /usr/local/bin/mupibox/wled_get_data.py -s '.$data["wled"]["com_port"].' -b '.$data["wled"]["baud_rate"].' -j {"v":true}';
-		exec($command);
+		// The stored port and baud rate run through a root shell on every page load: quote them, and
+		// only accept a serial device path and a plain number (values saved by older versions included).
+		$wled_port = (string)($data["wled"]["com_port"] ?? '');
+		$wled_baud = intval($data["wled"]["baud_rate"] ?? 0);
+		if( preg_match('#^/dev/tty[A-Za-z0-9]+$#', $wled_port) && $wled_baud > 0 )
+			{
+			$command='sudo python3 /usr/local/bin/mupibox/wled_get_data.py -s '.escapeshellarg($wled_port).' -b '.$wled_baud.' -j '.escapeshellarg('{"v":true}');
+			exec($command);
+			}
 
 		$info_string = file_get_contents('/tmp/.wled.info.json', true);
 		$wled_info_data = json_decode($info_string, true);
@@ -93,13 +100,30 @@
 
 		if( $_POST['change_wled'] )
 			{
-			$data["wled"]["baud_rate"] = $_POST['baud_rate'];
-			$data["wled"]["com_port"] = $_POST['com_port'];
-			$data["wled"]["brightness_dimmed"] = $_POST['brightness_dimmed'];
-			$data["wled"]["brightness_default"] = $_POST['brightness_default'];
-			$data["wled"]["shutdown_id"] = $_POST['wled_shutdown_preset'];
-			$data["wled"]["startup_id"] = $_POST['wled_boot_preset'];
-			$data["wled"]["main_id"] = $_POST['wled_main_preset'];
+			// These values end up in shell commands (here and on every page load): keep only a serial
+			// device path, a known baud rate and plain numbers.
+			$baud_allowed = array(300,1200,2400,4800,9600,19200,38400,57600,115200,230400,460800,921600);
+			// stored as strings like the template does; an empty preset id means "none"
+			$digits_or_empty = function ($v) { $v = trim((string)$v); return ctype_digit($v) ? $v : ''; };
+			if( in_array(intval($_POST['baud_rate']), $baud_allowed, true) )
+				{
+				$data["wled"]["baud_rate"] = (string)intval($_POST['baud_rate']);
+				}
+			if( preg_match('#^/dev/tty[A-Za-z0-9]+$#', (string)$_POST['com_port']) )
+				{
+				$data["wled"]["com_port"] = $_POST['com_port'];
+				}
+			else
+				{
+				$CHANGE_TXT=$CHANGE_TXT."<li>Invalid serial port ignored (expected e.g. /dev/ttyUSB0)</li>";
+				}
+			$data["wled"]["brightness_dimmed"] = (string)max(0, min(255, intval($_POST['brightness_dimmed'])));
+			$data["wled"]["brightness_default"] = (string)max(0, min(255, intval($_POST['brightness_default'])));
+			$data["wled"]["shutdown_id"] = $digits_or_empty($_POST['wled_shutdown_preset']);
+			$data["wled"]["startup_id"] = $digits_or_empty($_POST['wled_boot_preset']);
+			$data["wled"]["main_id"] = $digits_or_empty($_POST['wled_main_preset']);
+			// The WLED address comes from the device's own answer: only use it if it is an IP address.
+			$wled_ip = filter_var($wled_info_data["info"]["ip"] ?? '', FILTER_VALIDATE_IP) ?: '';
 			if( $_POST['wled_shutdown_active'] == "on" )
 			{
 				$data["wled"]["shutdown_active"]=true;
@@ -112,12 +136,18 @@
 			if( $_POST['wled_boot_active'] == "on" )
 			{
 				$data["wled"]["boot_active"]=true;
-				exec('curl -H "Content-Type: application/x-www-form-urlencoded" -d "BP='.$data["wled"]["startup_id"].'&&CA='.$data["wled"]["brightness_default"].'&&BO=on" -X POST http://'.$wled_info_data["info"]["ip"].'/settings/leds');
+				if( $wled_ip !== '' )
+					{
+					exec('curl -H "Content-Type: application/x-www-form-urlencoded" -d '.escapeshellarg('BP='.$data["wled"]["startup_id"].'&&CA='.$data["wled"]["brightness_default"].'&&BO=on').' -X POST '.escapeshellarg('http://'.$wled_ip.'/settings/leds'));
+					}
 			}
 			else
 			{
-				$data["wled"]["boot_active"]=false;	
-				exec('curl -H "Content-Type: application/x-www-form-urlencoded" -d "BP='.$data["wled"]["startup_id"].'&&CA='.$data["wled"]["brightness_default"].'&&BO" -X POST http://'.$wled_info_data["info"]["ip"].'/settings/leds');
+				$data["wled"]["boot_active"]=false;
+				if( $wled_ip !== '' )
+					{
+					exec('curl -H "Content-Type: application/x-www-form-urlencoded" -d '.escapeshellarg('BP='.$data["wled"]["startup_id"].'&&CA='.$data["wled"]["brightness_default"].'&&BO').' -X POST '.escapeshellarg('http://'.$wled_ip.'/settings/leds'));
+					}
 			}
 			if( $_POST['wled_active'] )
 			{
@@ -181,33 +211,24 @@
 		
 		if( $change == 1 )
 			{
-			$json_object = json_encode($data);
-			$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-			exec("sudo chmod 755 /etc/mupibox/mupiboxconfig.json");
-			exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+			save_mupiboxconfig($data);
 			exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
 			exec("sudo -i -u dietpi /usr/local/bin/mupibox/./restart_kiosk.sh");
 			}
 		if( $change == 2 )
 			{
-			$json_object = json_encode($data);
-			$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-			exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+			save_mupiboxconfig($data);
 			exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
 			}
 		if( $change == 3 )
 			{
-			$json_object = json_encode($data);
-			$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-			exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+			save_mupiboxconfig($data);
 			$command="sudo su dietpi -c 'pm2 restart spotify-control'";
 			exec($command);
 			}
 		if( $change == 4 )
 			{
-			$json_object = json_encode($data);
-			$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-			exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+			save_mupiboxconfig($data);
 			}
 		$CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 	?>

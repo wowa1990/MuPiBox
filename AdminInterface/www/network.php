@@ -176,18 +176,29 @@
 		$CHANGE_TXT=$CHANGE_TXT."<li>FTP disabled</li>";
 		}
 
-	if( $_POST['save_wifi'] )
+	// No password = open network, else WPA's 8..63 characters (a wrong length used to break
+	// wpa_supplicant.conf and take the box offline).
+	$wifi_pwd_len = strlen((string)($_POST['wifi_pwd'] ?? ''));
+	if( $_POST['save_wifi'] && $wifi_pwd_len > 0 && ($wifi_pwd_len < 8 || $wifi_pwd_len > 63) )
+		{
+		$CHANGE_TXT=$CHANGE_TXT."<li>Wifi not added: the password must have 8 to 63 characters</li>";
+		}
+	else if( $_POST['save_wifi'] )
 		{
 		$wifi_data[0]['category']="WLAN";
 		$wifi_data[0]['ssid']=$_POST['wifi_name'];
 		$wifi_data[0]['pw']=$_POST['wifi_pwd'];
 		$json_object = json_encode($wifi_data, JSON_PRETTY_PRINT);
-		$save_rc = file_put_contents('/tmp/.add-wifi.json', $json_object);
-		exec("sudo chmod 755 /tmp/.add-wifi.json");
-		exec("sudo mv /tmp/.add-wifi.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json");
+		// Random name, readable by nobody else: the file holds the WiFi password in plain text
+		// (it used to be a fixed /tmp/.add-wifi.json with mode 755).
+		$wifi_tmp = tempnam('/tmp', '.add-wifi.');
+		chmod($wifi_tmp, 0600);
+		$save_rc = file_put_contents($wifi_tmp, $json_object);
+		exec("sudo chown dietpi:dietpi " . escapeshellarg($wifi_tmp));
+		exec("sudo mv " . escapeshellarg($wifi_tmp) . " /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/wlan.json");
 		sleep(2);
 		#exec("sudo wpa_cli -i wlan0 reconfigure");
-		$CHANGE_TXT=$CHANGE_TXT."<li>Wifi ".$_POST['wifi_name']." added</li>";
+		$CHANGE_TXT=$CHANGE_TXT."<li>Wifi ".htmlspecialchars((string)$_POST['wifi_name'], ENT_QUOTES)." added</li>";
 		$change=1;
 
 		}
@@ -206,9 +217,14 @@
 
 	if( $_POST['delete_wifi'] )
 		{
-		if( $_POST['wifinr'] )
+		// wpa_cli wifinr is always a small non-negative integer; intval()
+		// strips anything that isn't a digit, so a POST with
+		// wifinr="0; rm -rf /" becomes 0 and the chained-command injection
+		// is gone. -1 is invalid for wpa_cli but harmless.
+		$wifinr = isset($_POST['wifinr']) ? intval($_POST['wifinr']) : -1;
+		if ($wifinr >= 0)
 			{
-			$command = "sudo wpa_cli remove_network ".$_POST['wifinr']." && sudo wpa_cli save_config";
+			$command = "sudo wpa_cli remove_network " . $wifinr . " && sudo wpa_cli save_config";
 			exec($command, $output, $result );
 			$change=1;
 			$CHANGE_TXT=$CHANGE_TXT."<li>Wifi deleted</li>";

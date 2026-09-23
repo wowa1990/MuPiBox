@@ -17,17 +17,51 @@ if ( $_POST['spotifyget'] ) {
 	$change = 1;
 }
 
-if ($_GET['code']) {
-	$command = "curl -d client_id=" . $data["spotify"]["clientId"] . " -d client_secret=" . $data["spotify"]["clientSecret"] . " -d grant_type=authorization_code -d code=" . $_GET['code'] . " -d redirect_uri=" . $REDIRECT_URI . " https://accounts.spotify.com/api/token";
+// The Spotify redirect is a GET that replaces the tokens: accept it only with the state of a
+// login this session started (see the authorize link below), once.
+$spotify_state_ok = isset($_GET['code'], $_GET['state'], $_SESSION['spotify_oauth_state'])
+	&& hash_equals($_SESSION['spotify_oauth_state'], (string)$_GET['state']);
+if (isset($_GET['code']) && !$spotify_state_ok) {
+	$CHANGE_TXT = $CHANGE_TXT . "<li>Spotify login ignored: it was not started from this page (please use the link below again)</li>";
+	$change = 0;
+}
+if ($spotify_state_ok) {
+	unset($_SESSION['spotify_oauth_state']);
+	// All four interpolated values reach the shell. clientId / clientSecret
+	// come from mupiboxconfig.json (admin-controlled) but $_GET['code'] is
+	// echoed back from Spotify's redirect — an attacker could craft a
+	// redirect URL with `code=$(rm -rf /)` or backticks. escapeshellarg()
+	// each value so the shell sees them as a single quoted token.
+	$command = "curl -d client_id=" . escapeshellarg($data["spotify"]["clientId"])
+	         . " -d client_secret=" . escapeshellarg($data["spotify"]["clientSecret"])
+	         . " -d grant_type=authorization_code"
+	         . " -d code=" . escapeshellarg($_GET['code'])
+	         . " -d redirect_uri=" . escapeshellarg($REDIRECT_URI)
+	         . " https://accounts.spotify.com/api/token";
 	exec($command, $Tokenoutput, $result);
-	$tokendata = json_decode($Tokenoutput[0], true);
-	$data["spotify"]["accessToken"] = $tokendata["access_token"];
-	$data["spotify"]["refreshToken"] = $tokendata["refresh_token"];
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	$tokendata = json_decode($Tokenoutput[0] ?? '', true);
+	// Only replace the stored tokens with a complete answer: a failed exchange used to overwrite
+	// both with null and leave Spotify dead until the next successful login.
+	if (!empty($tokendata["access_token"]) && !empty($tokendata["refresh_token"])) {
+		$data["spotify"]["accessToken"] = $tokendata["access_token"];
+		$data["spotify"]["refreshToken"] = $tokendata["refresh_token"];
+	}
+	// Re-authorising via OAuth implies the user wants Spotify ON. Without this
+	// flip, an admin who turned `active` off (e.g. while debugging) and then
+	// re-ran the Connect-Spotify flow would still have Spotify hidden in the
+	// frontend — and might assume the new tokens are also broken. Only flip if
+	// we actually got both tokens back; the OAuth call could have failed and
+	// returned an error blob, in which case enabling Spotify would resurrect
+	// the loading-spinner-stuck state.
+	if (!empty($tokendata["access_token"]) && !empty($tokendata["refresh_token"])) {
+		$data["spotify"]["active"] = true;
+	}
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
-    exec("sudo rm {$data['spotify']['cachepath']}/credentials.json");
+	// The librespot credentials.json is NOT deleted here any more. Since 2026-08-10 Spotify refuses
+	// librespot logins derived from a developer app's token (what env-librespot falls back to
+	// without that file), so deleting it on every re-link broke Spotify Connect for good. It is
+	// created by a librespot OAuth login (librespot --enable-oauth) and only "Reset data" removes it.
 	exec("sudo /usr/local/bin/mupibox/./spotify_restart.sh");
 ?>
 <form class="appnitro" method="post" action="spotify.php" id="form">
@@ -62,7 +96,7 @@ if ($_POST['savePlaylistScraper']) {
 
 if ($_POST['resetData']) {
     exec("sudo rm -r /home/dietpi/.mupibox/Sonos-Kids-Controller-master/cache/*");
-	exec("sudo rm -R " . $data["spotify"]["cachepath"] . "/*");
+	remove_config_cache_dir((string)($data["spotify"]["cachepath"] ?? ""), true);
 	$data["spotify"]["username"] = "";
 	$data["spotify"]["password"] = "";
 	$data["spotify"]["deviceId"] = "";
@@ -75,9 +109,7 @@ if ($_POST['resetData']) {
 }
 
 if ($change) {
-	$json_object = json_encode($data);
-	$save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-	exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+	save_mupiboxconfig($data);
 	exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
 }
 
@@ -140,7 +172,17 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 				<p>Please press the following URL to generate Access and Refresh Token. A login may be necessary.</p>
 				<p><b>
 						<?php
-						print '<a href=https://accounts.spotify.com/authorize?response_type=code&client_id=' . $data["spotify"]["clientId"] . '&redirect_uri=' . $REDIRECT_URI . '&scope=' . $SCOPE . ' id="loading">Login and generate Refresh & Access Token</a>';
+						// OAuth "state": the callback below only accepts the answer to a login started
+						// from this session (a foreign link to spotify.php?code=... must not replace the tokens).
+						if (empty($_SESSION['spotify_oauth_state'])) {
+							$_SESSION['spotify_oauth_state'] = bin2hex(random_bytes(16));
+						}
+						$authorize_url = 'https://accounts.spotify.com/authorize?response_type=code'
+							. '&client_id=' . urlencode((string)$data["spotify"]["clientId"])
+							. '&redirect_uri=' . urlencode($REDIRECT_URI)
+							. '&scope=' . $SCOPE
+							. '&state=' . $_SESSION['spotify_oauth_state'];
+						print '<a href="' . htmlspecialchars($authorize_url, ENT_QUOTES) . '" id="loading">Login and generate Refresh & Access Token</a>';
 						?>
 					</b></p>
 			</li>

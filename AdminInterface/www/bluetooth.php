@@ -35,25 +35,37 @@
 		$CHANGE_TXT=$CHANGE_TXT."<li>BT-Autoconnect-Service disabled</li>";
 		}
 
+	// Both handlers pass a MAC address to a shell command: accept only a canonical
+	// AA:BB:CC:DD:EE:FF address and quote it, so nothing else ever reaches the shell.
+	$btMacRegex = '/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/';
 	if( $bt_present && $_POST['remove_selected'] )
 		{
-		$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./remove_bt.sh ".$_POST['remove_mac'];
-		exec($command, $output, $result );
-		$CHANGE_TXT=$CHANGE_TXT."<li>Pairing removed [".$_POST['remove_mac']."</li>";
-		$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./stop_bt.sh";
-		exec($command, $output, $result );
-		$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./start_bt.sh";
-		exec($command, $output, $result );
-
-		$change=1;
+		$mac = $_POST['remove_mac'] ?? '';
+		if (!preg_match($btMacRegex, $mac)) {
+			$CHANGE_TXT=$CHANGE_TXT."<li>ERROR: invalid MAC, refused</li>"; $change=1;
+		} else {
+			$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./remove_bt.sh " . escapeshellarg($mac);
+			exec($command, $output, $result );
+			$CHANGE_TXT=$CHANGE_TXT."<li>Pairing removed [" . htmlspecialchars($mac) . "]</li>";
+			$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./stop_bt.sh";
+			exec($command, $output, $result );
+			$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./start_bt.sh";
+			exec($command, $output, $result );
+			$change=1;
+		}
 		}
 
 	if( $bt_present && $_POST['pair_selected'] )
 		{
-		$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./pair_bt.sh ".$_POST['bt_device'];
-		exec($command, $output, $result );
-		$CHANGE_TXT=$CHANGE_TXT."<li>Device is paired [".$_POST['bt_device']."</li>";
-		$change=1;
+		$mac = $_POST['bt_device'] ?? '';
+		if (!preg_match($btMacRegex, $mac)) {
+			$CHANGE_TXT=$CHANGE_TXT."<li>ERROR: invalid MAC, refused</li>"; $change=1;
+		} else {
+			$command = "timeout -k 1 60 sudo -u dietpi /usr/local/bin/mupibox/./pair_bt.sh " . escapeshellarg($mac);
+			exec($command, $output, $result );
+			$CHANGE_TXT=$CHANGE_TXT."<li>Device is paired [" . htmlspecialchars($mac) . "]</li>";
+			$change=1;
+		}
 		}
 
 
@@ -162,7 +174,8 @@
                                                 while (($line = fgetcsv($string, 0, "\t")) !== false) {
                                                         if($bt > 1)
                                                                 {
-                                                                print "<option value='".$line[1]."'>".$line[2]."</option>";
+                                                                // names come from any device in radio range: escape them
+                                                                print "<option value='".htmlspecialchars($line[1] ?? '', ENT_QUOTES)."'>".htmlspecialchars($line[2] ?? '', ENT_QUOTES)."</option>";
                                                                 }
                                                         $bt++;
                                                 }
@@ -180,11 +193,15 @@
                                 foreach($pairoutput as $device)
                                 {
                                         $split_device=explode(" ", $device);
+                                        // escapeshellarg for the shell, htmlspecialchars for the page: device names come from the radio
+                                        $mac = $split_device[1] ?? '';
+                                        $macHtml = htmlspecialchars($mac, ENT_QUOTES);
+                                        $nameHtml = htmlspecialchars($split_device[2] ?? '', ENT_QUOTES);
                                         print "<form class='appnitro'  method='post' action='bluetooth.php' id='remform'>";
-                                        print "<input type='hidden' name='remove_mac' value='".$split_device[1]."'>";
+                                        print "<input type='hidden' name='remove_mac' value='".$macHtml."'>";
                                         print "<input id='saveForm' class='button_text' type='submit' name='remove_selected' value='Remove' />&ensp;";
-                                        print $split_device[2]." [".$split_device[1]."]";
-                                        $command = "timeout -k 1 5 sudo -u dietpi bluetoothctl info ".$split_device[1]." | grep 'Connected: yes'";
+                                        print $nameHtml." [".$macHtml."]";
+                                        $command = "timeout -k 1 5 sudo -u dietpi bluetoothctl info ".escapeshellarg($mac)." | grep 'Connected: yes'";
                                         unset($connoutput);
                                         exec($command, $connoutput, $connresult );
                                         if( $connoutput[0] )

@@ -26,23 +26,41 @@
 	$dlcd_rotation_state=`sed -n '/^[[:blank:]]*display_lcd_rotate=/{s/^[^=]*=//p;q}' /boot/config.txt`;
 	$hdmi_rotation_state=`sed -n '/^[[:blank:]]*display_hdmi_rotate=/{s/^[^=]*=//p;q}' /boot/config.txt`;
 
-	if(isset($_POST['hdmi_rotation']) && $_POST['hdmi_rotation'] != substr($hdmi_rotation_state,0,-1))
+	// Display rotations: dietpi accepts integer rotation values (0/90/180/270
+	// for HDMI, 0/1/2/3 for LCD-flips). The values were spliced into a
+	// double-quoted shell string verbatim — a POST with hdmi_rotation="0\";
+	// rm -rf /; #" would have torn the quoting apart. intval() collapses
+	// anything non-numeric to 0 (safe default = no rotation).
+	$rotationWhitelist = [0, 1, 2, 3, 90, 180, 270];
+	if(isset($_POST['hdmi_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_hdmi_rotate=' 'display_hdmi_rotate=" . $_POST['hdmi_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set HDMI-Rotation [reboot is necessary]</li>";
+		$hdmiRot = intval($_POST['hdmi_rotation']);
+		if (in_array($hdmiRot, $rotationWhitelist, true) && $hdmiRot != substr($hdmi_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_hdmi_rotate=' 'display_hdmi_rotate=" . $hdmiRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set HDMI-Rotation [reboot is necessary]</li>";
+			}
 		}
-	if(isset($_POST['lcd_rotation']) && $_POST['lcd_rotation'] != substr($lcd_rotation_state,0,-1))
+	if(isset($_POST['lcd_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'lcd_rotate=' 'lcd_rotate=" . $_POST['lcd_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set LCD-Rotation [reboot is necessary]</li>";
+		$lcdRot = intval($_POST['lcd_rotation']);
+		if (in_array($lcdRot, $rotationWhitelist, true) && $lcdRot != substr($lcd_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'lcd_rotate=' 'lcd_rotate=" . $lcdRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set LCD-Rotation [reboot is necessary]</li>";
+			}
 		}
-	if(isset($_POST['dlcd_rotation']) && $_POST['dlcd_rotation'] != substr($dlcd_rotation_state,0,-1))
+	if(isset($_POST['dlcd_rotation']))
 		{
-		exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_lcd_rotate=' 'display_lcd_rotate=" . $_POST['dlcd_rotation'] . "' /boot/config.txt\"");
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>Set Display-LCD-Rotation [reboot is necessary]</li>";
+		$dlcdRot = intval($_POST['dlcd_rotation']);
+		if (in_array($dlcdRot, $rotationWhitelist, true) && $dlcdRot != substr($dlcd_rotation_state,0,-1))
+			{
+			exec("sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'display_lcd_rotate=' 'display_lcd_rotate=" . $dlcdRot . "' /boot/config.txt\"");
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>Set Display-LCD-Rotation [reboot is necessary]</li>";
+			}
 		}
 
 	if($_POST['stop_sleeptimer'] == "Stop running timer")
@@ -55,12 +73,28 @@
 		$CHANGE_TXT=$CHANGE_TXT."<li>Sleeptimer stopped</li>";
 		}
 
+	// Changing the password needs the current one (a forged request or an unattended browser must
+	// not be able to replace it), and the new one must not be empty or shorter than the form allows.
 	if($_POST['submitpw'])
 		{
-		$hash = password_hash($_POST['newpwd'], PASSWORD_DEFAULT);
-		$data["interfacelogin"]["password"]=$hash;
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>New password has been set</li>";
+		$newpwd = (string)($_POST['newpwd'] ?? '');
+		$curpwd = (string)($_POST['curpwd'] ?? '');
+		$oldhash = $data["interfacelogin"]["password"] ?? '';
+		if( strlen($newpwd) < 6 )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: at least 6 characters</li>";
+			}
+		else if( $oldhash !== '' && !password_verify($curpwd, $oldhash) )
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>Password not changed: current password is wrong</li>";
+			}
+		else
+			{
+			$hash = password_hash($newpwd, PASSWORD_DEFAULT);
+			$data["interfacelogin"]["password"]=$hash;
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>New password has been set</li>";
+			}
 		}
 
 
@@ -163,12 +197,25 @@
 			
 	if($_POST['potimer'])
 		{
-		$timerSleepingTime=$_POST['powerofftimer']*60;
-		$command = "sudo nohup /usr/local/bin/mupibox/./sleep_timer.sh ".$timerSleepingTime."  > /dev/null 2>&1 &";
-		exec($command);
-		$change=3;
-		$CHANGE_TXT=$CHANGE_TXT."<li>".$_POST['powerofftimer']." minutes sleeptimer started</li>";
-		//sudo pkill -f "sleep_timer.sh"
+		// powerofftimer is in minutes (admin-typed). intval() forces it to
+		// an integer; the *60 just produces another integer, so even
+		// without escapeshellarg() the shell only sees digits. Plus a
+		// sanity cap: 24 hours is the longest a parent could reasonably
+		// want, beyond that it's an input mistake or an attacker.
+		$minutes = intval($_POST['powerofftimer'] ?? 0);
+		if ($minutes > 0 && $minutes <= 24 * 60)
+			{
+			$timerSleepingTime = $minutes * 60;
+			$command = "sudo nohup /usr/local/bin/mupibox/./sleep_timer.sh " . $timerSleepingTime . "  > /dev/null 2>&1 &";
+			exec($command);
+			$change=3;
+			$CHANGE_TXT=$CHANGE_TXT."<li>" . $minutes . " minutes sleeptimer started</li>";
+			//sudo pkill -f "sleep_timer.sh"
+			}
+		else
+			{
+			$CHANGE_TXT=$CHANGE_TXT."<li>ERROR: invalid sleeptimer value, refused</li>";
+			}
 		}
 
 	if( $_POST['change_netboot'] == "activate for next boot" )
@@ -233,12 +280,25 @@
 
 	if ($_POST['change_cpug'])
 		{
-		$command = "sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=' 'CONFIG_CPU_GOVERNOR=".$_POST['cpugovernor']."' /boot/dietpi.txt\"";
-		$test=exec($command, $output, $result );
-		$command = "sudo /boot/dietpi/func/dietpi-set_cpu";
-		exec($command, $output, $result );
-		$change=1;
-		$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor changet to  ".$_POST['cpugovernor']."</li>";
+		// H6: $_POST['cpugovernor'] floss bisher ungeprüft als Substring in
+		// einen verschachtelten `sudo su -c "...G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=<wert>'..."`-
+		// Aufruf — post-auth Command-Injection. Whitelist gegen die vom Kernel
+		// tatsächlich angebotenen Governors aus scaling_available_governors;
+		// das ist auch genau die Liste, aus der der HTML-<select> generiert wird.
+		$available = explode(' ', trim((string)@file_get_contents(
+			'/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors')));
+		$cpug_input = (string)($_POST['cpugovernor'] ?? '');
+		if (in_array($cpug_input, $available, true)) {
+			$command = "sudo su - dietpi -c \". /boot/dietpi/func/dietpi-globals && G_SUDO G_CONFIG_INJECT 'CONFIG_CPU_GOVERNOR=' 'CONFIG_CPU_GOVERNOR=".$cpug_input."' /boot/dietpi.txt\"";
+			$test=exec($command, $output, $result );
+			$command = "sudo /boot/dietpi/func/dietpi-set_cpu";
+			exec($command, $output, $result );
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor changet to  ".htmlspecialchars($cpug_input, ENT_QUOTES, 'UTF-8')."</li>";
+		} else {
+			$change=1;
+			$CHANGE_TXT=$CHANGE_TXT."<li>CPU Governor change rejected: invalid value</li>";
+		}
 		}
 
 	if( $_POST['change_sd'] == "activate for next boot" )
@@ -288,11 +348,13 @@
   {
 	$tvcommand = "sudo su dietpi -c '/usr/bin/amixer sget Master | grep \"Right:\" | cut -d\" \" -f7 | sed \"s/\\[//g\" | sed \"s/\\]//g\" | sed \"s/\%//g\"'";
 	$tvresult = exec($tvcommand, $tvoutput);
-	if($_POST['thisvolume'] != $tvoutput[0])
-		{ 
-		$command="sudo su dietpi -c '/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " . $_POST['thisvolume'] . "%'";
+	// The value went unchecked into a root shell (www-data has sudo ALL): accept an integer 0..100 only.
+	$thisvolume = max(0, min(100, intval($_POST['thisvolume'] ?? 0)));
+	if($thisvolume != $tvoutput[0])
+		{
+		$command="sudo su dietpi -c '/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " . $thisvolume . "%'";
 		$set_volume = exec($command, $output );
-		$CHANGE_TXT=$CHANGE_TXT."<li>Volume: " . $_POST['thisvolume'] . "%</li>";
+		$CHANGE_TXT=$CHANGE_TXT."<li>Volume: " . $thisvolume . "%</li>";
 		$change=2;
 		}
   }
@@ -332,18 +394,26 @@
 		$change=2;
 		}
   }
- if( $data["mupibox"]["physicalDevice"]!=$_POST['audio'] && $_POST['audioset'])
+ // Only a soundcard from the offered list (it went into a root shell unchecked).
+ $known_soundcards = array_map(function ($d) { return $d['tname']; }, $data["mupibox"]["AudioDevices"] ?? array());
+ if( $data["mupibox"]["physicalDevice"]!=$_POST['audio'] && $_POST['audioset'] && in_array($_POST['audio'], $known_soundcards, true))
 	{
 	$data["mupibox"]["physicalDevice"]=$_POST['audio'];
-	$command = "sudo /boot/dietpi/func/dietpi-set_hardware soundcard '" . $_POST['audio'] . "'";
+	$command = "sudo /boot/dietpi/func/dietpi-set_hardware soundcard " . escapeshellarg($_POST['audio']);
 	$change_soundcard = exec($command, $output, $change_soundcard );
 	$CHANGE_TXT=$CHANGE_TXT."<li>Soundcard changed to  ".$data["mupibox"]["physicalDevice"]."x</li>";
 	$change=2;
 	}
- if( $data["mupibox"]["host"]!=$_POST['hostname'] && $_POST['submithn'])
+ // A valid hostname only (RFC 1123 label) - the value went unchecked into a root shell.
+ $hostname_valid = preg_match('/^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/', (string)($_POST['hostname'] ?? ''));
+ if( $_POST['submithn'] && !$hostname_valid )
+  {
+  $CHANGE_TXT=$CHANGE_TXT."<li>Invalid hostname (letters, digits and '-' only, max. 63 characters)</li>";
+  }
+ if( $data["mupibox"]["host"]!=$_POST['hostname'] && $_POST['submithn'] && $hostname_valid)
   {
   $data["mupibox"]["host"]=$_POST['hostname'];
-  $command = "sudo /boot/dietpi/func/change_hostname " . $_POST['hostname'];
+  $command = "sudo /boot/dietpi/func/change_hostname " . escapeshellarg($_POST['hostname']);
   $change_hostname = exec($command, $output, $change_hostname );
   $CHANGE_TXT=$CHANGE_TXT."<li>Hostname changed to  ".$data["mupibox"]["host"]." [reboot is necessary]</li>";
   $change=1;
@@ -475,7 +545,8 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT=$CHANGE_TXT."<li>Press Button delay set to ".$_POST['pressDelay']. " seconds</li>";
   $change=2;
   }
- if( $data["shim"]["ledPin"]!=$_POST['ledPin'] && $_POST['ledPin'])
+ // Only one of the offered GPIO pins (it went unchecked into a root sed command).
+ if( $data["shim"]["ledPin"]!=$_POST['ledPin'] && $_POST['ledPin'] && in_array($_POST['ledPin'], array("4", "12", "13", "17", "18", "21", "22", "23", "24", "25", "27"), true))
   {
   $data["shim"]["ledPin"]=$_POST['ledPin'];
   $CHANGE_TXT=$CHANGE_TXT."<li>New GPIO for Power-LED set to ".$data["shim"]["ledPin"]. "  [reboot is necessary]</li>";
@@ -588,22 +659,16 @@ if( $_POST['fan_control'] )
 		}  
  if( $change == 1 )
   {
-   $json_object = json_encode($data);
-   $save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-   exec("sudo rm -R " . $data["chromium"]["cachepath"]);
-   exec("sudo chmod 755 /etc/mupibox/mupiboxconfig.json");
-   exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+   remove_config_cache_dir((string)($data["chromium"]["cachepath"] ?? ""));
+   save_mupiboxconfig($data);
    exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
    exec("sudo -i -u dietpi /usr/local/bin/mupibox/./restart_kiosk.sh");
   }
  if( $change == 2 )
   {
-   $json_object = json_encode($data);
-   $save_rc = file_put_contents('/tmp/.mupiboxconfig.json', $json_object);
-   exec("sudo mv /tmp/.mupiboxconfig.json /etc/mupibox/mupiboxconfig.json");
+   save_mupiboxconfig($data);
    exec("sudo /usr/local/bin/mupibox/./setting_update.sh");
   }
-  
 $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 ?>
 
@@ -623,7 +688,10 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				The default password is "MuP1B0x"!
 				</p>
 				<div>
-				<input id="newpwd" name="newpwd" class="element text medium" type="password" minlength="6" maxlength="255" value=""/>
+				<label for="curpwd">Current password</label>
+				<input id="curpwd" name="curpwd" class="element text medium" type="password" maxlength="255" value="" autocomplete="current-password"/>
+				<label for="newpwd">New password</label>
+				<input id="newpwd" name="newpwd" class="element text medium" type="password" minlength="6" maxlength="255" value="" autocomplete="new-password"/>
 				<input type="submit" class="button_text" value="Set new password" name="submitpw" >
 				</div>
 			</li>
@@ -1526,8 +1594,16 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 ?>
 
 <?php
-        //$time2sleep=readfile("/tmp/.time2sleep");
-        $time2sleep=fgets(fopen("/tmp/.time2sleep", 'r'));
+        // M11: /tmp/.time2sleep only exists while a sleep timer is active.
+        // Without an active timer fopen() returned false and fgets(false)
+        // raised an uncaught TypeError on PHP 8+. Guard the resource open
+        // and default to empty string so the page renders cleanly either
+        // way (the JS side already handles an empty value).
+        $time2sleep = '';
+        if ($fh = @fopen("/tmp/.time2sleep", 'r')) {
+            $time2sleep = fgets($fh);
+            fclose($fh);
+        }
 ?>
 
 

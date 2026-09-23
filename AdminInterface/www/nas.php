@@ -4,6 +4,25 @@ $backendBase = 'http://localhost:8200/api/nas';
 
 // Progress of a running "Download selected" (polled by the page below). Answers
 // before header.php so that no HTML is sent along with the JSON.
+// These JSON answers come before header.php, so they need a login gate and CSRF check of their
+// own: without it anyone in the LAN could list the whole NAS, load or delete profiles, rebuild
+// the index or cancel a download through this page, without the admin login.
+$nasJsonActions = array('download_cancel', 'download_status', 'browse', 'index_status', 'index_search', 'index_refresh', 'profile_api');
+if (count(array_intersect($nasJsonActions, array_keys($_GET))) > 0) {
+	require __DIR__ . '/includes/auth_check.php';
+	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+		// The page sends the token in an X-CSRF-Token header (NAS_CSRF below); a foreign page can't
+		// read it. Compared against the session directly: auth_check.php has already released the
+		// session lock, and csrf.php would start the session again.
+		$nasSessionToken = (string)($_SESSION['csrf_token'] ?? '');
+		if ($nasSessionToken === '' || !hash_equals($nasSessionToken, (string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+			http_response_code(403);
+			header('Content-Type: application/json');
+			echo json_encode(array('success' => false, 'error' => 'CSRF token mismatch - please reload the page.'));
+			exit;
+		}
+	}
+}
 if (isset($_GET['download_cancel']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
 	header('Content-Type: application/json');
 	echo json_encode(nasApiCall("$backendBase/download/cancel", 'POST', new stdClass(), 10));
@@ -373,6 +392,8 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 <?php } ?>
 
 <script>
+// CSRF token for the JSON POSTs below (checked at the top of this file)
+var NAS_CSRF = <?= json_encode(csrf_token()) ?>;
 (function () {
 	var root = document.getElementById('nas-root');
 	if (!root) { return; }
@@ -585,7 +606,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 		if (refreshBtn) {
 			refreshBtn.addEventListener('click', function () {
 				refreshBtn.disabled = true;
-				fetch('nas.php?index_refresh=1', { method: 'POST' }).then(function () { setTimeout(pollIndex, 300); });
+				fetch('nas.php?index_refresh=1', { method: 'POST', headers: { 'X-CSRF-Token': NAS_CSRF } }).then(function () { setTimeout(pollIndex, 300); });
 			});
 		}
 		pollIndex();
@@ -800,7 +821,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 	window.nasNotice = notice;
 
 	function api(action, body) {
-		var opt = body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+		var opt = body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': NAS_CSRF }, body: JSON.stringify(body) };
 		return fetch('nas.php?profile_api=' + encodeURIComponent(action), opt).then(function (r) { return r.json(); });
 	}
 	var working = false;
@@ -1027,7 +1048,7 @@ $CHANGE_TXT = $CHANGE_TXT . "</ul>";
 		cancelBtn.addEventListener('click', function () {
 			cancelBtn.disabled = true;
 			cancelBtn.value = 'Cancelling...';
-			fetch('nas.php?download_cancel=1', { method: 'POST' }).catch(function () {});
+			fetch('nas.php?download_cancel=1', { method: 'POST', headers: { 'X-CSRF-Token': NAS_CSRF } }).catch(function () {});
 		});
 	}
 	refresh();
