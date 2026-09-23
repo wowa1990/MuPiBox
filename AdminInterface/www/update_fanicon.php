@@ -1,4 +1,5 @@
 <?php
+$AUTH_CHECK_NO_TOUCH = true; // background poll, not user activity
 require __DIR__ . '/includes/auth_check.php';
 
 // MED-17: fan state + CPU temperature was unauth-readable, useful for

@@ -47,4 +47,14 @@ if ($__loginRequired && !$__loggedIn) {
 
 // Session is fresh — bump last_activity so the timeout in header.php
 // stays in sync when the user navigates back into the HTML pages.
-$_SESSION['last_activity'] = time();
+// Background polls (header icons every 5 s) set $AUTH_CHECK_NO_TOUCH: they must not
+// count as activity, otherwise an open admin tab would never reach the idle timeout.
+if (empty($AUTH_CHECK_NO_TOUCH)) {
+    $_SESSION['last_activity'] = time();
+}
+
+// None of the endpoints behind this gate writes the session afterwards. Release the
+// session lock now: PHP holds it for the whole request, and the icon polls would
+// otherwise queue behind any slow page of the same browser (e.g. a hanging
+// bluetoothctl) and pile up php-fpm workers until the admin interface stalls.
+session_write_close();

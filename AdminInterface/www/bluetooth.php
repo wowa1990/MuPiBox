@@ -8,6 +8,11 @@
 	scan on
 	*/
 	include ('includes/header.php');
+	// The Bluetooth commands below can take a while (scan, pairing). Release the session lock
+	// so other admin pages and the header icon polls of the same browser don't wait for them.
+	// csrf_token() first: the form filter needs the token, and it can't be stored afterwards.
+	csrf_token();
+	session_write_close();
 
 	// Without a Bluetooth controller (e.g. the chip is switched off) bluetoothctl, and the scripts built on it,
 	// wait for one forever - while this request holds the PHP session lock. Every other admin page of the same
