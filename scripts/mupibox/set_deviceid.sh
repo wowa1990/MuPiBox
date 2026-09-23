@@ -4,7 +4,7 @@
 
 CONFIG="/etc/mupibox/mupiboxconfig.json"
 HOSTNAME=$(sudo /usr/bin/jq -r .mupibox.host ${CONFIG})
-DEVICES=$(curl http://${HOSTNAME}:5005/getDevices 2>/dev/null)
+DEVICES=$(curl http://127.0.0.1:5005/getDevices 2>/dev/null)
 devID=$(echo ${DEVICES} | jq '.[] | select(.name=='\"${HOSTNAME}\"')' | jq '.id')
 devID=$(echo ${devID} | sed 's/\"//g')
 if [ ${#devID} > 5 ];

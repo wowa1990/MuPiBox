@@ -35,11 +35,11 @@ if [ ${wled_active} = true ]; then
 		sleep 3
 	done
 	wled_data='{"ps":'${wled_main_id}'}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"bri":'${wled_brightness_def}'}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"on":true}'
-	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 fi
 
 while true
@@ -61,7 +61,7 @@ do
 		then
 			if [ ${wled_active} = true ]; then
 				wled_data='{"bri":'${wled_brightness_def}'}'
-				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 			fi
 			/usr/bin/cat <<< $(/usr/bin/jq '.led_dim_mode = 1' ${TMP_LEDFILE}) >  ${TMP_LEDFILE}
 			OLD_STATE=${displayState}
@@ -69,7 +69,7 @@ do
 		then
 			if [ ${wled_active} = true ]; then
 				wled_data='{"bri":'${wled_brightness_dim}'}'
-				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+				/usr/bin/python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 			fi
 			/usr/bin/cat <<< $(/usr/bin/jq '.led_dim_mode = 0' ${TMP_LEDFILE}) >  ${TMP_LEDFILE}
 			OLD_STATE=${displayState}

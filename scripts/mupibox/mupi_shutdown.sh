@@ -35,11 +35,11 @@ wled_brightness_def=$(/usr/bin/jq -r .wled.brightness_default ${CONFIG})
 
 if [ "${wled_shut_active}" = true ]; then
 	wled_data='{"ps":"'${wled_shut_id}'"}'
-	python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"bri":"'${wled_brightness_def}'"}'
-	python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 	wled_data='{"on":true}'
-	python3 /usr/local/bin/mupibox/wled_send_data.py -s ${wled_com_port} -b ${wled_baud_rate} -j ${wled_data}
+	python3 /usr/local/bin/mupibox/wled_send_data.py -s "${wled_com_port}" -b "${wled_baud_rate}" -j "${wled_data}"
 fi
 TELEGRAM=$(/usr/bin/jq -r .telegram.active ${CONFIG})
 TELEGRAM_CHATID=$(/usr/bin/jq -r .telegram.chatId ${CONFIG})

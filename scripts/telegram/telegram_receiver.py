@@ -63,11 +63,11 @@ def on_chat_message(msg):
         subprocess.run(["sudo", "/usr/local/bin/mupibox/./albumstop_activator.sh"])
     elif command == '/pause':
         bot.sendMessage(chat_id, "Pause")
-        url = 'http://' + config['mupibox']['host'] + ':5005//pause'
+        url = 'http://127.0.0.1:5005//pause'  # local: the player only takes commands from the box itself or its own pages
         requests.get(url)
     elif command == '/play':
         bot.sendMessage(chat_id, "Play")
-        url = 'http://' + config['mupibox']['host'] + ':5005//play'
+        url = 'http://127.0.0.1:5005//play'  # local: the player only takes commands from the box itself or its own pages
         requests.get(url)
 
 def on_callback_query(msg):
@@ -111,11 +111,11 @@ def on_callback_query(msg):
         subprocess.Popen(["sudo", "nohup", "/usr/local/bin/mupibox/./sleep_timer.sh", str(sleep)])
         bot.sendMessage(from_id, "Sleep timer set to " + split_cmd[1] + " minutes")
     elif query_data == 'play':
-        url = 'http://' + config['mupibox']['host'] + ':5005//play'
+        url = 'http://127.0.0.1:5005//play'  # local: the player only takes commands from the box itself or its own pages
         bot.answerCallbackQuery(query_id, text='Play', show_alert=True)
         requests.get(url)
     elif query_data == 'pause':
-        url = 'http://' + config['mupibox']['host'] + ':5005//pause'
+        url = 'http://127.0.0.1:5005//pause'  # local: the player only takes commands from the box itself or its own pages
         bot.answerCallbackQuery(query_id, text='Pause', show_alert=True)
         requests.get(url)
     elif query_data == 'back':

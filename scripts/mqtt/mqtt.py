@@ -858,8 +858,20 @@ def on_message(client, userdata, msg):
         os.system("/usr/local/bin/mupibox/./mupi_shutdown.sh")
         os.system("poweroff")
     if msg.topic == mqtt_topic + '/' + mqtt_clientId + '/volume/set':
-        print("Volume: " + msg.payload.decode("utf-8") + "%")
-        os.system("/usr/bin/pactl set-sink-volume @DEFAULT_SINK@ " + msg.payload.decode("utf-8") + "%")
+        # The payload used to go straight into os.system() (shell injection as root) and could also
+        # exceed the configured maximum volume. Parse it as a number and clamp it.
+        try:
+            volume = int(float(msg.payload.decode("utf-8").strip()))
+        except ValueError:
+            print("Volume: ignoring invalid value")
+            return
+        try:
+            max_volume = int(jsonconfig['mupibox'].get('maxVolume', 100))
+        except (KeyError, TypeError, ValueError):
+            max_volume = 100
+        volume = max(0, min(volume, max_volume))
+        print("Volume: " + str(volume) + "%")
+        subprocess.run(["/usr/bin/pactl", "set-sink-volume", "@DEFAULT_SINK@", str(volume) + "%"], check=False)
     if msg.topic == mqtt_topic + '/' + mqtt_clientId + '/pause/set' and str(msg.payload.decode("utf-8")) == "pause":
         print("Button: pause")
         url = 'http://127.0.0.1:5005/pause'
