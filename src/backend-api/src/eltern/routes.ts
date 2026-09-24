@@ -97,6 +97,17 @@ function wifiIface(): string {
  * (magic-link redemption) is a separate route in server.ts because it
  * needs to redirect to the WebApp, not return JSON.
  */
+// How playback may go on when a limit is reached: 'stop' (at once), 'track' (let the song finish) or 'album'.
+// Older configs only have maxOverrunMinutes: 0 meant stop at once, anything else let the song finish.
+type GraceMode = 'stop' | 'track' | 'album'
+function isGraceMode(value: unknown): value is GraceMode {
+  return value === 'stop' || value === 'track' || value === 'album'
+}
+function graceModeOf(block: Record<string, unknown>): GraceMode {
+  if (isGraceMode(block.graceMode)) return block.graceMode
+  return block.maxOverrunMinutes === 0 ? 'stop' : 'track'
+}
+
 export function createElternApiRouter(deps: ElternRouterDeps): Router {
   const router = Router()
 
@@ -336,7 +347,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     res.json({
       playtimeLimit: {
         enabled: playtime.enabled ?? false,
-        maxOverrunMinutes: playtime.maxOverrunMinutes ?? 10,
+        graceMode: graceModeOf(playtime),
         resetHour: playtime.resetHour ?? 0,
         limitsMinutes: playtime.limitsMinutes ?? {
           mon: 60, tue: 60, wed: 60, thu: 60, fri: 60, sat: 60, sun: 60,
@@ -344,7 +355,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       },
       quietHours: {
         enabled: quiet.enabled ?? false,
-        maxOverrunMinutes: quiet.maxOverrunMinutes ?? 10,
+        graceMode: graceModeOf(quiet),
         schedule: quiet.schedule ?? { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] },
       },
     })
@@ -363,12 +374,12 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       playtimeLimit?: {
         enabled?: unknown
         limitsMinutes?: Record<string, unknown>
-        maxOverrunMinutes?: unknown
+        graceMode?: unknown
       }
       quietHours?: {
         enabled?: unknown
         schedule?: Record<string, unknown>
-        maxOverrunMinutes?: unknown
+        graceMode?: unknown
       }
     }
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
@@ -425,7 +436,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       if (body.playtimeLimit) {
         const block = ((cfg.playtimeLimit as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
         if (typeof body.playtimeLimit.enabled === 'boolean') block.enabled = body.playtimeLimit.enabled
-        if (typeof body.playtimeLimit.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.playtimeLimit.maxOverrunMinutes)))
+        if (isGraceMode(body.playtimeLimit.graceMode)) {
+          block.graceMode = body.playtimeLimit.graceMode
+          delete block.maxOverrunMinutes
+        }
         if (Object.keys(validatedLimits).length > 0) {
           const lm = ((block.limitsMinutes as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
           Object.assign(lm, validatedLimits)
@@ -436,7 +450,10 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       if (body.quietHours) {
         const block = ((cfg.quietHours as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
         if (typeof body.quietHours.enabled === 'boolean') block.enabled = body.quietHours.enabled
-        if (typeof body.quietHours.maxOverrunMinutes === 'number') block.maxOverrunMinutes = Math.max(0, Math.min(120, Math.floor(body.quietHours.maxOverrunMinutes)))
+        if (isGraceMode(body.quietHours.graceMode)) {
+          block.graceMode = body.quietHours.graceMode
+          delete block.maxOverrunMinutes
+        }
         if (Object.keys(validatedSchedule).length > 0) {
           const sched = ((block.schedule as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
           Object.assign(sched, validatedSchedule)

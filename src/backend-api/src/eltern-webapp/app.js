@@ -643,6 +643,13 @@ async function loadCaps() {
   await Promise.all([loadCapsStatus(), loadCapsConfig(), loadSleepTimer()])
 }
 
+/** What may happen to what is playing when a limit is reached (set in the admin interface). */
+function capsGraceText(mode) {
+  if (mode === 'stop') return 'Sofort stoppen'
+  if (mode === 'album') return 'Album zu Ende spielen'
+  return 'Lied zu Ende spielen'
+}
+
 /** Translate the player's raw state token to friendly German for the badge. */
 function capsStateText(state, kind) {
   if (state === 'normal') return 'Normal'
@@ -698,7 +705,7 @@ async function loadCapsConfig() {
   renderQuietSchedule()
   $('#caps-playtime-toggle').checked = !!capsConfig.playtimeLimit?.enabled
   $('#caps-quiet-toggle').checked = !!capsConfig.quietHours?.enabled
-  setText('#caps-overrun-info', `${capsConfig.playtimeLimit?.maxOverrunMinutes ?? 10}`)
+  setText('#caps-overrun-info', capsGraceText(capsConfig.playtimeLimit?.graceMode))
 }
 
 function renderCapsDayGrid() {
@@ -805,12 +812,12 @@ async function saveCapsConfig() {
     body: {
       playtimeLimit: {
         enabled: capsConfig.playtimeLimit.enabled,
-        maxOverrunMinutes: capsConfig.playtimeLimit.maxOverrunMinutes,
+        graceMode: capsConfig.playtimeLimit.graceMode,
         limitsMinutes: capsConfig.playtimeLimit.limitsMinutes,
       },
       quietHours: {
         enabled: capsConfig.quietHours.enabled,
-        maxOverrunMinutes: capsConfig.quietHours.maxOverrunMinutes,
+        graceMode: capsConfig.quietHours.graceMode,
         schedule: capsConfig.quietHours.schedule,
       },
     },

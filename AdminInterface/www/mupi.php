@@ -545,6 +545,18 @@ if( $_POST['fan_control'] )
   $CHANGE_TXT=$CHANGE_TXT."<li>Press Button delay set to ".$_POST['pressDelay']. " seconds</li>";
   $change=2;
   }
+ // How playback may go on when a limit is reached: stop | track (let the song finish) | album (let the album finish).
+ // Older configs only have maxOverrunMinutes: 0 meant stop at once, anything else let the song finish.
+ function grace_mode_of($block)
+  {
+  if( is_array($block) && isset($block['graceMode']) && in_array($block['graceMode'], array('stop','track','album'), true) ) return $block['graceMode'];
+  if( is_array($block) && isset($block['maxOverrunMinutes']) && intval($block['maxOverrunMinutes']) === 0 ) return 'stop';
+  return 'track';
+  }
+ function grace_mode_posted($name)
+  {
+  return ( isset($_POST[$name]) && in_array($_POST[$name], array('stop','track','album'), true) ) ? $_POST[$name] : 'track';
+  }
  $playtime_changed = false;
  if( $_POST['playtime_save'] )
   {
@@ -553,7 +565,7 @@ if( $_POST['fan_control'] )
    $data["playtimeLimit"] = array(
     "enabled" => false,
     "resetHour" => 0,
-    "maxOverrunMinutes" => 10,
+    "graceMode" => "track",
     "limitsMinutes" => array("mon"=>60,"tue"=>60,"wed"=>60,"thu"=>60,"fri"=>60,"sat"=>60,"sun"=>60),
    );
    }
@@ -563,7 +575,8 @@ if( $_POST['fan_control'] )
    }
   $data["playtimeLimit"]["enabled"] = (isset($_POST['playtime_enabled']) && $_POST['playtime_enabled'] === '1');
   $data["playtimeLimit"]["resetHour"] = max(0, min(23, intval($_POST['playtime_resetHour'])));
-  $data["playtimeLimit"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['playtime_maxOverrunMinutes'])));
+  $data["playtimeLimit"]["graceMode"] = grace_mode_posted('playtime_graceMode');
+  unset($data["playtimeLimit"]["maxOverrunMinutes"]);
   $playtime_days = array('mon','tue','wed','thu','fri','sat','sun');
   foreach( $playtime_days as $d )
    {
@@ -581,12 +594,13 @@ if( $_POST['fan_control'] )
    {
    $data["quietHours"] = array(
     "enabled" => false,
-    "maxOverrunMinutes" => 10,
+    "graceMode" => "track",
     "schedule" => array("mon"=>array(),"tue"=>array(),"wed"=>array(),"thu"=>array(),"fri"=>array(),"sat"=>array(),"sun"=>array()),
    );
    }
   $data["quietHours"]["enabled"] = (isset($_POST['quiethours_enabled']) && $_POST['quiethours_enabled'] === '1');
-  $data["quietHours"]["maxOverrunMinutes"] = max(0, min(60, intval($_POST['quiethours_maxOverrunMinutes'])));
+  $data["quietHours"]["graceMode"] = grace_mode_posted('quiethours_graceMode');
+  unset($data["quietHours"]["maxOverrunMinutes"]);
   $quiethours_days = array('mon','tue','wed','thu','fri','sat','sun');
   $quiethours_window_count = 0;
   foreach( $quiethours_days as $d )
@@ -888,11 +902,9 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				$playtime_limits = isset($data["playtimeLimit"]["limitsMinutes"]) && is_array($data["playtimeLimit"]["limitsMinutes"]) ? $data["playtimeLimit"]["limitsMinutes"] : array();
 				echo '<p>Currently: <b>'.($playtime_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
 				?>
-				<p>Enable / disable the daily limit:</p>
-				<select name="playtime_enabled">
-					<option value="1" <?php echo $playtime_enabled_state ? 'selected' : ''; ?>>Enabled</option>
-					<option value="0" <?php echo !$playtime_enabled_state ? 'selected' : ''; ?>>Disabled</option>
-				</select>
+				<?php /* The field keeps the current state for the normal Save; the button below flips it and saves at once. */ ?>
+				<input type="hidden" name="playtime_enabled" id="playtime_enabled_field" value="<?php echo $playtime_enabled_state ? '1' : '0'; ?>">
+				<input type="submit" class="button_text" name="playtime_save" value="<?php echo $playtime_enabled_state ? 'Disable' : 'Enable'; ?>" title="Enable / disable the daily limit" onclick="document.getElementById('playtime_enabled_field').value='<?php echo $playtime_enabled_state ? '0' : '1'; ?>';">
 			</li>
 			<li id="li_1">
 				<h2>Reset hour (0 - 23)</h2>
@@ -900,10 +912,14 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<input type="number" name="playtime_resetHour" min="0" max="23" step="1" value="<?php echo $playtime_resetHour; ?>">
 			</li>
 			<li id="li_1">
-				<h2>Grace period (minutes)</h2>
-				<p>When the daily limit is reached, allow playback to continue for up to this many additional minutes so the current track can finish naturally. The player stops at the next track boundary (for local files / radio / RSS) or at the latest when this grace runs out. <b>0</b> = stop immediately at the limit. Default: <b>10</b>. Maximum: 60.</p>
-				<?php $playtime_maxOverrunMinutes = isset($data["playtimeLimit"]["maxOverrunMinutes"]) ? intval($data["playtimeLimit"]["maxOverrunMinutes"]) : 10; ?>
-				<input type="number" name="playtime_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $playtime_maxOverrunMinutes; ?>"> min
+				<h2>When the daily limit is reached</h2>
+				<p>What happens to what is playing when today's time is used up. Nothing new is started after the limit. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net (very long audiobooks). <b>Whatever you choose: podcasts may always finish the current episode, and radio streams are always stopped at once.</b></p>
+				<?php $playtime_graceMode = grace_mode_of(isset($data["playtimeLimit"]) ? $data["playtimeLimit"] : null); ?>
+				<select name="playtime_graceMode">
+					<option value="stop" <?php echo $playtime_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
+					<option value="track" <?php echo $playtime_graceMode === 'track' ? 'selected' : ''; ?>>Let the current song finish</option>
+					<option value="album" <?php echo $playtime_graceMode === 'album' ? 'selected' : ''; ?>>Let the current album finish</option>
+				</select>
 			</li>
 			<li id="li_1">
 				<h2>Daily limit per weekday (minutes)</h2>
@@ -955,59 +971,72 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<h2>Status</h2>
 				<?php
 				$qh_enabled_state = ( isset($data["quietHours"]["enabled"]) && $data["quietHours"]["enabled"] ) ? true : false;
-				$qh_maxOverrunMinutes = isset($data["quietHours"]["maxOverrunMinutes"]) ? intval($data["quietHours"]["maxOverrunMinutes"]) : 10;
 				$qh_schedule = isset($data["quietHours"]["schedule"]) && is_array($data["quietHours"]["schedule"]) ? $data["quietHours"]["schedule"] : array();
 				echo '<p>Currently: <b>'.($qh_enabled_state ? 'ENABLED' : 'DISABLED').'</b></p>';
 				?>
-				<p>Enable / disable quiet hours:</p>
-				<select name="quiethours_enabled">
-					<option value="1" <?php echo $qh_enabled_state ? 'selected' : ''; ?>>Enabled</option>
-					<option value="0" <?php echo !$qh_enabled_state ? 'selected' : ''; ?>>Disabled</option>
+				<?php /* The field keeps the current state for the normal Save; the button below flips it and saves at once. */ ?>
+				<input type="hidden" name="quiethours_enabled" id="quiethours_enabled_field" value="<?php echo $qh_enabled_state ? '1' : '0'; ?>">
+				<input type="submit" class="button_text" name="quiethours_save" value="<?php echo $qh_enabled_state ? 'Disable' : 'Enable'; ?>" title="Enable / disable quiet hours" onclick="document.getElementById('quiethours_enabled_field').value='<?php echo $qh_enabled_state ? '0' : '1'; ?>';">
+			</li>
+			<li id="li_1">
+				<h2>When a quiet window starts</h2>
+				<p>What happens to what is playing when a quiet window begins. Nothing new is started during the window. Letting the song or album finish is capped at 30 minutes / 3 hours as a safety net. <b>Whatever you choose: podcasts may always finish the current episode, and radio streams are always stopped at once.</b></p>
+				<?php $qh_graceMode = grace_mode_of(isset($data["quietHours"]) ? $data["quietHours"] : null); ?>
+				<select name="quiethours_graceMode">
+					<option value="stop" <?php echo $qh_graceMode === 'stop' ? 'selected' : ''; ?>>Stop immediately</option>
+					<option value="track" <?php echo $qh_graceMode === 'track' ? 'selected' : ''; ?>>Let the current song finish</option>
+					<option value="album" <?php echo $qh_graceMode === 'album' ? 'selected' : ''; ?>>Let the current album finish</option>
 				</select>
 			</li>
 			<li id="li_1">
-				<h2>Grace period (minutes)</h2>
-				<p>When a quiet window starts, allow up to this many additional minutes for the current track to finish naturally. <b>0</b> = stop immediately at the window boundary. Default: <b>10</b>. Maximum: 60.</p>
-				<input type="number" name="quiethours_maxOverrunMinutes" min="0" max="60" step="1" value="<?php echo $qh_maxOverrunMinutes; ?>"> min
-			</li>
-			<li id="li_1">
-				<h2>Windows per weekday</h2>
-				<p>Use „+ Add window" to add another row to a day. Empty rows are ignored on save.</p>
+				<h2>Rules</h2>
+				<p>Playback is blocked during these time spans. A span may run past midnight (e.g. 19:30 to 07:00).</p>
 				<?php
-				$qh_day_labels = array(
-					'mon' => 'Monday',
-					'tue' => 'Tuesday',
-					'wed' => 'Wednesday',
-					'thu' => 'Thursday',
-					'fri' => 'Friday',
-					'sat' => 'Saturday',
-					'sun' => 'Sunday',
-				);
+				$qh_day_labels = array('mon' => 'Monday', 'tue' => 'Tuesday', 'wed' => 'Wednesday', 'thu' => 'Thursday', 'fri' => 'Friday', 'sat' => 'Saturday', 'sun' => 'Sunday');
+				// the saved schedule as one flat list: {day, from, to, label}
+				$qh_rules = array();
 				foreach( $qh_day_labels as $key => $label ) {
 					$windows = isset($qh_schedule[$key]) && is_array($qh_schedule[$key]) ? $qh_schedule[$key] : array();
-					echo '<div class="quiet-day-block" style="margin-top:1em;padding:0.5em;border:1px solid #ddd;border-radius:4px;">';
-					echo '<b>'.$label.'</b>';
-					echo '<table class="quiet-windows-table" id="quiet-windows-'.$key.'" style="width:100%;margin-top:0.4em;">';
-					echo '<tr><th>From</th><th>To</th><th>Label (optional)</th><th></th></tr>';
-					$idx = 0;
 					foreach( $windows as $w ) {
 						if( !is_array($w) ) continue;
-						$wFrom = htmlspecialchars(isset($w['from']) ? $w['from'] : '');
-						$wTo = htmlspecialchars(isset($w['to']) ? $w['to'] : '');
-						$wLabel = htmlspecialchars(isset($w['label']) ? $w['label'] : '');
-						echo '<tr class="quiet-window-row">';
-						echo '<td><input type="time" name="quiet_windows['.$key.']['.$idx.'][from]" value="'.$wFrom.'"></td>';
-						echo '<td><input type="time" name="quiet_windows['.$key.']['.$idx.'][to]" value="'.$wTo.'"></td>';
-						echo '<td><input type="text" name="quiet_windows['.$key.']['.$idx.'][label]" value="'.$wLabel.'" placeholder="e.g. Bedtime"></td>';
-						echo '<td><button type="button" class="button_text_red" onclick="removeQuietWindow(this)">×</button></td>';
-						echo '</tr>';
-						$idx++;
+						$qh_rules[] = array(
+							'day' => $key,
+							'from' => isset($w['from']) ? (string)$w['from'] : '',
+							'to' => isset($w['to']) ? (string)$w['to'] : '',
+							'label' => isset($w['label']) ? (string)$w['label'] : '',
+						);
 					}
-					echo '</table>';
-					echo '<button type="button" class="button_text" onclick="addQuietWindow(\''.$key.'\')" style="margin-top:0.4em;">+ Add window</button>';
-					echo '</div>';
 				}
 				?>
+				<style>
+					.qr-add { margin: 4px 0 12px 0; }
+					table.qr-table { width: 100%; max-width: 720px; border-collapse: collapse; font-size: 15px; }
+					table.qr-table th { text-align: left; font-size: 13px; color: #8a8a8a; font-weight: bold; padding: 6px 10px; border-bottom: 1px solid #dcdcdc; }
+					table.qr-table td { padding: 8px 10px; border-bottom: 1px solid #ececec; }
+					table.qr-table td.qr-empty { color: #8a8a8a; font-style: italic; text-align: center; padding: 18px 10px; }
+					table.qr-table td.qr-actions { width: 1%; white-space: nowrap; text-align: right; }
+					.qr-del { border: 0; background: transparent; color: #b03030; font-size: 18px; cursor: pointer; padding: 0 6px; }
+					.qr-back { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; }
+					.qr-modal { box-sizing: border-box; width: calc(100% - 32px); max-width: 620px; background: #fff; color: #222; border-radius: 12px; padding: 26px 28px 22px 28px; box-shadow: 0 8px 30px rgba(0, 0, 0, .35); text-align: left; }
+					.qr-modal h3 { margin: 0 0 18px 0; font-size: 20px; }
+					.qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; }
+					.qr-field label { display: block; font-size: 14px; font-weight: bold; color: #a0a0a0; margin: 0 0 6px 2px; }
+					.qr-field select, .qr-field input[type=text] { box-sizing: border-box; width: 100%; height: 44px; padding: 0 14px; font-size: 16px; color: #222; background: #f9f9f9; border: 1px solid #dcdcdc; border-radius: 6px; outline: none; }
+					.qr-field select:focus, .qr-field input[type=text]:focus { border-color: #b5b5b5; background: #fbfbfb; }
+					.qr-error { min-height: 20px; margin: 12px 2px 0 2px; color: #b03030; font-size: 14px; }
+					.qr-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 18px; border-top: 1px solid #e5e5e5; }
+					.qr-btn { box-sizing: border-box; height: 40px; padding: 0 20px; font-size: 15px; letter-spacing: .5px; text-transform: uppercase; border-radius: 4px; cursor: pointer; }
+					.qr-cancel { background: #fff; color: #777; border: 2px solid #e2e2e2; }
+					.qr-save { background: #7d7d7d; color: #fff; border: 2px solid #7d7d7d; }
+					.qr-save:hover { background: #666; border-color: #666; }
+					@media (max-width: 560px) { .qr-grid { grid-template-columns: 1fr; } }
+				</style>
+				<input type="button" class="button_text qr-add" id="qr-add" value="Add rule" />
+				<table class="qr-table" id="qr-table">
+					<thead><tr><th>Weekday</th><th>From</th><th>To</th><th>Label</th><th></th></tr></thead>
+					<tbody id="qr-body"></tbody>
+				</table>
+				<div id="qr-hidden"></div>
 			</li>
 			<li class="buttons">
 				<input type="hidden" name="form_id" value="37271" />
@@ -1017,31 +1046,172 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 	</details>
 
 	<script>
-	function addQuietWindow(day) {
-		var table = document.getElementById('quiet-windows-' + day);
-		// Determine next index by counting existing rows (excluding header).
-		var existingRows = table.querySelectorAll('tr.quiet-window-row');
-		var nextIdx = 0;
-		existingRows.forEach(function(r){
-			var input = r.querySelector('input[name^="quiet_windows[' + day + ']["]');
-			if (input) {
-				var m = input.name.match(/\[(\d+)\]/);
-				if (m) nextIdx = Math.max(nextIdx, parseInt(m[1]) + 1);
+	// Quiet-hours rules: a table plus a popup to add one. The rules are sent with the form as hidden fields
+	// (quiet_windows[day][n][from|to|label]); "Save rule" and the delete button store the change at once.
+	(function () {
+		var DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday']];
+		var rules = <?php echo json_encode($qh_rules, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+		var body = document.getElementById('qr-body');
+		var hidden = document.getElementById('qr-hidden');
+		var addBtn = document.getElementById('qr-add');
+		if (!body || !hidden || !addBtn) { return; }
+		var form = addBtn.closest('form');
+		if (!form) { return; }
+
+		function dayName(key) { for (var i = 0; i < DAYS.length; i++) { if (DAYS[i][0] === key) { return DAYS[i][1]; } } return key; }
+		function dayIndex(key) { for (var i = 0; i < DAYS.length; i++) { if (DAYS[i][0] === key) { return i; } } return 99; }
+		function sortRules() {
+			rules.sort(function (a, b) { return dayIndex(a.day) - dayIndex(b.day) || String(a.from).localeCompare(String(b.from)); });
+		}
+
+		function cell(text) { var td = document.createElement('td'); td.textContent = text; return td; }
+		function render() {
+			sortRules();
+			body.innerHTML = '';
+			if (rules.length === 0) {
+				var tr = document.createElement('tr');
+				var td = document.createElement('td');
+				td.colSpan = 5;
+				td.className = 'qr-empty';
+				td.textContent = 'No entry';
+				tr.appendChild(td);
+				body.appendChild(tr);
 			}
-		});
-		var row = document.createElement('tr');
-		row.className = 'quiet-window-row';
-		row.innerHTML =
-			'<td><input type="time" name="quiet_windows[' + day + '][' + nextIdx + '][from]"></td>' +
-			'<td><input type="time" name="quiet_windows[' + day + '][' + nextIdx + '][to]"></td>' +
-			'<td><input type="text" name="quiet_windows[' + day + '][' + nextIdx + '][label]" placeholder="e.g. Bedtime"></td>' +
-			'<td><button type="button" class="button_text_red" onclick="removeQuietWindow(this)">×</button></td>';
-		table.appendChild(row);
-	}
-	function removeQuietWindow(btn) {
-		var row = btn.closest('tr.quiet-window-row');
-		if (row && row.parentNode) row.parentNode.removeChild(row);
-	}
+			rules.forEach(function (rule, i) {
+				var row = document.createElement('tr');
+				row.appendChild(cell(dayName(rule.day)));
+				row.appendChild(cell(rule.from));
+				row.appendChild(cell(rule.to));
+				row.appendChild(cell(rule.label || ''));
+				var act = document.createElement('td');
+				act.className = 'qr-actions';
+				var del = document.createElement('button');
+				del.type = 'button';
+				del.className = 'qr-del';
+				del.title = 'Delete rule';
+				del.innerHTML = '&times;';
+				del.addEventListener('click', function () {
+					if (!confirm('Delete this rule?')) { return; }
+					rules.splice(i, 1);
+					persist();
+				});
+				act.appendChild(del);
+				row.appendChild(act);
+				body.appendChild(row);
+			});
+			// the hidden fields the PHP save reads
+			hidden.innerHTML = '';
+			var perDay = {};
+			rules.forEach(function (rule) {
+				var n = perDay[rule.day] = (perDay[rule.day] === undefined ? 0 : perDay[rule.day] + 1);
+				['from', 'to', 'label'].forEach(function (field) {
+					var input = document.createElement('input');
+					input.type = 'hidden';
+					input.name = 'quiet_windows[' + rule.day + '][' + n + '][' + field + ']';
+					input.value = rule[field] || '';
+					hidden.appendChild(input);
+				});
+			});
+		}
+		// stores the rules right away by submitting the quiet-hours part of the form
+		function persist() {
+			render();
+			var save = document.createElement('input');
+			save.type = 'hidden';
+			save.name = 'quiethours_save';
+			save.value = '1';
+			hidden.appendChild(save);
+			form.submit();
+		}
+
+		function timeOptions() {
+			var html = '';
+			for (var m = 0; m < 24 * 60; m += 15) {
+				var t = ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+				html += '<option value="' + t + '">' + t + '</option>';
+			}
+			return html;
+		}
+		function field(labelText, control) {
+			var wrap = document.createElement('div');
+			wrap.className = 'qr-field';
+			var label = document.createElement('label');
+			label.textContent = labelText;
+			wrap.appendChild(label);
+			wrap.appendChild(control);
+			return wrap;
+		}
+
+		function openPopup() {
+			var back = document.createElement('div');
+			back.className = 'qr-back';
+			var modal = document.createElement('div');
+			modal.className = 'qr-modal';
+			var title = document.createElement('h3');
+			title.textContent = 'Add rule';
+			modal.appendChild(title);
+
+			var daySel = document.createElement('select');
+			DAYS.forEach(function (d) { var o = document.createElement('option'); o.value = d[0]; o.textContent = d[1]; daySel.appendChild(o); });
+			var labelIn = document.createElement('input');
+			labelIn.type = 'text';
+			labelIn.maxLength = 60;
+			labelIn.placeholder = 'e.g. Bedtime';
+			var fromSel = document.createElement('select');
+			fromSel.innerHTML = timeOptions();
+			fromSel.value = '19:30';
+			var toSel = document.createElement('select');
+			toSel.innerHTML = timeOptions();
+			toSel.value = '07:00';
+
+			var grid = document.createElement('div');
+			grid.className = 'qr-grid';
+			grid.appendChild(field('Weekday', daySel));
+			grid.appendChild(field('Label (optional)', labelIn));
+			grid.appendChild(field('From', fromSel));
+			grid.appendChild(field('To', toSel));
+			modal.appendChild(grid);
+
+			var err = document.createElement('div');
+			err.className = 'qr-error';
+			modal.appendChild(err);
+
+			var foot = document.createElement('div');
+			foot.className = 'qr-foot';
+			var cancel = document.createElement('button');
+			cancel.type = 'button';
+			cancel.className = 'qr-btn qr-cancel';
+			cancel.innerHTML = '&#10005;&nbsp; Cancel';
+			var save = document.createElement('button');
+			save.type = 'button';
+			save.className = 'qr-btn qr-save';
+			save.innerHTML = '&#10003;&nbsp; Save rule';
+			foot.appendChild(cancel);
+			foot.appendChild(save);
+			modal.appendChild(foot);
+			back.appendChild(modal);
+			document.body.appendChild(back);
+
+			function close() { document.body.removeChild(back); document.removeEventListener('keydown', onKey); }
+			function onKey(e) { if (e.key === 'Escape') { close(); } }
+			document.addEventListener('keydown', onKey);
+			cancel.addEventListener('click', close);
+			back.addEventListener('mousedown', function (e) { if (e.target === back) { close(); } });
+			save.addEventListener('click', function () {
+				var rule = { day: daySel.value, from: fromSel.value, to: toSel.value, label: labelIn.value.trim() };
+				if (rule.from === rule.to) { err.textContent = 'From and To must be different.'; return; }
+				var exists = rules.some(function (r) { return r.day === rule.day && r.from === rule.from && r.to === rule.to; });
+				if (exists) { err.textContent = 'This rule already exists.'; return; }
+				rules.push(rule);
+				close();
+				persist();
+			});
+			daySel.focus();
+		}
+
+		addBtn.addEventListener('click', openPopup);
+		render();
+	})();
 	</script>
 
 	<details id="systemsettings">

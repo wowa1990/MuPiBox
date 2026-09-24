@@ -2,6 +2,9 @@ export type PlaytimeDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'su
 
 export type PlaytimeLimitsMinutes = Partial<Record<PlaytimeDayKey, number>>
 
+// What happens to what is playing when a limit is reached: stop at once, let the song finish, or the album.
+export type GraceMode = 'stop' | 'track' | 'album'
+
 export interface PlaytimeBonus {
   date: string // YYYY-MM-DD; only honored if matches today's logical day
   minutes: number
@@ -10,7 +13,8 @@ export interface PlaytimeBonus {
 export interface PlaytimeLimitConfig {
   enabled: boolean
   resetHour?: number
-  maxOverrunMinutes?: number
+  graceMode?: GraceMode
+  maxOverrunMinutes?: number // older configs: 0 = stop at once, anything else = let the song finish
   limitsMinutes?: PlaytimeLimitsMinutes
   todayBonus?: PlaytimeBonus
 }
@@ -32,7 +36,8 @@ export type QuietHoursSchedule = Partial<Record<PlaytimeDayKey, QuietHoursWindow
 
 export interface QuietHoursConfig {
   enabled: boolean
-  maxOverrunMinutes?: number
+  graceMode?: GraceMode
+  maxOverrunMinutes?: number // older configs: see PlaytimeLimitConfig
   schedule?: QuietHoursSchedule
 }
 

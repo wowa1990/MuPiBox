@@ -279,7 +279,7 @@
 	"playtimeLimit": {
 		"enabled": false,
 		"resetHour": 0,
-		"maxOverrunMinutes": 10,
+		"graceMode": "track",
 		"limitsMinutes": {
 			"mon": 60,
 			"tue": 60,
@@ -292,7 +292,7 @@
 	},
 	"quietHours": {
 		"enabled": false,
-		"maxOverrunMinutes": 10,
+		"graceMode": "track",
 		"schedule": {
 			"mon": [],
 			"tue": [],
