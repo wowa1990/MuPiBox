@@ -17,7 +17,11 @@
 		//
 		// Accepted range: 4000-12600 mV (covers 1S, 2S and 3S Li-Ion packs).
 		// Plus strict descending order: v_100 > v_75 > v_50 > v_25 > v_0,
-		// and v_0 >= th_warning >= th_shutdown.
+		// and th_warning >= th_shutdown. The two thresholds are absolute battery states (OK above
+		// th_warning, LOW between the two, SHUTDOWN below th_shutdown, see mupihat_bq25792.py) and do
+		// not depend on v_0: the default Custom profile (v_0 6700, th_warning 7000, th_shutdown 6800) has
+		// them above v_0 - a check of v_0 >= th_warning rejected it, and every pack whose warning sits above
+		// its 0 % voltage.
 		$fields = ['v_100', 'v_75', 'v_50', 'v_25', 'v_0', 'th_warning', 'th_shutdown'];
 		$values = [];
 		$validation_error = '';
@@ -41,9 +45,8 @@
 			$validation_error = 'Voltages must strictly descend: v_100 > v_75 > v_50 > v_25 > v_0';
 		}
 		if ($validation_error === '' &&
-		    !($values['v_0'] >= $values['th_warning']
-		      && $values['th_warning'] >= $values['th_shutdown'])) {
-			$validation_error = 'Threshold order violated: v_0 >= th_warning >= th_shutdown required';
+		    !($values['th_warning'] >= $values['th_shutdown'])) {
+			$validation_error = 'Threshold order violated: th_warning >= th_shutdown required';
 		}
 
 		// Phase 13a: optional `vreg` field (BQ25792 Charge Voltage Limit) for
