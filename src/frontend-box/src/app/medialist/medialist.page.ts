@@ -21,6 +21,7 @@ import { CoverFlipService } from '../cover-flip.service'
 import { LoadingComponent } from '../loading/loading.component'
 import { CategoryType, isSyncManaged, Media, MediaSorting } from '../media'
 import { MediaService } from '../media.service'
+import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
@@ -40,6 +41,7 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
     IonContent,
     SwiperComponent,
     LoadingComponent,
+    MediaUnavailableComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -56,6 +58,11 @@ export class MedialistPage extends SwiperIonicEventsHelper {
   private levelsAbove: Record<string, string>[] = []
   private currentLevel: Record<string, string> = {}
   protected media: Signal<Media[]>
+  // A podcast or NAS folder that came back with nothing: the load failed (a real one always has entries)
+  protected unavailable: Signal<boolean> = computed(() => {
+    const type = this.artist()?.coverMedia?.type
+    return !this.isLoading() && this.media()?.length === 0 && (type === 'rss' || type === 'nas')
+  })
   protected swiperData: Signal<SwiperData<Media>[]> = computed(() => {
     return this.media()?.map((media) => {
       return {

@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, Signal, signal, WritableSignal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, Signal, signal, WritableSignal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationExtras, Router } from '@angular/router'
 import {
@@ -32,6 +32,7 @@ import { CoverFlipService } from '../cover-flip.service'
 import { LoadingComponent } from '../loading/loading.component'
 import type { CategoryType } from '../media'
 import { MediaService } from '../media.service'
+import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
@@ -44,6 +45,7 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
   imports: [
     MupiHatIconComponent,
     LoadingComponent,
+    MediaUnavailableComponent,
     IonHeader,
     IonToolbar,
     IonButtons,
@@ -76,6 +78,11 @@ export class HomePage extends SwiperIonicEventsHelper {
   protected isOnline: Signal<boolean>
   protected isLoading: WritableSignal<boolean> = signal(false)
   protected category: WritableSignal<CategoryType> = signal('audiobook')
+  // The picture that stands for a whole list that could not be loaded (once, not per station / podcast):
+  // the NAS tab when the NAS did not answer, radio stations and podcasts when the box is offline.
+  protected unavailable: Signal<boolean>
+  // Counts up to load the list again while the NAS is not reachable
+  private reloadTick: WritableSignal<number> = signal(0)
 
   constructor(
     private mediaService: MediaService,
@@ -119,8 +126,9 @@ export class HomePage extends SwiperIonicEventsHelper {
         toObservable(this.category),
         toObservable(this.isOnline),
         this.mediaService.getLibraryVersion(),
+        toObservable(this.reloadTick),
       ]).pipe(
-        map(([category, _isOnline, version]) => ({ category, version })),
+        map(([category, _isOnline, version, tick]) => ({ category, version, tick })),
         // MED-13: combineLatest re-emits whenever ANY input changes, so a
         // Wi-Fi blip (online → offline → online …) used to trigger a fetch on
         // every transition — a "re-fetch storm" that flooded /api/data and
@@ -129,7 +137,7 @@ export class HomePage extends SwiperIonicEventsHelper {
         // OR when the library actually changed (Phase 17g — so a Smart-Sync
         // add/remove shows up without a manual reload), but never on bare
         // online/offline flips.
-        distinctUntilChanged((a, b) => a.category === b.category && a.version === b.version),
+        distinctUntilChanged((a, b) => a.category === b.category && a.version === b.version && a.tick === b.tick),
         tap(() => this.isLoading.set(true)),
         switchMap(({ category }) => {
           return this.mediaService.fetchArtistData(category).pipe(
@@ -143,6 +151,20 @@ export class HomePage extends SwiperIonicEventsHelper {
         tap(() => this.isLoading.set(false)),
       ),
     )
+
+    this.unavailable = computed(() => {
+      if (this.isLoading()) return false
+      if (this.category() === 'nas') return this.mediaService.nasUnavailable()
+      const artists = this.artists()
+      if (this.isOnline() !== false || !artists || artists.length === 0) return false
+      return artists.every((a) => a.coverMedia?.type === 'rss' || a.coverMedia?.type === 'radio')
+    })
+    // While the NAS is not reachable the list is asked for again every 30 s.
+    effect((onCleanup) => {
+      if (!(this.category() === 'nas' && this.unavailable())) return
+      const timer = window.setInterval(() => this.reloadTick.update((n) => n + 1), 30_000)
+      onCleanup(() => window.clearInterval(timer))
+    })
 
     this.swiperData = computed(() => {
       return this.artists()?.map((artist) => {

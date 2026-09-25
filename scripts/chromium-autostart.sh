@@ -4,6 +4,18 @@
 # Chromium-parameters: https://peter.sh/experiments/chromium-command-line-switches/
 #                      https://kapeli.com/cheat_sheets/Chromium_Command_Line_Switches.docset/Contents/Resources/Documents/index
 # /var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh
+# Watchdog: now and then Chromium starts but never opens the start page (white screen, window title
+# stays "Untitled"; seen at boot and after a kiosk restart). If that is still the case after 60 s,
+# restart the kiosk once (the marker keeps a persistent failure from turning into a restart loop).
+(
+	sleep 60
+	export DISPLAY=:0 XAUTHORITY="$(ls -t /tmp/serverauth.* 2>/dev/null | head -1)"
+	if xwininfo -root -tree 2>/dev/null | grep -q '"Untitled - Chromium"' && ! find /tmp/kiosk-watchdog -mmin -5 2>/dev/null | grep -q .; then
+		touch /tmp/kiosk-watchdog
+		logger -t mupibox-kiosk "Chromium did not load the start page, restarting the kiosk"
+		/usr/local/bin/mupibox/restart_kiosk.sh
+	fi
+) >/dev/null 2>&1 &
 clear
 /usr/local/bin/mupibox/./startup.sh &
 

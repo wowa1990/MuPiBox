@@ -32,5 +32,8 @@
 
 <ion-content class="home-content">
   <mupi-loading [loading]="isLoading()"></mupi-loading>
+  @if (unavailable()) {
+    <mupi-media-unavailable></mupi-media-unavailable>
+  }
   <mupi-swiper [data]="swiperData()" roundImages="true" (elementClicked)="this.artistCoverClicked($event.data)"></mupi-swiper>
 </ion-content>

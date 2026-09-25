@@ -4239,7 +4239,14 @@ app.get('/api/nas/artists', async (_req, res) => {
         return undefined
       }
     })
-    res.json(entries.filter((entry) => entry !== undefined))
+    const found = entries.filter((entry) => entry !== undefined)
+    // Folders are marked but none could be read: the NAS (or its login) is not reachable right now. Say so
+    // instead of returning an empty list that looks like "nothing marked", so the UI can try again.
+    if (artistFolders.length > 0 && found.length === 0) {
+      res.status(503).json([])
+      return
+    }
+    res.json(found)
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Failed to list NAS artists: ${error}`)
     res.json([])
