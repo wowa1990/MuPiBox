@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core'
+import { Component, computed, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import {
@@ -18,11 +18,12 @@ import {
   IonToolbar,
 } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
+import { Subscription, catchError, EMPTY, switchMap, timer } from 'rxjs'
 import { addOutline, arrowBackOutline, lockClosedOutline, refresh, scanOutline, wifiOutline } from 'ionicons/icons'
 import { MediaService } from '../media.service'
 import { PlayerCmds, PlayerService } from '../player.service'
 import { WifiService } from '../wifi.service'
-import type { WifiNetwork } from '../wifi-network'
+import type { WifiBandChoice, WifiNetwork, WifiStatus } from '../wifi-network'
 
 @Component({
   selector: 'app-wifi',
@@ -46,6 +47,36 @@ import type { WifiNetwork } from '../wifi-network'
 })
 export class WifiPage {
   protected network = toSignal(this.mediaService.network$, { initialValue: null })
+  // The link as it is right now, asked for every few seconds while the page is open (network.json, which
+  // `network` comes from, is only rewritten every 30 seconds)
+  private status = signal<WifiStatus | null>(null)
+  private statusPolling?: Subscription
+  // What the top card shows: the live link, until the first answer the network.json values
+  protected card = computed(() => {
+    const live = this.status()
+    if (!live) {
+      const stored = this.network()
+      return {
+        interface: stored?.interface,
+        name: stored?.wifi ?? '—',
+        detail: `${stored?.wifilink ?? ''} · ${stored?.wifisignal ?? ''}`,
+        ip: stored?.ip ?? '—',
+        gateway: stored?.gateway ?? '—',
+      }
+    }
+    const connected = live.state === 'COMPLETED' && live.ssid
+    return {
+      interface: live.interface,
+      name: connected ? live.ssid : 'Connecting …',
+      detail: connected
+        ? [live.signal !== undefined ? `${live.signal} %` : '', live.signalDbm !== undefined ? `${live.signalDbm} dBm` : '', live.band ? `${live.band} GHz` : '']
+            .filter((part) => part !== '')
+            .join(' · ')
+        : '',
+      ip: live.ip ?? '—',
+      gateway: live.gateway ?? '—',
+    }
+  })
   protected networks = signal<WifiNetwork[]>([])
   protected loading = signal(true)
   protected readonly signalBars = [1, 2, 3, 4]
@@ -62,6 +93,13 @@ export class WifiPage {
 
   ionViewWillEnter() {
     this.loadNetworks()
+    this.statusPolling = timer(0, 3000)
+      .pipe(switchMap(() => this.wifiService.getStatus().pipe(catchError(() => EMPTY))))
+      .subscribe((status) => this.status.set(status))
+  }
+
+  ionViewWillLeave() {
+    this.statusPolling?.unsubscribe()
   }
 
   // Scans for networks in range (takes a few seconds) and merges them with the saved ones.
@@ -96,6 +134,27 @@ export class WifiPage {
     }
     const text = `${bands.join(' + ')} GHz`
     return network.current && network.connectedBand && bands.length > 1 ? `${text} (connected on ${network.connectedBand} GHz)` : text
+  }
+
+  // The 2.4 / 5 GHz choice is offered for a saved network that is broadcast on both bands. One that is
+  // already limited to a band keeps it, so the limit can always be lifted again.
+  protected canChooseBand(network: WifiNetwork): boolean {
+    if (network.id === undefined) {
+      return false
+    }
+    return (network.bands?.length ?? 0) > 1 || (network.band !== undefined && network.band !== 'auto')
+  }
+
+  protected setBand(network: WifiNetwork, band: WifiBandChoice) {
+    if (network.id === undefined || (network.band ?? 'auto') === band) {
+      return
+    }
+    // The connection is set up again when this is the network in use: give it about ten seconds
+    this.loading.set(true)
+    this.wifiService.setNetworkBand(network.id, band).subscribe({
+      next: () => setTimeout(() => this.loadNetworks(), network.current ? 10000 : 500),
+      error: () => this.loadNetworks(),
+    })
   }
 
   addNetworkButtonPressed() {

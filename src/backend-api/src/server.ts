@@ -1715,6 +1715,50 @@ app.get('/api/wifi/configured', async (_req, res) => {
   }
 })
 
+// The WiFi link as it is right now, for the WiFi page: network.json is only rewritten by a cron job every
+// 30 seconds, so a network change would show up there with a delay - and it names the adapter that is not
+// necessarily the one in use.
+app.get('/api/wifi/status', async (_req, res) => {
+  try {
+    const wifi = await wifiInterface()
+    const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'status'])
+    const field = (name: string) => new RegExp('^' + name + '=(.*)$', 'm').exec(stdout)?.[1]
+    const state = field('wpa_state') ?? 'UNKNOWN'
+    const connected = state === 'COMPLETED'
+    let signalDbm: number | undefined
+    if (connected) {
+      try {
+        const { stdout: poll } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'signal_poll'])
+        const rssi = /^RSSI=(-?\d+)/m.exec(poll)?.[1]
+        signalDbm = rssi === undefined ? undefined : Number.parseInt(rssi, 10)
+      } catch {
+        // no signal value right now
+      }
+    }
+    let gateway: string | undefined
+    try {
+      const { stdout: route } = await execFileAsync('ip', ['-4', 'route', 'show', 'default', 'dev', wifi])
+      gateway = /via (\S+)/.exec(route)?.[1]
+    } catch {
+      // no default route on this adapter
+    }
+    const frequency = field('freq')
+    res.json({
+      interface: wifi,
+      state,
+      ssid: connected ? field('ssid') : undefined,
+      band: connected && frequency ? wifiBandOf(Number.parseInt(frequency, 10)) : undefined,
+      ip: connected ? field('ip_address') : undefined,
+      gateway: connected ? gateway : undefined,
+      signalDbm,
+      signal: signalDbm === undefined ? undefined : wifiSignalPercent(signalDbm),
+    })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error reading wifi status: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
 // wpa_cli prints SSIDs with non-ASCII / special bytes as \xNN escapes.
 function decodeWpaSsid(raw: string): string {
   const bytes: number[] = []
@@ -1786,6 +1830,94 @@ function wifiSignalPercent(signalDbm: number): number {
   return Math.min(100, Math.max(0, 2 * (signalDbm + 100)))
 }
 
+// Which band the box may use for a saved network: both (auto) or only one of them. Kept in the network's
+// freq_list in wpa_supplicant.conf.
+type WifiBandChoice = 'auto' | '2.4' | '5'
+const WIFI_BAND_FREQUENCIES: Record<'2.4' | '5', number[]> = {
+  '2.4': [2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472],
+  '5': [
+    5180, 5200, 5220, 5240, 5260, 5280, 5300, 5320, 5500, 5520, 5540, 5560, 5580, 5600, 5620, 5640, 5660, 5680, 5700, 5720,
+    5745, 5765, 5785, 5805, 5825,
+  ],
+}
+
+// This wpa_supplicant takes a network's freq_list from wpa_cli and reads it from the config file, but does not
+// write it back: every save_config drops it. The band choice is therefore kept in the file by MuPiBox itself,
+// as one entry per network block (in file order = the order of wpa_cli list_networks), and put back after each
+// save_config (wifiSaveConfig). It is only read from the file when wpa_supplicant starts.
+const WPA_CONF = '/etc/wpa_supplicant/wpa_supplicant.conf'
+interface WifiBandEntry {
+  ssid: string | undefined
+  frequencies: string // "2412 2417 ..." or '' for both bands
+}
+
+function wifiBlocks(text: string): { ssid: string | undefined; body: string }[] {
+  return [...text.matchAll(/network\s*=\s*\{([\s\S]*?)\n\s*\}/g)].map((m) => ({
+    ssid: /^\s*ssid="(.*)"\s*$/m.exec(m[1])?.[1],
+    body: m[1],
+  }))
+}
+
+function wifiFrequenciesOf(body: string): string {
+  const list = /^\s*freq_list=(?:"([^"]*)"|(.*))\s*$/m.exec(body)
+  return (list?.[1] ?? list?.[2] ?? '').trim()
+}
+
+async function wifiBandEntries(): Promise<WifiBandEntry[]> {
+  try {
+    return wifiBlocks(await readFile(WPA_CONF, 'utf8')).map((b) => ({ ssid: b.ssid, frequencies: wifiFrequenciesOf(b.body) }))
+  } catch {
+    return []
+  }
+}
+
+// Writes the entries' freq_list lines into the config file (block by block, only where the SSID still matches).
+async function wifiWriteBandEntries(entries: WifiBandEntry[]): Promise<void> {
+  const text = await readFile(WPA_CONF, 'utf8')
+  let index = 0
+  const updated = text.replace(/(network\s*=\s*\{)([\s\S]*?)(\n\s*\})/g, (whole, open: string, body: string, close: string) => {
+    const entry = entries[index++]
+    const ssid = /^\s*ssid="(.*)"\s*$/m.exec(body)?.[1]
+    if (!entry || entry.ssid !== ssid) return whole
+    const without = body.replace(/\n[ \t]*freq_list=.*/g, '')
+    return `${open}${without}${entry.frequencies ? `\n\tfreq_list=${entry.frequencies}` : ''}${close}`
+  })
+  if (updated === text) return
+  const tmpPath = `/tmp/.wpa_supplicant.${process.pid}.${Date.now()}.conf`
+  await writeFile(tmpPath, updated, { mode: 0o600 })
+  try {
+    // cp keeps the owner and mode of the existing file
+    await execFileAsync('sudo', ['cp', tmpPath, WPA_CONF])
+  } finally {
+    await fs.promises.rm(tmpPath, { force: true })
+  }
+}
+
+// wpa_cli save_config, keeping the band choices. adjust() changes the entries first (a network removed, a band set).
+async function wifiSaveConfig(wifi: string, adjust?: (entries: WifiBandEntry[]) => void): Promise<void> {
+  const entries = await wifiBandEntries()
+  adjust?.(entries)
+  await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'save_config'])
+  await wifiWriteBandEntries(entries)
+}
+
+// The band choice of every saved network, in the order of wpa_cli list_networks. A position whose SSID does not
+// match its block counts as 'auto'.
+async function wifiBandChoices(ssidsInOrder: string[]): Promise<WifiBandChoice[]> {
+  const entries = await wifiBandEntries()
+  return ssidsInOrder.map((ssid, index) => {
+    const entry = entries[index]
+    if (!entry || (entry.ssid !== undefined && entry.ssid !== ssid) || !entry.frequencies) return 'auto'
+    const bands = new Set(
+      entry.frequencies
+        .split(/\s+/)
+        .map((f) => wifiBandOf(Number.parseInt(f, 10)))
+        .filter((b) => b !== undefined),
+    )
+    return bands.size === 1 && bands.has('2.4') ? '2.4' : bands.size === 1 && bands.has('5') ? '5' : 'auto'
+  })
+}
+
 interface WifiNetworkInfo {
   ssid: string
   id?: number
@@ -1796,6 +1928,7 @@ interface WifiNetworkInfo {
   secured?: boolean
   bands?: string[] // bands the network is available on ("2.4", "5", "6")
   connectedBand?: string // the band in use, for the connected network only
+  band?: WifiBandChoice // saved networks: which band the box may use for it
 }
 
 // Networks in range (strongest first) merged with the saved ones; saved networks
@@ -1831,7 +1964,9 @@ app.get('/api/wifi/networks', async (req, res) => {
     }
 
     const networks: WifiNetworkInfo[] = []
-    for (const configured of parseWpaCliNetworks(configuredOutput)) {
+    const configuredNetworks = parseWpaCliNetworks(configuredOutput)
+    const bandChoices = await wifiBandChoices(configuredNetworks.map((n) => n.ssid))
+    for (const [position, configured] of configuredNetworks.entries()) {
       const ssid = decodeWpaSsid(configured.ssid)
       const found = scanned.get(ssid)
       scanned.delete(ssid)
@@ -1846,6 +1981,7 @@ app.get('/api/wifi/networks', async (req, res) => {
         secured: found?.secured,
         bands: found?.bands,
         connectedBand: configured.current ? connectedBand : undefined,
+        band: bandChoices[position],
       })
     }
     for (const [ssid, found] of scanned) {
@@ -1881,12 +2017,55 @@ app.delete('/api/wifi/configured/:id', async (req, res) => {
   }
 
   try {
-    await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'remove_network', String(id)])
-    await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'save_config'])
+    const wifi = await wifiInterface()
+    const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'list_networks'])
+    const position = parseWpaCliNetworks(stdout).findIndex((n) => n.id === id)
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'remove_network', String(id)])
+    await wifiSaveConfig(wifi, (entries) => {
+      if (position >= 0) entries.splice(position, 1)
+    })
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Removed wifi network ${id}`)
     res.status(200).send('ok')
   } catch (error) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error removing wifi network ${id}: ${error}`)
+    res.status(500).send('error')
+  }
+})
+
+// Lets the box use only the 2.4 or only the 5 GHz band for a saved network, or both again ('auto').
+// Only makes sense for a network that is broadcast on both bands; the page offers it only then.
+app.post('/api/wifi/configured/:id/band', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10)
+  const band: unknown = req.body?.band
+  if (Number.isNaN(id) || (band !== 'auto' && band !== '2.4' && band !== '5')) {
+    res.status(400).send('invalid request')
+    return
+  }
+
+  try {
+    const wifi = await wifiInterface()
+    const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'list_networks'])
+    const saved = parseWpaCliNetworks(stdout)
+    const position = saved.findIndex((n) => n.id === id)
+    if (position < 0) {
+      res.status(404).send('unknown network')
+      return
+    }
+    const frequencies = band === 'auto' ? [] : WIFI_BAND_FREQUENCIES[band]
+    // In effect at once (an empty value lifts the limit) ...
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'set_network', String(id), 'freq_list', frequencies.join(' ')])
+    // ... and kept in the file for the next start of wpa_supplicant
+    await wifiSaveConfig(wifi, (entries) => {
+      if (entries[position]) entries[position].frequencies = frequencies.join(' ')
+    })
+    // Connected right now: connect again so the choice takes effect (a few seconds without network).
+    if (saved[position].current) {
+      await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'reassociate'])
+    }
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Wifi network ${id}: band ${band}`)
+    res.status(200).send('ok')
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error setting band of wifi network ${id}: ${error}`)
     res.status(500).send('error')
   }
 })
@@ -1902,7 +2081,7 @@ app.post('/api/wifi/configured/:id/password', async (req, res) => {
   try {
     await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'set_network', String(id), 'psk', `"${password}"`])
     await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'enable_network', String(id)])
-    await execFileAsync('sudo', ['wpa_cli', '-i', await wifiInterface(), 'save_config'])
+    await wifiSaveConfig(await wifiInterface())
     console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Updated password for wifi network ${id}`)
     res.status(200).send('ok')
   } catch (error) {

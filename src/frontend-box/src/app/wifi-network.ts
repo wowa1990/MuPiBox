@@ -13,6 +13,23 @@ export interface WifiNetwork {
   bands?: string[]
   /** The band in use, for the connected network only. */
   connectedBand?: string
+  /** Saved networks: the band the box may use ('auto' = both). */
+  band?: WifiBandChoice
+}
+
+export type WifiBandChoice = 'auto' | '2.4' | '5'
+
+/** The WiFi link right now (not the 30-second old network.json). */
+export interface WifiStatus {
+  interface: string
+  /** wpa_supplicant state: COMPLETED = connected; SCANNING, ASSOCIATING ... while it connects. */
+  state: string
+  ssid?: string
+  band?: string
+  ip?: string
+  gateway?: string
+  signalDbm?: number
+  signal?: number
 }
 
 export interface WifiConfiguredNetwork {

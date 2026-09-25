@@ -128,6 +128,46 @@ ion-toolbar {
             opacity: 0.6;
         }
 
+        // Change / Delete and, for a network on both bands, the band choice in front of them. The choice
+        // is stretched to the height of the buttons (align-items), so both are always exactly as high.
+        .row-actions {
+            display: flex;
+            align-items: stretch;
+            gap: 20px;
+
+            ion-button {
+                margin: 0;
+            }
+        }
+
+        // Band choice of a saved network on both bands: Auto | 2.4 GHz | 5 GHz
+        .band-toggle {
+            display: inline-flex;
+            box-sizing: border-box;
+            font-size: 0.8125rem;
+            border: 1px solid var(--ion-color-primary, #2dd6c7);
+            border-radius: 6px;
+            overflow: hidden;
+
+            button {
+                background: transparent;
+                color: var(--ion-color-primary, #2dd6c7);
+                border: 0;
+                padding: 0 16px;
+                font-size: inherit;
+
+                & + button {
+                    border-left: 1px solid var(--ion-color-primary, #2dd6c7);
+                }
+
+                &.on {
+                    background: var(--ion-color-primary, #2dd6c7);
+                    color: #000;
+                    font-weight: 600;
+                }
+            }
+        }
+
         // Saved network that is currently out of range: greyed out.
         &.unavailable {
             opacity: 0.45;
