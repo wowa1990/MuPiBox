@@ -1097,7 +1097,11 @@ function acquireMupiboxConfigLock(): Promise<() => void> {
         // flock below creates it if needed
       }
     }
-    const holder = spawn('flock', [MUPIBOX_CONFIG_LOCK, 'sh', '-c', 'echo locked; read _'], {
+    // The lock file is opened read-only by the shell (exec 9<) and flock works on that fd. Letting flock
+    // open it itself uses O_CREAT, which the kernel refuses in /tmp for a file owned by another user
+    // (fs.protected_regular) - the file is www-data's once the admin interface has created it, even
+    // though it is world-writable - and the holder would exit at once.
+    const holder = spawn('sh', ['-c', 'exec 9<"$1" && flock 9 && echo locked && read _', 'config-lock', MUPIBOX_CONFIG_LOCK], {
       stdio: ['pipe', 'pipe', 'ignore'],
     })
     let settled = false
