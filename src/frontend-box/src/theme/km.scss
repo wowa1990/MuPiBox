@@ -75,7 +75,8 @@ body.km {
     height: 64px !important;
     min-height: 64px !important;
     align-self: center;
-    width: auto;
+    // as wide as its tabs (two tabs when two categories are hidden: a small pill, as in the design)
+    width: fit-content !important;
     max-width: 420px;
     margin: 0 auto;
     padding: 4px;
@@ -145,6 +146,12 @@ body.km {
     }
   }
 
+  // ---------- resume page: on the theme's background like the album list (the theme files only name the others) ----------
+  .resume-content {
+    --ion-background-color: transparent !important;
+    --background: transparent !important;
+  }
+
   // ---------- "not reachable": the mascot is on the theme's background (transparent), so the list behind it goes ----------
   mupi-media-unavailable ~ mupi-swiper {
     visibility: hidden;
@@ -164,6 +171,18 @@ body.km {
 
   // ---------- player header: album 22/600, track 16/500, volume and x/y as pills ----------
   .player-header {
+    // the titles end with "..." before the volume and track pills
+    .toolbar-album,
+    .toolbar-tracktitle {
+      width: 440px;
+
+      div {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
     .toolbar-album {
       padding-inline: 16px 8px;
       text-align: left;

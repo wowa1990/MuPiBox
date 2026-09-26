@@ -17,7 +17,8 @@
         "connectingLabel": "Connecting …",
         "closeShort": "Close",
         "nasUnavailable": "NAS not reachable",
-        "offlineLabel": "No connection"
+        "offlineLabel": "No connection",
+        "resumeTitle": "Continue listening"
       }
     },
     "de": {
@@ -36,7 +37,8 @@
         "connectingLabel": "Verbinde …",
         "closeShort": "Zu",
         "nasUnavailable": "NAS nicht erreichbar",
-        "offlineLabel": "Keine Verbindung"
+        "offlineLabel": "Keine Verbindung",
+        "resumeTitle": "Weiterhören"
       }
     },
     "fr": {
@@ -55,7 +57,8 @@
         "connectingLabel": "Connexion …",
         "closeShort": "Fermer",
         "nasUnavailable": "NAS inaccessible",
-        "offlineLabel": "Pas de connexion"
+        "offlineLabel": "Pas de connexion",
+        "resumeTitle": "Reprendre l'écoute"
       }
     },
     "es": {
@@ -74,7 +77,8 @@
         "connectingLabel": "Conectando …",
         "closeShort": "Cerrar",
         "nasUnavailable": "NAS no disponible",
-        "offlineLabel": "Sin conexión"
+        "offlineLabel": "Sin conexión",
+        "resumeTitle": "Seguir escuchando"
       }
     },
     "it": {
@@ -93,7 +97,8 @@
         "connectingLabel": "Connessione …",
         "closeShort": "Chiudi",
         "nasUnavailable": "NAS non raggiungibile",
-        "offlineLabel": "Nessuna connessione"
+        "offlineLabel": "Nessuna connessione",
+        "resumeTitle": "Continua ad ascoltare"
       }
     },
     "nl": {
@@ -112,7 +117,8 @@
         "connectingLabel": "Verbinden …",
         "closeShort": "Sluiten",
         "nasUnavailable": "NAS niet bereikbaar",
-        "offlineLabel": "Geen verbinding"
+        "offlineLabel": "Geen verbinding",
+        "resumeTitle": "Verder luisteren"
       }
     },
     "sv": {
@@ -131,7 +137,8 @@
         "connectingLabel": "Ansluter …",
         "closeShort": "Stäng",
         "nasUnavailable": "NAS går inte att nå",
-        "offlineLabel": "Ingen anslutning"
+        "offlineLabel": "Ingen anslutning",
+        "resumeTitle": "Fortsätt lyssna"
       }
     },
     "da": {
@@ -150,7 +157,8 @@
         "connectingLabel": "Forbinder …",
         "closeShort": "Luk",
         "nasUnavailable": "NAS kan ikke nås",
-        "offlineLabel": "Ingen forbindelse"
+        "offlineLabel": "Ingen forbindelse",
+        "resumeTitle": "Lyt videre"
       }
     },
     "nb": {
@@ -169,7 +177,8 @@
         "connectingLabel": "Kobler til …",
         "closeShort": "Lukk",
         "nasUnavailable": "NAS er ikke tilgjengelig",
-        "offlineLabel": "Ingen tilkobling"
+        "offlineLabel": "Ingen tilkobling",
+        "resumeTitle": "Fortsett å lytte"
       }
     },
     "fi": {
@@ -188,7 +197,8 @@
         "connectingLabel": "Yhdistetään …",
         "closeShort": "Sulje",
         "nasUnavailable": "NAS ei ole tavoitettavissa",
-        "offlineLabel": "Ei yhteyttä"
+        "offlineLabel": "Ei yhteyttä",
+        "resumeTitle": "Jatka kuuntelua"
       }
     },
     "pl": {
@@ -207,7 +217,8 @@
         "connectingLabel": "Łączenie …",
         "closeShort": "Zamknij",
         "nasUnavailable": "NAS jest niedostępny",
-        "offlineLabel": "Brak połączenia"
+        "offlineLabel": "Brak połączenia",
+        "resumeTitle": "Słuchaj dalej"
       }
     },
     "pt": {
@@ -226,7 +237,8 @@
         "connectingLabel": "A ligar …",
         "closeShort": "Fechar",
         "nasUnavailable": "NAS indisponível",
-        "offlineLabel": "Sem ligação"
+        "offlineLabel": "Sem ligação",
+        "resumeTitle": "Continuar a ouvir"
       }
     },
     "tr": {
@@ -245,7 +257,8 @@
         "connectingLabel": "Bağlanıyor …",
         "closeShort": "Kapat",
         "nasUnavailable": "NAS erişilemiyor",
-        "offlineLabel": "Bağlantı yok"
+        "offlineLabel": "Bağlantı yok",
+        "resumeTitle": "Dinlemeye devam et"
       }
     },
     "uk": {
@@ -264,7 +277,8 @@
         "connectingLabel": "З’єднання …",
         "closeShort": "Закрити",
         "nasUnavailable": "NAS недоступний",
-        "offlineLabel": "Немає з’єднання"
+        "offlineLabel": "Немає з’єднання",
+        "resumeTitle": "Слухати далі"
       }
     },
     "ru": {
@@ -283,7 +297,8 @@
         "connectingLabel": "Подключение …",
         "closeShort": "Закрыть",
         "nasUnavailable": "NAS недоступен",
-        "offlineLabel": "Нет соединения"
+        "offlineLabel": "Нет соединения",
+        "resumeTitle": "Слушать дальше"
       }
     },
     "cs": {
@@ -302,7 +317,8 @@
         "connectingLabel": "Připojování …",
         "closeShort": "Zavřít",
         "nasUnavailable": "NAS není dostupný",
-        "offlineLabel": "Bez připojení"
+        "offlineLabel": "Bez připojení",
+        "resumeTitle": "Poslouchat dál"
       }
     },
     "el": {
@@ -321,7 +337,8 @@
         "connectingLabel": "Σύνδεση …",
         "closeShort": "Κλείσιμο",
         "nasUnavailable": "Το NAS δεν είναι διαθέσιμο",
-        "offlineLabel": "Χωρίς σύνδεση"
+        "offlineLabel": "Χωρίς σύνδεση",
+        "resumeTitle": "Συνέχεια ακρόασης"
       }
     }
   }

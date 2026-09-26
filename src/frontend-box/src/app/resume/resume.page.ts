@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, Signal, signal, WritableSignal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, Signal, signal, WritableSignal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationExtras, Router } from '@angular/router'
 import { IonBackButton, IonButtons, IonContent, IonHeader, IonTitle, IonToolbar } from '@ionic/angular/standalone'
@@ -8,6 +8,7 @@ import { arrowBackOutline } from 'ionicons/icons'
 import { catchError, lastValueFrom, of, switchMap, tap } from 'rxjs'
 import { environment } from 'src/environments/environment'
 import { ArtworkService } from '../artwork.service'
+import { DisplayTextsService } from '../display-texts.service'
 import { LoadingComponent } from '../loading/loading.component'
 import { Media } from '../media'
 import { MediaService } from '../media.service'
@@ -15,6 +16,7 @@ import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
+import { KmThemeService } from '../theme/km-theme.service'
 
 @Component({
   selector: 'mupi-resume',
@@ -35,6 +37,9 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ResumePage extends SwiperIonicEventsHelper {
+  // km themes: the title in the display's language ("Weiterhören")
+  protected readonly km = inject(KmThemeService).isKm
+  protected readonly displayTexts = inject(DisplayTextsService)
   protected isOnline: Signal<boolean>
   protected isLoading: WritableSignal<boolean> = signal(false)
   protected media: Signal<Media[]>

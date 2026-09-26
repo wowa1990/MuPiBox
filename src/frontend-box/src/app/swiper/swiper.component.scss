@@ -158,7 +158,18 @@ swiper-container.coverflow {
 // --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
 // Sizes are the same for all 17 themes (the design's handoff, 800 × 480), colours come from the theme's --km-*
 // variables. Here in the component, because the rules above would win over the theme file.
+
+// the row as high as the page: its scrollbar sits 22 px above the bottom of the screen (not on the name bars)
 :host-context(body.km) {
+    display: block;
+    height: 100%;
+}
+
+:host-context(body.km) {
+    swiper-container:not(.km-stage) {
+        height: 100%;
+    }
+
     swiper-container:not(.km-stage) {
         .img-row {
             // covers start 106 px from the top (72 px header + 5 px grid + 24 + 5 px column),
@@ -191,7 +202,7 @@ swiper-container.coverflow {
                     display: grid;
                     place-items: center;
                     background: var(--km-night-3);
-                    border-radius: inherit;
+                    border-radius: 22px;
 
                     img {
                         width: 110px !important;
