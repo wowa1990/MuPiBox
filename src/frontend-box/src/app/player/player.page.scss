@@ -290,11 +290,63 @@ ion-content.player-content.tracklist-active {
 
         &.km-pressing {
             transform: scale(0.97);
+
+            img {
+                filter: brightness(0.6);
+            }
+        }
+
+        img {
+            transition: filter 200ms;
+        }
+
+        // long press: a bigger, thicker ring straight on the dimmed cover (no dark disc)
+        .press-indicator {
+            width: 116px;
+            height: 116px;
+
+            circle {
+                stroke-width: 5;
+            }
+
+            .press-indicator-track {
+                fill: none;
+                stroke: rgba(255, 255, 255, 0.35);
+            }
         }
 
         .press-indicator-progress,
         .load-indicator-ring {
             stroke: var(--km-apricot);
+        }
+
+        // stream connecting: three bouncing dots in the middle of the cover
+        .km-cover-dots {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            gap: 14px;
+            pointer-events: none;
+
+            i {
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                background: var(--km-moon);
+                animation: km-cover-dots-bounce 1100ms ease-in-out infinite;
+
+                &:nth-child(2) {
+                    background: var(--km-apricot);
+                    animation-delay: 150ms;
+                }
+
+                &:nth-child(3) {
+                    background: var(--km-lavender);
+                    animation-delay: 300ms;
+                }
+            }
         }
     }
 
@@ -419,6 +471,23 @@ ion-content.player-content.tracklist-active {
         }
     }
 
+    // volume buttons: the design's filled speaker with minus / plus
+    .km-vol-icon {
+        width: 32px;
+        height: 32px;
+
+        .speaker {
+            fill: currentColor;
+        }
+
+        .sign {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.4;
+            stroke-linecap: round;
+        }
+    }
+
     // radio: a stream has no end - a "Live" pill instead of the bar
     .km-live {
         height: 48px;
@@ -483,7 +552,6 @@ ion-content.player-content.tracklist-active {
         border: 0;
         border-radius: 32px;
         background: var(--km-apricot);
-        box-shadow: 0 4px 0 var(--km-apricot-shadow);
         color: var(--km-ink);
         font-family: inherit;
         font-size: 20px;
@@ -512,6 +580,7 @@ ion-content.player-content.tracklist-active {
         flex: 1 1 auto;
         min-width: 0;
         overflow-y: auto;
+        scrollbar-width: none; // swiped with the finger, no bar (as in the design)
         padding: 16px 16px 16px 0;
         background: transparent;
 
@@ -528,6 +597,10 @@ ion-content.player-content.tracklist-active {
             &.current-track {
                 --background: var(--km-apricot);
                 --color: var(--km-ink);
+
+                .track-position {
+                    background: var(--km-cream);
+                }
             }
         }
 
@@ -563,6 +636,19 @@ ion-content.player-content.tracklist-active {
         .track-duration {
             font-size: 16px;
         }
+    }
+}
+
+@keyframes km-cover-dots-bounce {
+    0%,
+    80%,
+    100% {
+        transform: translateY(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: translateY(-14px);
+        opacity: 1;
     }
 }
 

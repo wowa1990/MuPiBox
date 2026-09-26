@@ -113,11 +113,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   protected readonly km = this.kmTheme.isKm
   protected readonly displayTexts = inject(DisplayTextsService)
 
-  /** km themes: position and length under the progress bar - only Spotify tells the times (mplayer: percent) */
-  protected spotifyTimes(): { position: string; duration: string } | undefined {
-    if (this.media?.type !== 'spotify') return undefined
-    const duration = this.currentPlayedSpotify?.item?.duration_ms
-    if (!duration) return undefined
+  /** km themes: position and length under the progress bar (Spotify, and mplayer when it knows the length) */
+  protected kmTimes(): { position: string; duration: string } | undefined {
     const format = (ms: number) => {
       const total = Math.max(0, Math.floor(ms / 1000))
       const h = Math.floor(total / 3600)
@@ -125,7 +122,13 @@ export class PlayerPage implements OnInit, AfterViewInit {
       const sec = String(total % 60).padStart(2, '0')
       return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
     }
-    return { position: format(this.currentPlayedSpotify?.progress_ms ?? 0), duration: format(duration) }
+    if (this.media?.type === 'spotify') {
+      const duration = this.currentPlayedSpotify?.item?.duration_ms
+      return duration ? { position: format(this.currentPlayedSpotify?.progress_ms ?? 0), duration: format(duration) } : undefined
+    }
+    const seconds = this.currentPlayedLocal?.durationSeconds
+    if (!seconds) return undefined
+    return { position: format((this.currentPlayedLocal?.positionSeconds ?? 0) * 1000), duration: format(seconds * 1000) }
   }
 
   // The picture embedded in the file that plays (NAS / local), when it has one - shown instead of the album cover,

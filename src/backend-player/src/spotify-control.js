@@ -223,10 +223,12 @@ function cueSeek(seconds) {
 
 player.on('length', (val) => {
   if (currentCue) currentCue.fileLength = val
+  if (!isCuePlayback()) currentMeta.durationSeconds = val
 })
 player.on('time_pos', (seconds) => {
   if (!isCuePlayback()) {
     pendingCueSeek = null
+    currentMeta.positionSeconds = seconds
     return
   }
   if (pendingCueSeek) {
@@ -250,6 +252,8 @@ player.on('time_pos', (seconds) => {
   const end = cueTrackEnd(index)
   if (end > track.startSeconds) {
     currentMeta.progressTime = Math.max(0, Math.min(100, Math.round(((seconds - track.startSeconds) * 100) / (end - track.startSeconds))))
+    currentMeta.positionSeconds = Math.max(0, seconds - track.startSeconds)
+    currentMeta.durationSeconds = end - track.startSeconds
   }
 })
 setInterval(() => {
@@ -279,6 +283,9 @@ player.on('pause', (val) => {
 // across play/stop transitions (the resume-tracking area Phase 7.5 fixed).
 setInterval(() => {
   player.getProps(['percent_pos', 'pause'])
+  // playing time and length of the file (the display shows them under the progress bar); CUE albums have their
+  // own timer above
+  if (currentMeta.currentPlayer === 'mplayer' && !isCuePlayback()) player.getProps(['time_pos', 'length'])
 }, 1000)
 
 player.on('metadata', (val) => {
@@ -509,6 +516,9 @@ const currentMeta = {
   currentTracknr: 0,
   totalTracks: '',
   progressTime: '',
+  // mplayer: playing time and length of the current track in seconds (0 = unknown, e.g. a radio stream)
+  positionSeconds: 0,
+  durationSeconds: 0,
   volume: 0,
   // Radio streams and podcasts are buffered before they start: how far along that is.
   loading: false,
@@ -1491,6 +1501,8 @@ function stop() {
     writeplayerstatePause()
     currentMeta.currentTrackname = ''
     currentMeta.progressTime = ''
+    currentMeta.positionSeconds = 0
+    currentMeta.durationSeconds = 0
     currentMeta.album = ''
     currentMeta.path = ''
     currentMeta.currentTracknr = ''
