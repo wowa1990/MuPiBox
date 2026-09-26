@@ -446,6 +446,20 @@
    $change=1;
    }
   }
+ // km themes: "Cover-Flow-Ansicht" (stage) and reading the name aloud when it stops - both only shown for a km theme
+ if( $_POST['mupiset'] && isset($_POST['kmStageShown']) )
+  {
+  foreach (array('themeStage' => 'Cover-Flow view (stage) of the children\'s theme', 'themeStageAutoRead' => 'Reading the name aloud on the stage') as $kmKey => $kmText)
+   {
+   $kmOn = isset($_POST[$kmKey]);
+   if( $kmOn !== (($data["mupibox"][$kmKey] ?? false) === true) )
+    {
+    $data["mupibox"][$kmKey] = $kmOn;
+    $CHANGE_TXT=$CHANGE_TXT."<li>".$kmText." is now ".($kmOn ? "on" : "off")."</li>";
+    $change=1;
+    }
+   }
+  }
  if( $_POST['tts'] != $data["mupibox"]["ttsLanguage"] && $_POST['mupiset'] )
   {
   $data["mupibox"]["ttsLanguage"]=$_POST['tts'];
@@ -1510,25 +1524,30 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 			<li id="li_1" >
 				<h2>Theme </h2>
 				<div>
-				<select id="theme" name="theme" class="element text medium" onchange="switchImage(); toggleCoverflowNameOption();">
+				<select id="theme" name="theme" class="element text medium" onchange="switchImage(); toggleCoverflowNameOption(); toggleKmStageOption();">
 				<?php
+				// km themes (children's themes of one design): names from km-themes.json, in a group of their own
+				$kmNames = array();
+				$kmJson = @json_decode(@file_get_contents('/home/dietpi/MuPiBox/themes/km-themes.json'), true);
+				foreach (($kmJson['themes'] ?? array()) as $kmTheme) {
+					if (!empty($kmTheme['id'])) $kmNames[$kmTheme['id']] = (string)($kmTheme['label'] ?? $kmTheme['id']);
+				}
 				$Themes = $data["mupibox"]["installedThemes"];
 				asort($Themes);
+				$themeOption = function ($key, $label) use ($data) {
+					$selected = ($key == $data["mupibox"]["theme"]) ? " selected=\"selected\"" : "";
+					return "<option value=\"" . htmlspecialchars($key, ENT_QUOTES) . "\"" . $selected . ">" . htmlspecialchars($label) . "</option>";
+				};
+				$kmOptions = '';
 				foreach($Themes as $key) {
-				if( $key == $data["mupibox"]["theme"] )
-				{
-				$selected = " selected=\"selected\"";
+					if (isset($kmNames[$key])) { $kmOptions .= $themeOption($key, $kmNames[$key]); continue; }
+					print $themeOption($key, $key);
 				}
-				else
-				{
-				$selected = "";
-				}
-				print "<option value=\"". $key . "\"" . $selected  . ">" . $key . "</option>";
-				}
+				if ($kmOptions !== '') print "<optgroup label=\"Kinder-Themes\">" . $kmOptions . "</optgroup>";
 				?>
 				</select>
 				</div>
-				<div class="themePrev"><img src="images/<?php print $data["mupibox"]["theme"]; ?>.png" width="250" height="150" name="selectedTheme" /></div>
+				<div class="themePrev"><img src="images/<?php print isset($kmNames[$data["mupibox"]["theme"]]) ? 'km/' . htmlspecialchars($data["mupibox"]["theme"]) . '.svg' : htmlspecialchars($data["mupibox"]["theme"]) . '.png'; ?>" width="250" height="150" name="selectedTheme" style="object-fit:cover;" /></div>
 				<style>
 					.mupi-toggle { display:inline-flex; align-items:center; gap:10px; margin-top:12px; cursor:pointer; }
 					.mupi-toggle input { position:absolute; opacity:0; width:0; height:0; }
@@ -1552,7 +1571,33 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 						<span>Ordner/Albumnamen einblenden</span>
 					</label>
 				</div>
+				<?php $kmSelected = isset($kmNames[$data["mupibox"]["theme"]]); $kmStageOn = (($data["mupibox"]["themeStage"] ?? false) === true); ?>
+				<div id="kmStageToggleWrap" style="<?= $kmSelected ? '' : 'display:none;' ?>">
+					<input type="hidden" name="kmStageShown" value="1" />
+					<label class="mupi-toggle" for="themeStage">
+						<input type="checkbox" id="themeStage" name="themeStage" value="1" <?= $kmStageOn ? 'checked="checked"' : '' ?> onchange="toggleKmStageOption();" />
+						<span class="track"></span>
+						<span>Cover-Flow-Ansicht (Bühne)</span>
+					</label>
+					<p style="margin:4px 0 0 54px; font-size:90%; color:#555;">Großes Cover in der Mitte, Nachbarn kleiner. Wischen oder Nachbar antippen holt ihn in die Mitte.</p>
+					<div id="kmAutoReadWrap" style="<?= $kmStageOn ? '' : 'display:none;' ?>">
+						<label class="mupi-toggle" for="themeStageAutoRead">
+							<input type="checkbox" id="themeStageAutoRead" name="themeStageAutoRead" value="1" <?= (($data["mupibox"]["themeStageAutoRead"] ?? false) === true) ? 'checked="checked"' : '' ?> />
+							<span class="track"></span>
+							<span>Name beim Anhalten vorlesen</span>
+						</label>
+					</div>
+				</div>
 				<script>
+					var kmThemeIds = <?= json_encode(array_keys($kmNames)) ?>;
+					function toggleKmStageOption() {
+						var sel = document.getElementById('theme');
+						var wrap = document.getElementById('kmStageToggleWrap');
+						var stage = document.getElementById('themeStage');
+						var autoRead = document.getElementById('kmAutoReadWrap');
+						if (sel && wrap) wrap.style.display = (kmThemeIds.indexOf(sel.value) >= 0) ? '' : 'none';
+						if (stage && autoRead) autoRead.style.display = stage.checked ? '' : 'none';
+					}
 					function toggleCoverflowNameOption() {
 						var sel = document.getElementById('theme');
 						var wrap = document.getElementById('coverflowNameToggleWrap');
