@@ -58,7 +58,7 @@
         }
       }
     </ion-title>
-    @if (showTrackList) {
+    @if (showTrackList && !km()) {
       <ion-buttons slot="end">
         <ion-button (click)="closeTrackList()">
           <ion-icon slot="icon-only" name="arrow-back-outline"></ion-icon>
@@ -66,7 +66,7 @@
       </ion-buttons>
     }
     <ion-title class="toolbar-tracknumber" slot="end">
-      <div>{{local?.volume}}%</div>
+      <div class="km-vol">@if (km()) {<ion-icon name="volume-medium"></ion-icon>}{{local?.volume}}%</div>
       @if (media.type ==='library' || media.type ==='nas') {
         <div>{{local?.currentTracknr}}/{{local?.totalTracks}}</div>
       } @else {
@@ -99,6 +99,13 @@
 
 <ion-content class="player-content" [class.tracklist-active]="showTrackList">
   @if (showTrackList) {
+    <div class="km-tl-wrap">
+    @if (km()) {
+      <div class="km-tl-side">
+        <img [src]="cover" alt="">
+        <button class="km-tl-close" (click)="closeTrackList()"><ion-icon name="close"></ion-icon>{{ displayTexts.text('closeShort') }}</button>
+      </div>
+    }
     <ion-list class="tracklist" [style.font-family]="listFontFamily" [style.--ion-font-family]="listFontFamily">
       @if (loadingTrackList) {
         <div class="tracklist-loading"><ion-spinner></ion-spinner></div>
@@ -130,11 +137,12 @@
         }
       }
     </ion-list>
+    </div>
   } @else {
   <ion-grid>
     <ion-row>
       <ion-col size="6">
-        <ion-card class="cover-card" (pointerdown)="coverPointerDown()" (pointerup)="coverPointerUp()" (pointerleave)="coverPointerUp()" (pointercancel)="coverPointerUp()">
+        <ion-card class="cover-card" [class.km-pressing]="km() && pressingCover" (pointerdown)="coverPointerDown()" (pointerup)="coverPointerUp()" (pointerleave)="coverPointerUp()" (pointercancel)="coverPointerUp()">
           <img src="{{this.cover}} " draggable="false" style="-moz-user-select: none;" ondragstart="return false;">
           @if ((media.type === 'radio' || media.type === 'rss') && currentPlayedLocal?.loading) {
             <!-- Stream is being buffered: a ring in the middle of the cover that gets smaller until playback starts. -->
@@ -161,6 +169,12 @@
           <ion-row class="slider-row">
             @if (media.type !=='radio') {
               <ion-range #range [(ngModel)]="progress" max="100" (touchend)="seek()" (mouseup)="seek()"></ion-range>
+              @if (km() && spotifyTimes(); as times) {
+                <div class="km-times"><span>{{ times.position }}</span><span>{{ times.duration }}</span></div>
+              }
+            } @else if (km()) {
+              <!-- km themes: a stream has no end - a "Live" pill instead of the bar -->
+              <span class="km-live" [class.km-buffering]="currentPlayedLocal?.loading"><i></i>{{ currentPlayedLocal?.loading ? displayTexts.text('connectingLabel') : displayTexts.text('liveLabel') }}</span>
             }
           </ion-row>
           <ion-row class="controls-row">
@@ -170,7 +184,7 @@
               </ion-button>
             </ion-col>
             <ion-col size="4" class="ion-text-center">
-              <ion-button (click)="playPause()" color="light">
+              <ion-button class="km-play" (click)="playPause()" color="light">
                 @if (playing) {
                   <ion-icon slot="icon-only" name="pause" class="small-icon"></ion-icon>
                 }
@@ -188,12 +202,12 @@
 
           <ion-row class="controls-row">
             <ion-col size="6" class="ion-text-center">
-              <ion-button [disabled]="this.media.showid" (click)="skipPrev()" color="light">
+              <ion-button class="km-skip" [disabled]="this.media.showid" (click)="skipPrev()" color="light">
                 <ion-icon slot="icon-only" name="play-skip-back" class="small-icon"></ion-icon>
               </ion-button>
             </ion-col>
             <ion-col size="6" class="ion-text-center">
-              <ion-button [disabled]="this.media.showid" (click)="skipNext()" color="light">
+              <ion-button class="km-skip" [disabled]="this.media.showid" (click)="skipNext()" color="light">
                 <ion-icon slot="icon-only" name="play-skip-forward" class="small-icon"></ion-icon>
               </ion-button>
             </ion-col>
@@ -202,24 +216,24 @@
           @if (media.type ==='spotify' && (media.category =='music' || media.category =='other')) {
             <ion-row class="controls-row">
               <ion-col size="4" class="ion-text-center">
-                <ion-button (click)="seekBack()" color="light">
+                <ion-button class="km-minor" (click)="seekBack()" color="light">
                   <ion-icon slot="icon-only" name="play-back" class="small-icon"></ion-icon>
                 </ion-button>
               </ion-col>
               <ion-col size="4" class="ion-text-center">
                 @if (!media.shuffle) {
-                  <ion-button (click)="toggleshuffle()" color="light">
+                  <ion-button class="km-minor" (click)="toggleshuffle()" color="light">
                     <ion-icon slot="icon-only" name="shuffle-outline" class="small-icon"></ion-icon>
                   </ion-button>
                 }
                 @if (media.shuffle) {
-                  <ion-button (click)="toggleshuffle()" color="dark">
+                  <ion-button class="km-minor" (click)="toggleshuffle()" color="dark">
                     <ion-icon slot="icon-only" name="shuffle-outline" class="small-icon"></ion-icon>
                   </ion-button>
                 }
               </ion-col>
               <ion-col size="4" class="ion-text-center">
-                <ion-button (click)="seekForward()" color="light">
+                <ion-button class="km-minor" (click)="seekForward()" color="light">
                   <ion-icon slot="icon-only" name="play-forward" class="small-icon"></ion-icon>
                 </ion-button>
               </ion-col>
@@ -227,12 +241,12 @@
           } @else {
             <ion-row class="controls-row">
               <ion-col size="6" class="ion-text-center">
-                <ion-button (click)="seekBack()" color="light">
+                <ion-button class="km-minor" (click)="seekBack()" color="light">
                   <ion-icon slot="icon-only" name="play-back" class="small-icon"></ion-icon>
                 </ion-button>
               </ion-col>
               <ion-col size="6" class="ion-text-center">
-                <ion-button (click)="seekForward()" color="light">
+                <ion-button class="km-minor" (click)="seekForward()" color="light">
                   <ion-icon slot="icon-only" name="play-forward" class="small-icon"></ion-icon>
                 </ion-button>
               </ion-col>

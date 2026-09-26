@@ -240,3 +240,332 @@ ion-content.player-content.tracklist-active {
     justify-content: center;
     padding: 40px;
 }
+
+// Wrapper of the track list: only the km themes lay it out (mini cover and "Zu" on the left), else it is not there.
+.km-tl-wrap {
+    display: contents;
+}
+
+// --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
+// Cover 320 on the left (40 px below the header), the controls centred in a column on the right, button sizes by
+// role. A button with a color attribute takes --ion-color-base (not --background) in Ionic.
+:host-context(body.km) {
+    ion-content.player-content > ion-grid {
+        padding: 40px 24px 0 32px;
+
+        > ion-row {
+            flex-wrap: nowrap;
+
+            > ion-col {
+                flex: 1 1 auto;
+                width: auto;
+                max-width: none;
+                padding: 0;
+            }
+
+            > ion-col:first-child {
+                flex: 0 0 352px;
+                max-width: 352px;
+            }
+        }
+    }
+
+    .cover-card {
+        width: 320px;
+        height: 320px;
+        margin: 0 !important;
+        border-radius: 28px;
+        background: var(--km-night-4);
+        box-shadow: 0 8px 0 var(--km-shadow);
+        contain: none;
+        transition: transform 150ms var(--km-spring);
+
+        img {
+            width: 320px;
+            min-width: 320px !important;
+            max-width: 320px !important;
+            height: 320px;
+            border-radius: 28px;
+        }
+
+        &.km-pressing {
+            transform: scale(0.97);
+        }
+
+        .press-indicator-progress,
+        .load-indicator-ring {
+            stroke: var(--km-apricot);
+        }
+    }
+
+    .controls {
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+
+        .slider-row {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            flex-direction: column;
+            align-items: center;
+
+            ion-range {
+                width: 100%;
+                min-height: 48px;
+                padding: 0 8px;
+                --bar-height: 12px;
+                --bar-border-radius: 6px;
+                --bar-background: var(--km-night-3);
+                --bar-background-active: var(--km-apricot);
+                --knob-size: 32px;
+                --knob-background: var(--km-cream);
+                --knob-box-shadow: 0 0 0 4px var(--km-apricot);
+            }
+        }
+
+        .km-times {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: -10px;
+            padding: 0 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--km-lavender);
+        }
+
+        .controls-row {
+            margin: 0;
+            width: 100%;
+            flex-wrap: nowrap;
+            justify-content: center;
+            align-items: center;
+            gap: 28px;
+
+            &:has(.km-skip) {
+                gap: 56px;
+            }
+
+            &:has(.km-minor) {
+                gap: 24px;
+            }
+
+            ion-col {
+                flex: 0 0 auto;
+                width: auto;
+                max-width: none;
+                padding: 0;
+            }
+
+            ion-button {
+                margin: 0;
+                width: 76px;
+                height: 76px;
+                --padding-start: 0;
+                --padding-end: 0;
+                --padding-top: 0;
+                --padding-bottom: 0;
+                --border-radius: 38px;
+                --box-shadow: 0 4px 0 var(--km-shadow);
+                --ion-color-base: var(--km-night-3) !important;
+                --ion-color-contrast: var(--km-cream) !important;
+                --ion-color-shade: var(--km-night-4) !important;
+                --ion-color-tint: var(--km-night-4) !important;
+                transition: transform 150ms var(--km-spring);
+
+                &:active {
+                    transform: scale(0.9);
+                }
+
+                &.km-play {
+                    width: 116px;
+                    height: 116px;
+                    --border-radius: 58px;
+                    --box-shadow: 0 6px 0 var(--km-apricot-shadow);
+                    --ion-color-base: var(--km-apricot) !important;
+                    --ion-color-contrast: var(--km-ink) !important;
+                    --ion-color-shade: var(--km-apricot) !important;
+                    --ion-color-tint: var(--km-apricot) !important;
+
+                    ion-icon {
+                        font-size: 54px !important;
+                    }
+                }
+
+                &.km-skip {
+                    width: 96px;
+                    height: 72px;
+                    --border-radius: 36px;
+                }
+
+                &.km-minor {
+                    width: 72px;
+                    height: 64px;
+                    --border-radius: 32px;
+                    --box-shadow: none;
+                    --ion-color-base: var(--km-night-2) !important;
+                    --ion-color-contrast: var(--km-lavender) !important;
+
+                    // shuffle is on
+                    &[color='dark'] {
+                        --ion-color-base: var(--km-apricot) !important;
+                        --ion-color-contrast: var(--km-ink) !important;
+                    }
+                }
+            }
+        }
+    }
+
+    // radio: a stream has no end - a "Live" pill instead of the bar
+    .km-live {
+        height: 48px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 20px;
+        border-radius: 24px;
+        background: var(--km-night-2);
+        color: var(--km-on-bg);
+        font-size: 18px;
+        font-weight: 600;
+
+        i {
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: var(--km-rose);
+            animation: km-live-pulse 1.6s ease-in-out infinite;
+        }
+
+        &.km-buffering i {
+            background: var(--km-lavender);
+        }
+    }
+
+    // track list: a panel, mini cover and "Zu" on the left, the titles on the right
+    ion-content.player-content.tracklist-active {
+        --background: transparent !important;
+        --ion-background-color: transparent !important;
+    }
+
+    .km-tl-wrap {
+        position: absolute;
+        inset: 42px 16px 16px;
+        display: flex;
+        border-radius: 28px;
+        background: var(--km-night-2);
+        overflow: hidden;
+    }
+
+    .km-tl-side {
+        flex: 0 0 200px;
+        padding: 20px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+
+        img {
+            width: 160px;
+            height: 160px;
+            border-radius: 20px;
+            object-fit: contain;
+            background: var(--km-night-4);
+        }
+    }
+
+    .km-tl-close {
+        width: 160px;
+        height: 64px;
+        border: 0;
+        border-radius: 32px;
+        background: var(--km-apricot);
+        box-shadow: 0 4px 0 var(--km-apricot-shadow);
+        color: var(--km-ink);
+        font-family: inherit;
+        font-size: 20px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: transform 150ms var(--km-spring);
+
+        ion-icon {
+            font-size: 26px;
+        }
+
+        &:active {
+            transform: scale(0.93);
+        }
+    }
+
+    .tracklist {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 16px 16px 16px 0;
+        background: transparent;
+
+        ion-item {
+            --background: var(--km-night-3);
+            --color: var(--km-cream);
+            --border-width: 0 !important;
+            --inner-border-width: 0 !important;
+            --min-height: 64px;
+            --padding-start: 10px;
+            margin-bottom: 6px;
+            border-radius: 20px;
+
+            &.current-track {
+                --background: var(--km-apricot);
+                --color: var(--km-ink);
+            }
+        }
+
+        .track-position {
+            width: 44px;
+            height: 44px;
+            margin-inline-end: 14px;
+            border-radius: 22px;
+            background: rgba(0, 0, 0, 0.18);
+            font-size: 18px;
+            font-weight: 600;
+            opacity: 1;
+
+            ion-icon {
+                font-size: 20px;
+                color: inherit;
+            }
+        }
+
+        ion-label h2 {
+            font-size: 20px;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        ion-label p {
+            font-size: 14px;
+            color: inherit;
+            opacity: 0.7;
+        }
+
+        .track-duration {
+            font-size: 16px;
+        }
+    }
+}
+
+@keyframes km-live-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.35;
+    }
+}
