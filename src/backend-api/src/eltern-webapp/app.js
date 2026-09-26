@@ -2342,6 +2342,7 @@ async function loadTheme() {
   }
   const current = res.body?.current ?? ''
   const available = res.body?.available ?? []
+  const labels = res.body?.labels ?? {}
   if (!available.length) {
     wrap.innerHTML = `<p class="dim">${t('theme.none')}</p>`
     return
@@ -2361,7 +2362,7 @@ async function loadTheme() {
     })
     const lbl = document.createElement('div')
     lbl.className = 'theme-name'
-    lbl.textContent = name
+    lbl.textContent = labels[name] ?? name
     const badge = document.createElement('div')
     badge.className = 'theme-badge'
     if (name === current) badge.textContent = t('common.checkActiveLower')

@@ -1475,7 +1475,19 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const available = Array.isArray(mb.installedThemes)
       ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string').sort()
       : []
-    res.json({ current, available })
+    // the children's themes (km) have German names in their registry ("Tag & Nacht" for tagundnacht)
+    const labels: Record<string, string> = {}
+    try {
+      const km = JSON.parse(readFileSync('/home/dietpi/MuPiBox/themes/km-themes.json', 'utf8')) as {
+        themes?: { id?: unknown; label?: unknown }[]
+      }
+      for (const theme of km.themes ?? []) {
+        if (typeof theme.id === 'string' && typeof theme.label === 'string') labels[theme.id] = theme.label
+      }
+    } catch {
+      // no registry (older installation): the names as they are
+    }
+    res.json({ current, available, labels })
   })
 
   /**
@@ -1567,7 +1579,11 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     }
     res.setHeader('Cache-Control', 'public, max-age=3600')
     res.sendFile(`/var/www/images/${name}.png`, (err) => {
-      if (err && !res.headersSent) res.status(404).end()
+      if (!err || res.headersSent) return
+      // the children's themes (km) have an SVG picture of their background instead
+      res.sendFile(`/var/www/images/km/${name}.svg`, (err2) => {
+        if (err2 && !res.headersSent) res.status(404).end()
+      })
     })
   })
 
