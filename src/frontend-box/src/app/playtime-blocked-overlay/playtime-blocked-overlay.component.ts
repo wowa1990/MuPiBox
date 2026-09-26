@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, Signal } from '@angular/core'
 import { IonIcon } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
-import { hourglassOutline, moonOutline, musicalNotesOutline } from 'ionicons/icons'
+import { hourglass, hourglassOutline, moonOutline, musicalNotesOutline } from 'ionicons/icons'
 import { DisplayTextsService } from '../display-texts.service'
 import { PlaytimeService } from '../playtime.service'
 import { KmThemeService } from '../theme/km-theme.service'
@@ -25,6 +25,11 @@ export class PlaytimeBlockedOverlayComponent {
   private kmTheme = inject(KmThemeService)
   protected readonly km = this.kmTheme.isKm
   protected readonly kmMascot = computed(() => this.kmTheme.kmMascot('sleeping'))
+  // km themes: a quiet time or a parent's pause ("Zzz" badge) rather than the day's limit (hourglass)
+  protected readonly kmQuiet = computed(() => {
+    const s = this.playtimeService.status()
+    return s.enabled === true && (s.blockSource === 'quiet' || s.blockSource === 'override')
+  })
 
   protected readonly content: Signal<OverlayContent> = computed(() => {
     const s = this.playtimeService.status()
@@ -47,7 +52,7 @@ export class PlaytimeBlockedOverlayComponent {
   })
 
   constructor() {
-    addIcons({ moonOutline, musicalNotesOutline, hourglassOutline })
+    addIcons({ moonOutline, musicalNotesOutline, hourglassOutline, hourglass })
     // created each time playback gets blocked: pick up texts changed in the meantime
     this.texts.refresh()
   }

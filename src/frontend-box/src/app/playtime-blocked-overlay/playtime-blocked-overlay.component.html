@@ -2,7 +2,15 @@
   <div class="content">
     @if (km()) {
       <!-- km themes: the theme's mascot asleep, the icon as a badge on it; the texts next to it -->
-      <div class="km-mascot-wrap"><img [src]="kmMascot()" alt=""><ion-icon [name]="content().iconName" class="icon" aria-hidden="true"></ion-icon></div>
+      <!-- badge as in the design: an hourglass for the day's limit, "Zzz" for a quiet time (also a parent's pause) -->
+      <div class="km-mascot-wrap">
+        <img [src]="kmMascot()" alt="">
+        @if (kmQuiet()) {
+          <span class="km-badge-zzz" aria-hidden="true">Zzz</span>
+        } @else {
+          <ion-icon name="hourglass" class="icon" aria-hidden="true"></ion-icon>
+        }
+      </div>
     } @else {
       <ion-icon [name]="content().iconName" class="icon" aria-hidden="true"></ion-icon>
     }

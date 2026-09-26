@@ -21,10 +21,10 @@
     }
 }
 
-// km themes: three bouncing dots on a light veil
+// km themes: three bouncing dots on the theme's background (no veil, as in the design)
 :host-context(body.km) {
     .mupi-loading {
-        background-color: rgba(0, 0, 0, 0.15);
+        background-color: transparent;
     }
 
     .km-dots {
