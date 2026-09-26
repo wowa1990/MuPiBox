@@ -42,6 +42,13 @@ import { KmThemeService } from '../theme/km-theme.service'
       :host-context(body.km) {
         background: transparent;
       }
+      /* 62 px round: ion-icon keeps box-sizing content-box (!important), so 32 + 2 × 11 padding + 2 × 4 border */
+      :host-context(body.km) .km-mascot-small ion-icon {
+        width: 32px;
+        height: 32px;
+        padding: 11px;
+        border-radius: 50%;
+      }
     `,
   ],
   imports: [IonIcon],

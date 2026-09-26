@@ -75,16 +75,16 @@
       position: absolute;
       right: 6px;
       top: 20px;
-      width: 72px;
-      height: 72px;
+      // 72 px round: ion-icon keeps box-sizing content-box (!important), so 34 + 2 × 14 padding + 2 × 5 border
+      width: 34px;
+      height: 34px;
       margin: 0;
-      padding: 16px;
-      box-sizing: border-box;
-      border-radius: 36px;
+      padding: 14px;
+      border-radius: 50%;
       border: 5px solid var(--km-overlay);
       background: var(--km-night-3);
       color: var(--km-moon);
-      font-size: 36px;
+      font-size: 34px;
       opacity: 1;
     }
   }
