@@ -78,6 +78,13 @@ export class MedialistPage extends SwiperIonicEventsHelper {
         // manages. Helps parents/kids identify auto-synced entries at a
         // glance. Manual entries (the default) carry no badge.
         badge: isSyncManaged(media) ? '🔗' : undefined,
+        // km themes: card stack for a folder (opens the next level), 'own' = the folder's own titles (first entry)
+        kind: media.ownFiles
+          ? ('own' as const)
+          : media.nasIsContainer || media.libraryIsContainer
+            ? ('folder' as const)
+            : ('album' as const),
+        synced: isSyncManaged(media),
       }
     })
   })

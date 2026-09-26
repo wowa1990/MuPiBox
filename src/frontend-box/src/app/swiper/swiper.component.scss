@@ -154,3 +154,139 @@ swiper-container.coverflow {
     }
 
 }
+
+// --- km themes (children's themes, body.km - see theme/km-theme.service.ts) ------------------------------------
+// Sizes are the same for all 17 themes (the design's handoff, 800 × 480), colours come from the theme's --km-*
+// variables. Here in the component, because the rules above would win over the theme file.
+:host-context(body.km) {
+    swiper-container:not(.km-stage) {
+        .img-row {
+            // covers start 106 px from the top (72 px header + 5 px grid + 24 + 5 px column),
+            // names 14 px below the picture (at 340)
+            padding-top: 24px;
+            padding-bottom: 0;
+
+            ion-card {
+                width: 204px;
+                height: 204px;
+                margin: 16px auto 0 !important;
+                border-radius: 22px;
+                --background: var(--km-night-4);
+                background: var(--km-night-4);
+                box-shadow: 0 6px 0 var(--km-shadow);
+                // Ionic contains the card (paint containment): the folder stack and the badge reach beyond it
+                overflow: visible;
+                contain: none;
+                transition: transform 180ms var(--km-spring);
+
+                img {
+                    border-radius: 22px;
+                    object-fit: contain;
+                }
+
+                // no cover (or it does not load): the theme's mascot, awake, on a plain field
+                .km-missing {
+                    position: absolute;
+                    inset: 0;
+                    display: grid;
+                    place-items: center;
+                    background: var(--km-night-3);
+                    border-radius: inherit;
+
+                    img {
+                        width: 110px !important;
+                        height: 110px !important;
+                        border-radius: 0;
+                        object-fit: contain;
+                    }
+                }
+
+                &:active {
+                    transform: scale(0.93);
+                }
+            }
+
+            ion-card.circle-card {
+                width: 220px;
+                height: 220px;
+                margin: 0 auto !important;
+                box-sizing: border-box;
+                border: 6px solid var(--km-ring);
+                border-radius: 50%;
+                overflow: hidden;
+
+                img {
+                    border-radius: 50%;
+                    object-fit: cover;
+                }
+            }
+        }
+
+        .title-row {
+            padding-top: 4px; // + 2 × 5 px of the columns = 14 px below the picture
+            padding-bottom: 0;
+
+            ion-card {
+                width: 232px;
+                height: 60px;
+                border-radius: 30px;
+                --background: var(--km-cream);
+                background: var(--km-cream);
+                box-shadow: 0 4px 0 var(--km-shadow);
+                transition:
+                    transform 180ms var(--km-spring),
+                    background-color 200ms;
+
+                &:active {
+                    transform: scale(0.95);
+                }
+
+                &.km-speaking {
+                    --background: var(--km-moon);
+                    background: var(--km-moon);
+                    transform: scale(1.05);
+                }
+            }
+
+            // ion-card-header is a column flexbox: the title is centred vertically by justify-content
+            ion-card-header {
+                height: 60px;
+                padding: 0 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: center;
+            }
+
+            ion-card-title {
+                flex: none !important;
+                width: 100%;
+                padding: 0;
+                font-size: 21px;
+                font-weight: 600;
+                line-height: 1.2;
+                color: var(--km-ink);
+                text-align: center;
+            }
+        }
+    }
+
+    // fewer than 3 entries: centred
+    swiper-container.km-few::part(wrapper) {
+        justify-content: center;
+    }
+
+    // scrollbar: 200 × 8 in the middle, 22 px above the bottom
+    swiper-container {
+        --swiper-scrollbar-size: 8px;
+        --swiper-scrollbar-bottom: 22px;
+        --swiper-scrollbar-bg-color: var(--km-night-3);
+        --swiper-scrollbar-drag-bg-color: var(--km-lavender);
+        --swiper-scrollbar-border-radius: 4px;
+    }
+
+    swiper-container::part(scrollbar) {
+        width: 200px;
+        left: calc(50% - 100px);
+    }
+}

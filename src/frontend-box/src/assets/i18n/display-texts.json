@@ -1,5 +1,5 @@
 {
-  "_comment": "Texts of the overlays on the box display, per language. Used by the box display, the parents' web app and the admin interface. {s} = seconds. To add a language, add a block with all eight keys.",
+  "_comment": "Texts of the overlays on the box display, per language. Used by the box display, the parents' web app and the admin interface. {s} = seconds. To add a language, add a block with all keys.",
   "languages": {
     "en": {
       "name": "English",
@@ -11,7 +11,11 @@
         "parentsTitle": "Parent setup",
         "parentsHint": "Scan with your phone or open in a browser:",
         "parentsCountdown": "Disappears in {s} s",
-        "parentsClose": "Close"
+        "parentsClose": "Close",
+        "ownFilesLabel": "All tracks here",
+        "liveLabel": "Live",
+        "connectingLabel": "Connecting …",
+        "closeShort": "Close"
       }
     },
     "de": {
@@ -24,7 +28,11 @@
         "parentsTitle": "Eltern-Setup",
         "parentsHint": "Mit dem Smartphone scannen oder im Browser öffnen:",
         "parentsCountdown": "Verschwindet in {s} Sek",
-        "parentsClose": "Schließen"
+        "parentsClose": "Schließen",
+        "ownFilesLabel": "Alle Titel hier",
+        "liveLabel": "Live",
+        "connectingLabel": "Verbinde …",
+        "closeShort": "Zu"
       }
     },
     "fr": {
@@ -37,7 +45,11 @@
         "parentsTitle": "Espace parents",
         "parentsHint": "Scannez avec votre téléphone ou ouvrez dans un navigateur :",
         "parentsCountdown": "Disparaît dans {s} s",
-        "parentsClose": "Fermer"
+        "parentsClose": "Fermer",
+        "ownFilesLabel": "Tous les titres",
+        "liveLabel": "En direct",
+        "connectingLabel": "Connexion …",
+        "closeShort": "Fermer"
       }
     },
     "es": {
@@ -50,7 +62,11 @@
         "parentsTitle": "Configuración para padres",
         "parentsHint": "Escanea con el móvil o ábrelo en un navegador:",
         "parentsCountdown": "Desaparece en {s} s",
-        "parentsClose": "Cerrar"
+        "parentsClose": "Cerrar",
+        "ownFilesLabel": "Todas las pistas",
+        "liveLabel": "En directo",
+        "connectingLabel": "Conectando …",
+        "closeShort": "Cerrar"
       }
     },
     "it": {
@@ -63,7 +79,11 @@
         "parentsTitle": "Area genitori",
         "parentsHint": "Scansiona con lo smartphone o apri nel browser:",
         "parentsCountdown": "Scompare tra {s} s",
-        "parentsClose": "Chiudi"
+        "parentsClose": "Chiudi",
+        "ownFilesLabel": "Tutti i brani",
+        "liveLabel": "In diretta",
+        "connectingLabel": "Connessione …",
+        "closeShort": "Chiudi"
       }
     },
     "nl": {
@@ -76,7 +96,11 @@
         "parentsTitle": "Ouderinstellingen",
         "parentsHint": "Scan met je telefoon of open in een browser:",
         "parentsCountdown": "Verdwijnt over {s} s",
-        "parentsClose": "Sluiten"
+        "parentsClose": "Sluiten",
+        "ownFilesLabel": "Alle nummers",
+        "liveLabel": "Live",
+        "connectingLabel": "Verbinden …",
+        "closeShort": "Sluiten"
       }
     },
     "sv": {
@@ -89,7 +113,11 @@
         "parentsTitle": "Föräldrainställningar",
         "parentsHint": "Skanna med mobilen eller öppna i en webbläsare:",
         "parentsCountdown": "Försvinner om {s} s",
-        "parentsClose": "Stäng"
+        "parentsClose": "Stäng",
+        "ownFilesLabel": "Alla spår här",
+        "liveLabel": "Live",
+        "connectingLabel": "Ansluter …",
+        "closeShort": "Stäng"
       }
     },
     "da": {
@@ -102,7 +130,11 @@
         "parentsTitle": "Forældreopsætning",
         "parentsHint": "Scan med telefonen eller åbn i en browser:",
         "parentsCountdown": "Forsvinder om {s} s",
-        "parentsClose": "Luk"
+        "parentsClose": "Luk",
+        "ownFilesLabel": "Alle numre her",
+        "liveLabel": "Live",
+        "connectingLabel": "Forbinder …",
+        "closeShort": "Luk"
       }
     },
     "nb": {
@@ -115,7 +147,11 @@
         "parentsTitle": "Foreldreoppsett",
         "parentsHint": "Skann med mobilen eller åpne i en nettleser:",
         "parentsCountdown": "Forsvinner om {s} s",
-        "parentsClose": "Lukk"
+        "parentsClose": "Lukk",
+        "ownFilesLabel": "Alle spor her",
+        "liveLabel": "Direkte",
+        "connectingLabel": "Kobler til …",
+        "closeShort": "Lukk"
       }
     },
     "fi": {
@@ -128,7 +164,11 @@
         "parentsTitle": "Vanhempien asetukset",
         "parentsHint": "Skannaa puhelimella tai avaa selaimessa:",
         "parentsCountdown": "Katoaa {s} s kuluttua",
-        "parentsClose": "Sulje"
+        "parentsClose": "Sulje",
+        "ownFilesLabel": "Kaikki kappaleet",
+        "liveLabel": "Suora",
+        "connectingLabel": "Yhdistetään …",
+        "closeShort": "Sulje"
       }
     },
     "pl": {
@@ -141,7 +181,11 @@
         "parentsTitle": "Ustawienia dla rodziców",
         "parentsHint": "Zeskanuj telefonem lub otwórz w przeglądarce:",
         "parentsCountdown": "Zniknie za {s} s",
-        "parentsClose": "Zamknij"
+        "parentsClose": "Zamknij",
+        "ownFilesLabel": "Wszystkie utwory",
+        "liveLabel": "Na żywo",
+        "connectingLabel": "Łączenie …",
+        "closeShort": "Zamknij"
       }
     },
     "pt": {
@@ -154,7 +198,11 @@
         "parentsTitle": "Configuração para pais",
         "parentsHint": "Digitalize com o telemóvel ou abra num navegador:",
         "parentsCountdown": "Desaparece em {s} s",
-        "parentsClose": "Fechar"
+        "parentsClose": "Fechar",
+        "ownFilesLabel": "Todas as faixas",
+        "liveLabel": "Ao vivo",
+        "connectingLabel": "A ligar …",
+        "closeShort": "Fechar"
       }
     },
     "tr": {
@@ -167,7 +215,11 @@
         "parentsTitle": "Ebeveyn ayarları",
         "parentsHint": "Telefonunla tara veya bir tarayıcıda aç:",
         "parentsCountdown": "{s} sn içinde kaybolur",
-        "parentsClose": "Kapat"
+        "parentsClose": "Kapat",
+        "ownFilesLabel": "Tüm parçalar",
+        "liveLabel": "Canlı",
+        "connectingLabel": "Bağlanıyor …",
+        "closeShort": "Kapat"
       }
     },
     "uk": {
@@ -180,7 +232,11 @@
         "parentsTitle": "Налаштування для батьків",
         "parentsHint": "Відскануйте телефоном або відкрийте в браузері:",
         "parentsCountdown": "Зникне через {s} с",
-        "parentsClose": "Закрити"
+        "parentsClose": "Закрити",
+        "ownFilesLabel": "Усі треки тут",
+        "liveLabel": "Наживо",
+        "connectingLabel": "З’єднання …",
+        "closeShort": "Закрити"
       }
     },
     "ru": {
@@ -193,7 +249,11 @@
         "parentsTitle": "Настройки для родителей",
         "parentsHint": "Отсканируйте телефоном или откройте в браузере:",
         "parentsCountdown": "Исчезнет через {s} с",
-        "parentsClose": "Закрыть"
+        "parentsClose": "Закрыть",
+        "ownFilesLabel": "Все треки здесь",
+        "liveLabel": "В эфире",
+        "connectingLabel": "Подключение …",
+        "closeShort": "Закрыть"
       }
     },
     "cs": {
@@ -206,7 +266,11 @@
         "parentsTitle": "Nastavení pro rodiče",
         "parentsHint": "Naskenujte telefonem nebo otevřete v prohlížeči:",
         "parentsCountdown": "Zmizí za {s} s",
-        "parentsClose": "Zavřít"
+        "parentsClose": "Zavřít",
+        "ownFilesLabel": "Všechny skladby",
+        "liveLabel": "Živě",
+        "connectingLabel": "Připojování …",
+        "closeShort": "Zavřít"
       }
     },
     "el": {
@@ -219,7 +283,11 @@
         "parentsTitle": "Ρυθμίσεις γονέων",
         "parentsHint": "Σαρώστε με το κινητό ή ανοίξτε σε πρόγραμμα περιήγησης:",
         "parentsCountdown": "Εξαφανίζεται σε {s} δευτ.",
-        "parentsClose": "Κλείσιμο"
+        "parentsClose": "Κλείσιμο",
+        "ownFilesLabel": "Όλα τα κομμάτια",
+        "liveLabel": "Ζωντανά",
+        "connectingLabel": "Σύνδεση …",
+        "closeShort": "Κλείσιμο"
       }
     }
   }

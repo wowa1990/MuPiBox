@@ -7,6 +7,7 @@ import {
   computed,
   ElementRef,
   effect,
+  inject,
   input,
   output,
   Signal,
@@ -15,13 +16,17 @@ import {
   viewChild,
   WritableSignal,
 } from '@angular/core'
-import { IonCard, IonCardHeader, IonCardTitle, IonCol, IonGrid, IonRow } from '@ionic/angular/standalone'
+import { IonCard, IonCardHeader, IonCardTitle, IonCol, IonGrid, IonIcon, IonRow } from '@ionic/angular/standalone'
+import { addIcons } from 'ionicons'
+import { folder, link, play } from 'ionicons/icons'
 import { Observable } from 'rxjs'
 import Swiper from 'swiper'
 import { environment } from '../../environments/environment'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { CoverFlipService } from '../cover-flip.service'
+import { DisplayTextsService } from '../display-texts.service'
 import { PlayerService } from '../player.service'
+import { KmThemeService } from '../theme/km-theme.service'
 
 export interface SwiperData<T> {
   name: string
@@ -33,13 +38,17 @@ export interface SwiperData<T> {
   // playlist. Renders as a tiny emoji/glyph in the top-right corner of
   // the card; absent badges add no DOM.
   badge?: string
+  // km themes: what a tap on the cover does (artist level, folder with more albums, album, the folder's own titles
+  // as the first entry) - shown as card stack / badge - and whether it is synced from Spotify.
+  kind?: 'artist' | 'folder' | 'album' | 'own'
+  synced?: boolean
 }
 
 @Component({
   selector: 'mupi-swiper',
   templateUrl: './swiper.component.html',
   styleUrls: ['./swiper.component.scss'],
-  imports: [AsyncPipe, IonCard, IonCardHeader, IonCardTitle, IonCol, IonGrid, IonRow],
+  imports: [AsyncPipe, IonCard, IonCardHeader, IonCardTitle, IonCol, IonGrid, IonIcon, IonRow],
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -86,6 +95,15 @@ export class SwiperComponent<T> {
   // on every ionic navigation.
   protected shownData: Signal<SwiperData<T>[]>
 
+  // km themes (see theme/km-theme.service.ts): extra markup only while one of them is active
+  private readonly kmTheme = inject(KmThemeService)
+  protected readonly km = this.kmTheme.isKm
+  protected readonly kmMascotAwake = computed(() => this.kmTheme.kmMascot('awake'))
+  protected readonly displayTexts = inject(DisplayTextsService)
+  protected readonly speakingName = signal<string | undefined>(undefined)
+  private speakingTimer: ReturnType<typeof setTimeout> | undefined
+  private readonly missingCovers = signal(new Set<string>())
+
   // Since we reset the swiper container when the page is entered / left, we need to
   // manually cache / restore the swiper position.
   private cachedSwiperPosition = 0
@@ -117,6 +135,7 @@ export class SwiperComponent<T> {
     private coverFlip: CoverFlipService,
     http: HttpClient,
   ) {
+    addIcons({ folder, link, play })
     http.get<MupiboxConfig>(`${environment.backend.apiUrl}/config`).subscribe({
       next: (config) => {
         this.coverflow.set(config?.mupibox?.theme === 'coverflow')
@@ -142,7 +161,7 @@ export class SwiperComponent<T> {
       const limit = Math.min(this.renderableLimit(), src.length)
       const cloned = src
         .slice(0, limit)
-        .map((d) => ({ name: d.name, imgSrc: d.imgSrc, data: structuredClone(d.data) }))
+        .map((d) => ({ name: d.name, imgSrc: d.imgSrc, data: structuredClone(d.data), kind: d.kind, synced: d.synced }))
       return cloned
     })
 
@@ -791,6 +810,20 @@ export class SwiperComponent<T> {
 
   protected readText(text: string): void {
     this.playerService.sayText(text)
+    // km themes: the name bar lights up while it is read (the box gives no end signal: about as long as a name takes)
+    this.speakingName.set(text)
+    clearTimeout(this.speakingTimer)
+    this.speakingTimer = setTimeout(() => this.speakingName.set(undefined), 1800)
+  }
+
+  // km themes: a cover that does not load shows the theme's mascot instead
+  protected onCoverError(name: string): void {
+    if (!this.km()) return
+    this.missingCovers.update((set) => new Set(set).add(name))
+  }
+
+  protected coverMissing(name: string, src: string | null | undefined): boolean {
+    return !src || src.includes('nocover') || this.missingCovers().has(name)
   }
 
   // Tapping a tilted side cover brings it to the center; only the centered one opens.
