@@ -503,8 +503,14 @@ ion-content.player-content.tracklist-active {
         }
     }
 
+    // the theme file places the list itself as the panel (a flex row); here the panel is .km-tl-wrap and the list
+    // is its scrolling right column
     .tracklist {
+        position: static;
+        inset: auto;
+        display: block;
         flex: 1 1 auto;
+        min-width: 0;
         overflow-y: auto;
         padding: 16px 16px 16px 0;
         background: transparent;
