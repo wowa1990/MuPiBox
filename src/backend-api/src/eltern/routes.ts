@@ -1475,22 +1475,24 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const available = Array.isArray(mb.installedThemes)
       ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string').sort()
       : []
-    // the children's themes (km) have names in their registry: English ("Day & Night" for tagundnacht), German
-    // ("Tag & Nacht") when the box display's texts are German
-    const german = cfg.displayLanguage === 'de'
+    // the children's themes (km) have names in their registry: English ("Day & Night" for tagundnacht) and German
+    // ("Tag & Nacht") - the web app shows the ones of its own language
     const labels: Record<string, string> = {}
+    const labelsDe: Record<string, string> = {}
     try {
       const km = JSON.parse(readFileSync('/home/dietpi/MuPiBox/themes/km-themes.json', 'utf8')) as {
         themes?: { id?: unknown; label?: unknown; labelEn?: unknown }[]
       }
       for (const theme of km.themes ?? []) {
-        const label = german ? theme.label : (theme.labelEn ?? theme.label)
-        if (typeof theme.id === 'string' && typeof label === 'string') labels[theme.id] = label
+        if (typeof theme.id !== 'string') continue
+        if (typeof theme.label === 'string') labelsDe[theme.id] = theme.label
+        const en = theme.labelEn ?? theme.label
+        if (typeof en === 'string') labels[theme.id] = en
       }
     } catch {
       // no registry (older installation): the names as they are
     }
-    res.json({ current, available, labels })
+    res.json({ current, available, labels, labelsDe })
   })
 
   /**

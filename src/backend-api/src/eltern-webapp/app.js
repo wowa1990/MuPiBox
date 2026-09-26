@@ -8,7 +8,7 @@
 // Navigation is hash-based so browser-back works and links from the
 // Telegram bot can deep-link straight to a section.
 
-import { applyI18n, getLangPref, localeTag, setLangPref, t, tn } from './i18n.js'
+import { applyI18n, getLang, getLangPref, localeTag, setLangPref, t, tn } from './i18n.js'
 
 const API = '/api/eltern'
 const SYNC_API = '/api/spotify-sync'
@@ -2342,7 +2342,8 @@ async function loadTheme() {
   }
   const current = res.body?.current ?? ''
   const available = res.body?.available ?? []
-  const labels = res.body?.labels ?? {}
+  // children's themes: German names only while the web app is in German
+  const labels = (getLang() === 'de' ? res.body?.labelsDe : res.body?.labels) ?? {}
   if (!available.length) {
     wrap.innerHTML = `<p class="dim">${t('theme.none')}</p>`
     return

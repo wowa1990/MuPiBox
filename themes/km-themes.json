@@ -1,5 +1,5 @@
 {
-  "_comment": "Alle km-Themes. tokens = CSS-Variablen aus :root der jeweiligen Theme-Datei. light = heller Grund (Kopfleisten-Text dunkel). labelEn = englischer Name (Standard), label = deutscher Name (Eltern-WebApp bei deutschen Display-Texten).",
+  "_comment": "Alle km-Themes. tokens = CSS-Variablen aus :root der jeweiligen Theme-Datei. light = heller Grund (Kopfleisten-Text dunkel). labelEn = englischer Name (Standard), label = deutscher Name (Eltern-WebApp auf Deutsch).",
   "stageConfigKey": "themeStage",
   "themes": [
     {
