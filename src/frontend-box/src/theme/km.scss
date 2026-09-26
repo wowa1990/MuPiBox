@@ -145,6 +145,11 @@ body.km {
     }
   }
 
+  // ---------- "not reachable": the mascot is on the theme's background (transparent), so the list behind it goes ----------
+  mupi-media-unavailable ~ mupi-swiper {
+    visibility: hidden;
+  }
+
   // ---------- album list: the title left next to the back button ----------
   .medialist-header ion-title {
     padding-inline: 16px 8px;
