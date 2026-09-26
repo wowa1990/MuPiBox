@@ -456,7 +456,7 @@
         "awake": "/theme-data/einhorn/maskottchen-wach.svg"
       },
       "background": "/theme-data/einhorn/background.svg",
-      "motif": "Flieder-Himmel über Mintwiese: Regenbogen auf Wolken, grasendes Einhorn, Luftballons, Blumen, Schmetterlinge, Herzen, Sterne.",
+      "motif": "Flieder-Himmel über Mintwiese: großes Einhorn (schaut zwischen den ersten beiden Karten hervor), Regenbogen auf Wolken rechts, Luftballons, Blumen, Schmetterlinge, Herzen, Sterne.",
       "tokens": {
         "km-night": "#E6E4FB",
         "km-night-2": "#FFFFFF",
