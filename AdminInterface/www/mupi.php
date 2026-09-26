@@ -1526,11 +1526,11 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 				<div>
 				<select id="theme" name="theme" class="element text medium" onchange="switchImage(); toggleCoverflowNameOption(); toggleKmStageOption();">
 				<?php
-				// km themes (children's themes of one design): names from km-themes.json, in a group of their own
+				// km themes (children's themes of one design): English names from km-themes.json, in a group of their own
 				$kmNames = array();
 				$kmJson = @json_decode(@file_get_contents('/home/dietpi/MuPiBox/themes/km-themes.json'), true);
 				foreach (($kmJson['themes'] ?? array()) as $kmTheme) {
-					if (!empty($kmTheme['id'])) $kmNames[$kmTheme['id']] = (string)($kmTheme['label'] ?? $kmTheme['id']);
+					if (!empty($kmTheme['id'])) $kmNames[$kmTheme['id']] = (string)($kmTheme['labelEn'] ?? $kmTheme['label'] ?? $kmTheme['id']);
 				}
 				$Themes = $data["mupibox"]["installedThemes"];
 				asort($Themes);
@@ -1543,7 +1543,7 @@ $CHANGE_TXT=$CHANGE_TXT."</ul></div>";
 					if (isset($kmNames[$key])) { $kmOptions .= $themeOption($key, $kmNames[$key]); continue; }
 					print $themeOption($key, $key);
 				}
-				if ($kmOptions !== '') print "<optgroup label=\"Kinder-Themes\">" . $kmOptions . "</optgroup>";
+				if ($kmOptions !== '') print "<optgroup label=\"Kids' themes\">" . $kmOptions . "</optgroup>";
 				?>
 				</select>
 				</div>

@@ -1,10 +1,11 @@
 {
-  "_comment": "Alle km-Themes. tokens = CSS-Variablen aus :root der jeweiligen Theme-Datei. light = heller Grund (Kopfleisten-Text dunkel).",
+  "_comment": "Alle km-Themes. tokens = CSS-Variablen aus :root der jeweiligen Theme-Datei. light = heller Grund (Kopfleisten-Text dunkel). labelEn = englischer Name (Standard), label = deutscher Name (Eltern-WebApp bei deutschen Display-Texten).",
   "stageConfigKey": "themeStage",
   "themes": [
     {
       "id": "kuschelmond",
       "label": "Kuschelmond",
+      "labelEn": "Cuddle Moon",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -44,6 +45,7 @@
     {
       "id": "moosnest",
       "label": "Moosnest",
+      "labelEn": "Moss Nest",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -83,6 +85,7 @@
     {
       "id": "sonnenhof",
       "label": "Sonnenhof",
+      "labelEn": "Sunny Farm",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -122,6 +125,7 @@
     {
       "id": "pferdehof",
       "label": "Pferdehof",
+      "labelEn": "Pony Farm",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -161,6 +165,7 @@
     {
       "id": "fussball",
       "label": "Fußball",
+      "labelEn": "Football",
       "light": false,
       "font": "Baloo 2",
       "fontFile": "Baloo2-Variable.ttf",
@@ -200,6 +205,7 @@
     {
       "id": "fahrzeuge",
       "label": "Fahrzeuge",
+      "labelEn": "Vehicles",
       "light": false,
       "font": "Baloo 2",
       "fontFile": "Baloo2-Variable.ttf",
@@ -239,6 +245,7 @@
     {
       "id": "buecherregal",
       "label": "Bücherregal",
+      "labelEn": "Bookshelf",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -278,6 +285,7 @@
     {
       "id": "kassettenrekorder",
       "label": "Kassettenrekorder",
+      "labelEn": "Cassette Player",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -317,6 +325,7 @@
     {
       "id": "unterwasser",
       "label": "Unterwasser",
+      "labelEn": "Underwater",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -356,6 +365,7 @@
     {
       "id": "bastelpapier",
       "label": "Bastelpapier",
+      "labelEn": "Craft Paper",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -395,6 +405,7 @@
     {
       "id": "prinzessin",
       "label": "Prinzessin",
+      "labelEn": "Princess",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -434,6 +445,7 @@
     {
       "id": "einhorn",
       "label": "Einhorn",
+      "labelEn": "Unicorn Dream",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -473,6 +485,7 @@
     {
       "id": "feenschloss",
       "label": "Feenschloss",
+      "labelEn": "Fairy Castle",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -512,6 +525,7 @@
     {
       "id": "weltraum",
       "label": "Weltraum",
+      "labelEn": "Outer Space",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -551,6 +565,7 @@
     {
       "id": "dinoland",
       "label": "Dinoland",
+      "labelEn": "Dino Land",
       "light": false,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -590,6 +605,7 @@
     {
       "id": "piratenbucht",
       "label": "Piratenbucht",
+      "labelEn": "Pirate Cove",
       "light": true,
       "font": "Fredoka",
       "fontFile": "Fredoka-Variable.ttf",
@@ -629,6 +645,7 @@
     {
       "id": "tagundnacht",
       "label": "Tag & Nacht",
+      "labelEn": "Day & Night",
       "light": true,
       "lightAtNight": false,
       "font": "Fredoka",

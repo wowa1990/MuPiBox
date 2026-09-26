@@ -2353,7 +2353,8 @@ async function loadTheme() {
     card.className = 'theme-card' + (name === current ? ' active' : '')
     const img = document.createElement('img')
     img.className = 'theme-preview'
-    img.src = `${API}/theme-preview/${encodeURIComponent(name)}`
+    // ?v=2: phones had kept the "not found" of the children's themes from before they had a preview
+    img.src = `${API}/theme-preview/${encodeURIComponent(name)}?v=2`
     img.alt = name
     img.loading = 'lazy'
     img.addEventListener('error', () => {

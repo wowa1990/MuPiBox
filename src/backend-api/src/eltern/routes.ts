@@ -1475,14 +1475,17 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     const available = Array.isArray(mb.installedThemes)
       ? (mb.installedThemes as unknown[]).filter((x): x is string => typeof x === 'string').sort()
       : []
-    // the children's themes (km) have German names in their registry ("Tag & Nacht" for tagundnacht)
+    // the children's themes (km) have names in their registry: English ("Day & Night" for tagundnacht), German
+    // ("Tag & Nacht") when the box display's texts are German
+    const german = cfg.displayLanguage === 'de'
     const labels: Record<string, string> = {}
     try {
       const km = JSON.parse(readFileSync('/home/dietpi/MuPiBox/themes/km-themes.json', 'utf8')) as {
-        themes?: { id?: unknown; label?: unknown }[]
+        themes?: { id?: unknown; label?: unknown; labelEn?: unknown }[]
       }
       for (const theme of km.themes ?? []) {
-        if (typeof theme.id === 'string' && typeof theme.label === 'string') labels[theme.id] = theme.label
+        const label = german ? theme.label : (theme.labelEn ?? theme.label)
+        if (typeof theme.id === 'string' && typeof label === 'string') labels[theme.id] = label
       }
     } catch {
       // no registry (older installation): the names as they are
@@ -1577,12 +1580,13 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       res.status(404).end()
       return
     }
-    res.setHeader('Cache-Control', 'public, max-age=3600')
-    res.sendFile(`/var/www/images/${name}.png`, (err) => {
+    // cached only when there is a picture: a cached "not found" kept a theme without preview for an hour
+    const cached = { headers: { 'Cache-Control': 'public, max-age=3600' } }
+    res.sendFile(`/var/www/images/${name}.png`, cached, (err) => {
       if (!err || res.headersSent) return
       // the children's themes (km) have an SVG picture of their background instead
-      res.sendFile(`/var/www/images/km/${name}.svg`, (err2) => {
-        if (err2 && !res.headersSent) res.status(404).end()
+      res.sendFile(`/var/www/images/km/${name}.svg`, cached, (err2) => {
+        if (err2 && !res.headersSent) res.status(404).setHeader('Cache-Control', 'no-store').end()
       })
     })
   })
