@@ -3,6 +3,7 @@ import { IonIcon } from '@ionic/angular/standalone'
 import { addIcons } from 'ionicons'
 import { timeOutline } from 'ionicons/icons'
 import { PlaytimeService } from '../playtime.service'
+import { KmThemeService } from '../theme/km-theme.service'
 
 type ChipLevel = 'normal' | 'warning' | 'critical'
 
@@ -15,6 +16,7 @@ type ChipLevel = 'normal' | 'warning' | 'critical'
 })
 export class PlaytimeChipComponent {
   private playtimeService = inject(PlaytimeService)
+  private km = inject(KmThemeService).isKm
 
   protected readonly visible: Signal<boolean> = computed(() => {
     const s = this.playtimeService.status()
@@ -31,6 +33,8 @@ export class PlaytimeChipComponent {
 
   protected readonly level: Signal<ChipLevel> = computed(() => {
     const m = this.remainingMinutes()
+    // km themes: accent from 10 minutes, red below 5 (the design's steps)
+    if (this.km()) return m < 5 ? 'critical' : m <= 10 ? 'warning' : 'normal'
     if (m < 10) return 'critical'
     if (m < 30) return 'warning'
     return 'normal'

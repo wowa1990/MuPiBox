@@ -2,7 +2,11 @@
   <ion-toolbar color="light">
     <ion-buttons slot="start">
       <ion-button (click)="resume()">
-        <ion-icon slot="icon-only" name="timer-outline"></ion-icon>
+        @if (km()) {
+          <svg class="km-resume-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path d="M4 3.5v4h4" /><path d="M12 8v4.2l2.8 1.8" /></svg>
+        } @else {
+          <ion-icon slot="icon-only" name="timer-outline"></ion-icon>
+        }
       </ion-button>
     </ion-buttons>
     @if (configLoaded()) {
@@ -29,7 +33,7 @@
 <ion-content class="home-content">
   <mupi-loading [loading]="isLoading()"></mupi-loading>
   @if (unavailable()) {
-    <mupi-media-unavailable></mupi-media-unavailable>
+    <mupi-media-unavailable [nas]="category() === 'nas'"></mupi-media-unavailable>
   }
   <mupi-swiper [data]="swiperData()" roundImages="true" (elementClicked)="this.artistCoverClicked($event.data)"></mupi-swiper>
 </ion-content>

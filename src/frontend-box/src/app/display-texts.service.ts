@@ -22,6 +22,9 @@ export const DEFAULT_DISPLAY_TEXTS = {
   liveLabel: 'Live',
   connectingLabel: 'Connecting …',
   closeShort: 'Close',
+  // list that could not be loaded: NAS folder / radio and podcasts without a connection
+  nasUnavailable: 'NAS not reachable',
+  offlineLabel: 'No connection',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

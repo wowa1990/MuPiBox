@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, effect, Signal, signal, WritableSignal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, inject, Signal, signal, WritableSignal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationExtras, Router } from '@angular/router'
 import {
@@ -36,6 +36,7 @@ import { MupiHatIconComponent } from '../mupihat-icon/mupihat-icon.component'
 import { WifiIconComponent } from '../wifi-icon/wifi-icon.component'
 import { SwiperComponent, SwiperData } from '../swiper/swiper.component'
 import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
+import { KmThemeService } from '../theme/km-theme.service'
 
 @Component({
   selector: 'app-home',
@@ -61,6 +62,8 @@ import { SwiperIonicEventsHelper } from '../swiper/swiper-ionic-events-helper'
 export class HomePage extends SwiperIonicEventsHelper {
   private settingsAccessTimerMs = 3000
   private settingsPressTimer = 0
+  // km themes: the resume button has the design's clock-with-arrow symbol
+  protected readonly km = inject(KmThemeService).isKm
 
   // Category tabs at the top, in display order; some can be hidden in the admin.
   protected readonly categories: { key: CategoryType; icon: string }[] = [

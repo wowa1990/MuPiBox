@@ -15,7 +15,9 @@
         "ownFilesLabel": "All tracks here",
         "liveLabel": "Live",
         "connectingLabel": "Connecting …",
-        "closeShort": "Close"
+        "closeShort": "Close",
+        "nasUnavailable": "NAS not reachable",
+        "offlineLabel": "No connection"
       }
     },
     "de": {
@@ -32,7 +34,9 @@
         "ownFilesLabel": "Alle Titel hier",
         "liveLabel": "Live",
         "connectingLabel": "Verbinde …",
-        "closeShort": "Zu"
+        "closeShort": "Zu",
+        "nasUnavailable": "NAS nicht erreichbar",
+        "offlineLabel": "Keine Verbindung"
       }
     },
     "fr": {
@@ -49,7 +53,9 @@
         "ownFilesLabel": "Tous les titres",
         "liveLabel": "En direct",
         "connectingLabel": "Connexion …",
-        "closeShort": "Fermer"
+        "closeShort": "Fermer",
+        "nasUnavailable": "NAS inaccessible",
+        "offlineLabel": "Pas de connexion"
       }
     },
     "es": {
@@ -66,7 +72,9 @@
         "ownFilesLabel": "Todas las pistas",
         "liveLabel": "En directo",
         "connectingLabel": "Conectando …",
-        "closeShort": "Cerrar"
+        "closeShort": "Cerrar",
+        "nasUnavailable": "NAS no disponible",
+        "offlineLabel": "Sin conexión"
       }
     },
     "it": {
@@ -83,7 +91,9 @@
         "ownFilesLabel": "Tutti i brani",
         "liveLabel": "In diretta",
         "connectingLabel": "Connessione …",
-        "closeShort": "Chiudi"
+        "closeShort": "Chiudi",
+        "nasUnavailable": "NAS non raggiungibile",
+        "offlineLabel": "Nessuna connessione"
       }
     },
     "nl": {
@@ -100,7 +110,9 @@
         "ownFilesLabel": "Alle nummers",
         "liveLabel": "Live",
         "connectingLabel": "Verbinden …",
-        "closeShort": "Sluiten"
+        "closeShort": "Sluiten",
+        "nasUnavailable": "NAS niet bereikbaar",
+        "offlineLabel": "Geen verbinding"
       }
     },
     "sv": {
@@ -117,7 +129,9 @@
         "ownFilesLabel": "Alla spår här",
         "liveLabel": "Live",
         "connectingLabel": "Ansluter …",
-        "closeShort": "Stäng"
+        "closeShort": "Stäng",
+        "nasUnavailable": "NAS går inte att nå",
+        "offlineLabel": "Ingen anslutning"
       }
     },
     "da": {
@@ -134,7 +148,9 @@
         "ownFilesLabel": "Alle numre her",
         "liveLabel": "Live",
         "connectingLabel": "Forbinder …",
-        "closeShort": "Luk"
+        "closeShort": "Luk",
+        "nasUnavailable": "NAS kan ikke nås",
+        "offlineLabel": "Ingen forbindelse"
       }
     },
     "nb": {
@@ -151,7 +167,9 @@
         "ownFilesLabel": "Alle spor her",
         "liveLabel": "Direkte",
         "connectingLabel": "Kobler til …",
-        "closeShort": "Lukk"
+        "closeShort": "Lukk",
+        "nasUnavailable": "NAS er ikke tilgjengelig",
+        "offlineLabel": "Ingen tilkobling"
       }
     },
     "fi": {
@@ -168,7 +186,9 @@
         "ownFilesLabel": "Kaikki kappaleet",
         "liveLabel": "Suora",
         "connectingLabel": "Yhdistetään …",
-        "closeShort": "Sulje"
+        "closeShort": "Sulje",
+        "nasUnavailable": "NAS ei ole tavoitettavissa",
+        "offlineLabel": "Ei yhteyttä"
       }
     },
     "pl": {
@@ -185,7 +205,9 @@
         "ownFilesLabel": "Wszystkie utwory",
         "liveLabel": "Na żywo",
         "connectingLabel": "Łączenie …",
-        "closeShort": "Zamknij"
+        "closeShort": "Zamknij",
+        "nasUnavailable": "NAS jest niedostępny",
+        "offlineLabel": "Brak połączenia"
       }
     },
     "pt": {
@@ -202,7 +224,9 @@
         "ownFilesLabel": "Todas as faixas",
         "liveLabel": "Ao vivo",
         "connectingLabel": "A ligar …",
-        "closeShort": "Fechar"
+        "closeShort": "Fechar",
+        "nasUnavailable": "NAS indisponível",
+        "offlineLabel": "Sem ligação"
       }
     },
     "tr": {
@@ -219,7 +243,9 @@
         "ownFilesLabel": "Tüm parçalar",
         "liveLabel": "Canlı",
         "connectingLabel": "Bağlanıyor …",
-        "closeShort": "Kapat"
+        "closeShort": "Kapat",
+        "nasUnavailable": "NAS erişilemiyor",
+        "offlineLabel": "Bağlantı yok"
       }
     },
     "uk": {
@@ -236,7 +262,9 @@
         "ownFilesLabel": "Усі треки тут",
         "liveLabel": "Наживо",
         "connectingLabel": "З’єднання …",
-        "closeShort": "Закрити"
+        "closeShort": "Закрити",
+        "nasUnavailable": "NAS недоступний",
+        "offlineLabel": "Немає з’єднання"
       }
     },
     "ru": {
@@ -253,7 +281,9 @@
         "ownFilesLabel": "Все треки здесь",
         "liveLabel": "В эфире",
         "connectingLabel": "Подключение …",
-        "closeShort": "Закрыть"
+        "closeShort": "Закрыть",
+        "nasUnavailable": "NAS недоступен",
+        "offlineLabel": "Нет соединения"
       }
     },
     "cs": {
@@ -270,7 +300,9 @@
         "ownFilesLabel": "Všechny skladby",
         "liveLabel": "Živě",
         "connectingLabel": "Připojování …",
-        "closeShort": "Zavřít"
+        "closeShort": "Zavřít",
+        "nasUnavailable": "NAS není dostupný",
+        "offlineLabel": "Bez připojení"
       }
     },
     "el": {
@@ -287,7 +319,9 @@
         "ownFilesLabel": "Όλα τα κομμάτια",
         "liveLabel": "Ζωντανά",
         "connectingLabel": "Σύνδεση …",
-        "closeShort": "Κλείσιμο"
+        "closeShort": "Κλείσιμο",
+        "nasUnavailable": "Το NAS δεν είναι διαθέσιμο",
+        "offlineLabel": "Χωρίς σύνδεση"
       }
     }
   }

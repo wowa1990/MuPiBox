@@ -45,6 +45,17 @@ body.km {
       }
     }
 
+    // resume ("Weiterhören"): the design's clock with an arrow
+    .km-resume-icon {
+      width: 30px;
+      height: 30px;
+      fill: none;
+      stroke: var(--km-cream);
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
     // status: WiFi and battery in the theme's colour on the background
     .status-icons,
     .mupihat-icon-container {
@@ -91,6 +102,10 @@ body.km {
     --background-hover-opacity: 0;
     --background-focused: transparent;
     --background-focused-opacity: 0;
+    --background-activated: transparent;
+    --background-activated-opacity: 0;
+    --ripple-color: transparent;
+    outline: none;
     --color: var(--km-lavender);
     --color-checked: var(--km-ink);
     transition:
@@ -101,8 +116,24 @@ body.km {
       display: none;
     }
 
+    // the tapped tab showed a rectangular field (ripple / focus) around the round tab
+    &::part(native) {
+      border-radius: 28px;
+      overflow: hidden;
+      outline: none;
+    }
+
     &.segment-button-checked {
       background: var(--km-apricot);
+    }
+
+    // icon colour set directly: the toolbar's colour would win over --color / --color-checked
+    ion-icon {
+      color: var(--km-lavender);
+    }
+
+    &.segment-button-checked ion-icon {
+      color: var(--km-ink);
     }
 
     &:active {

@@ -91,3 +91,69 @@
 .ml-close:hover {
   background: rgba(255, 255, 255, 0.08);
 }
+
+// km themes: cream card 680 × 340 (radius 32) on a scrim without blur, QR 284 on white, big close button
+:host-context(body.km) {
+  .magic-link-overlay {
+    background: rgba(20, 16, 36, 0.86);
+  }
+
+  .ml-card {
+    width: 680px;
+    max-width: calc(100vw - 32px);
+    min-height: 340px;
+    box-sizing: border-box;
+    gap: 28px;
+    padding: 28px;
+    border-radius: 32px;
+    background: var(--km-cream);
+    color: var(--km-ink);
+    font-family: inherit;
+    box-shadow: 0 8px 0 var(--km-shadow);
+  }
+
+  .ml-qr {
+    width: 252px;
+    height: 252px;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .ml-info {
+    max-width: none;
+    text-align: left;
+  }
+
+  .ml-info h2 {
+    font-size: 30px;
+    font-weight: 600;
+  }
+
+  .ml-info p {
+    font-size: 17px;
+    font-weight: 500;
+  }
+
+  .ml-url {
+    font-size: 15px;
+    border-radius: 10px;
+    background: rgba(42, 33, 64, 0.08);
+  }
+
+  .ml-countdown {
+    color: inherit;
+    opacity: 0.7;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .ml-close {
+    height: 64px;
+    border: 0;
+    border-radius: 32px;
+    background: var(--km-ink);
+    color: var(--km-cream);
+    font-size: 22px;
+    font-weight: 600;
+  }
+}

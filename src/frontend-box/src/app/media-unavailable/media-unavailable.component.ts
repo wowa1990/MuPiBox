@@ -1,10 +1,25 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core'
+import { IonIcon } from '@ionic/angular/standalone'
+import { addIcons } from 'ionicons'
+import { cloudOfflineOutline } from 'ionicons/icons'
+import { DisplayTextsService } from '../display-texts.service'
+import { KmThemeService } from '../theme/km-theme.service'
 
 // One picture for a whole list whose content could not be loaded (NAS not reachable, radio stations and
 // podcasts without a connection) - instead of a broken tile per station or podcast. It covers the list.
+// km themes: the theme's mascot (awake) with a cloud badge and a short text on the theme's background.
 @Component({
   selector: 'mupi-media-unavailable',
-  template: '<img src="assets/images/media-unavailable.webp" alt="The media could not be loaded" />',
+  template: `
+    @if (km()) {
+      <div class="km-unavail">
+        <div class="km-mascot-small"><img [src]="mascot()" alt="" /><ion-icon name="cloud-offline-outline"></ion-icon></div>
+        <div class="km-unavail-text">{{ displayTexts.text(nas() ? 'nasUnavailable' : 'offlineLabel') }}</div>
+      </div>
+    } @else {
+      <img src="assets/images/media-unavailable.webp" alt="The media could not be loaded" />
+    }
+  `,
   styles: [
     `
       :host {
@@ -24,8 +39,23 @@ import { ChangeDetectionStrategy, Component } from '@angular/core'
         max-height: 100%;
         object-fit: contain;
       }
+      :host-context(body.km) {
+        background: transparent;
+      }
     `,
   ],
+  imports: [IonIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MediaUnavailableComponent {}
+export class MediaUnavailableComponent {
+  /** a NAS list (else: radio / podcasts without a connection) - only the km themes say which */
+  public readonly nas = input(false)
+  private readonly kmTheme = inject(KmThemeService)
+  protected readonly km = this.kmTheme.isKm
+  protected readonly mascot = computed(() => this.kmTheme.kmMascot('awake'))
+  protected readonly displayTexts = inject(DisplayTextsService)
+
+  constructor() {
+    addIcons({ cloudOfflineOutline })
+  }
+}

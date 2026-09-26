@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, Signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, Signal } from '@angular/core'
 import { toObservable, toSignal } from '@angular/core/rxjs-interop'
 import { map, of, switchMap } from 'rxjs'
 import { MediaService } from '../media.service'
 import type { Mupihat } from '../mupihat'
 import { PlayerService } from '../player.service'
+import { KmThemeService } from '../theme/km-theme.service'
 
 @Component({
   selector: 'mupihat-icon',
@@ -14,6 +15,8 @@ import { PlayerService } from '../player.service'
 export class MupiHatIconComponent {
   protected readonly mupihat: Signal<Mupihat | undefined>
   protected readonly hat_active: Signal<boolean>
+  // km themes: a small battery (32 × 17) with the percentage below it (the design's status area)
+  protected readonly km = inject(KmThemeService).isKm
   // 0-100: the granular percentage of the backend, or the four buckets of an older one
   protected readonly level = computed(() => {
     const hat = this.mupihat()

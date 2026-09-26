@@ -48,3 +48,71 @@
     vertical-align: middle;
   }
 }
+
+// km themes: mascot 220 on the left with the icon as a badge, heading and line of text on the right
+:host-context(body.km) .playtime-blocked-overlay {
+  .content {
+    display: flex;
+    align-items: center;
+    gap: 44px;
+    max-width: none;
+    padding: 0 60px;
+    text-align: left;
+    color: var(--km-on-bg);
+  }
+
+  .km-mascot-wrap {
+    position: relative;
+    flex: 0 0 220px;
+    height: 220px;
+
+    img {
+      width: 220px;
+      height: 220px;
+    }
+
+    .icon {
+      position: absolute;
+      right: 6px;
+      top: 20px;
+      width: 72px;
+      height: 72px;
+      margin: 0;
+      padding: 16px;
+      box-sizing: border-box;
+      border-radius: 36px;
+      border: 5px solid var(--km-overlay);
+      background: var(--km-night-3);
+      color: var(--km-moon);
+      font-size: 36px;
+      opacity: 1;
+    }
+  }
+
+  h1 {
+    margin: 0 0 14px;
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1.1;
+    text-wrap: balance;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  p {
+    display: flex;
+    gap: 10px;
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--km-lavender);
+    opacity: 1;
+  }
+
+  .inline-icon {
+    font-size: 24px;
+    color: var(--km-apricot);
+    opacity: 1;
+  }
+}

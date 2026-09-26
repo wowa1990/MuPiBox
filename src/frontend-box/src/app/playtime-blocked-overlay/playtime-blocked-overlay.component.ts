@@ -4,6 +4,7 @@ import { addIcons } from 'ionicons'
 import { hourglassOutline, moonOutline, musicalNotesOutline } from 'ionicons/icons'
 import { DisplayTextsService } from '../display-texts.service'
 import { PlaytimeService } from '../playtime.service'
+import { KmThemeService } from '../theme/km-theme.service'
 
 interface OverlayContent {
   iconName: string
@@ -21,6 +22,9 @@ interface OverlayContent {
 export class PlaytimeBlockedOverlayComponent {
   private playtimeService = inject(PlaytimeService)
   private texts = inject(DisplayTextsService)
+  private kmTheme = inject(KmThemeService)
+  protected readonly km = this.kmTheme.isKm
+  protected readonly kmMascot = computed(() => this.kmTheme.kmMascot('sleeping'))
 
   protected readonly content: Signal<OverlayContent> = computed(() => {
     const s = this.playtimeService.status()

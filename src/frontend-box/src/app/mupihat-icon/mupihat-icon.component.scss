@@ -77,3 +77,65 @@
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
   }
 }
+
+// km themes: outline 32 × 17 (2 px) filling with the charge, a bolt in the accent colour while charging, the
+// percentage (12/600) below it
+.km-battery {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: var(--km-on-bg);
+}
+
+.km-bat-row {
+  display: flex;
+  align-items: center;
+}
+
+.km-bat-body {
+  position: relative;
+  box-sizing: border-box;
+  width: 32px;
+  height: 17px;
+  padding: 2px;
+  border: 2px solid currentColor;
+  border-radius: 5px;
+}
+
+.km-bat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transition: width 0.6s ease;
+}
+
+.km-bat-bolt {
+  position: absolute;
+  left: 8px;
+  top: -1px;
+  width: 12px;
+  height: 14px;
+  fill: var(--km-apricot);
+  stroke: var(--km-night-2);
+  stroke-width: 1;
+}
+
+.km-bat-nub {
+  width: 3px;
+  height: 7px;
+  border-radius: 0 2px 2px 0;
+  background: currentColor;
+}
+
+.km-bat-text {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--km-lavender);
+}
+
+.km-battery.low .km-bat-fill {
+  background: var(--km-rose);
+}

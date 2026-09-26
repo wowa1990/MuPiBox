@@ -36,3 +36,33 @@
     color: #ffffff;
   }
 }
+
+// km themes: 32 high below the 72 px header, no blur; > 10 min night, 5-10 accent, < 5 red
+:host-context(body.km) .playtime-chip {
+  top: 76px;
+  right: 14px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--km-night-3);
+  color: var(--km-cream);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+
+  ion-icon {
+    font-size: 18px;
+  }
+
+  &[data-level='warning'] {
+    background: var(--km-apricot);
+    color: var(--km-ink);
+  }
+
+  &[data-level='critical'] {
+    background: var(--km-rose);
+    color: #2a1520;
+  }
+}
