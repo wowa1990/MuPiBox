@@ -2344,6 +2344,7 @@ async function loadTheme() {
   const available = res.body?.available ?? []
   // children's themes: German names only while the web app is in German
   const labels = (getLang() === 'de' ? res.body?.labelsDe : res.body?.labels) ?? {}
+  showThemeStage(res.body, current in (res.body?.labels ?? {}))
   if (!available.length) {
     wrap.innerHTML = `<p class="dim">${t('theme.none')}</p>`
     return
@@ -2374,6 +2375,34 @@ async function loadTheme() {
     }
     wrap.appendChild(card)
   }
+}
+
+// Children's themes: the Cover Flow view ("stage") and reading the name aloud when it stops - only offered while
+// one of them is active (the other themes do not know these settings).
+function showThemeStage(body, isKidsTheme) {
+  const card = $('#theme-stage-card')
+  if (!card) return
+  card.hidden = !isKidsTheme
+  if (!isKidsTheme) return
+  const stage = $('#theme-stage-toggle')
+  const autoRead = $('#theme-autoread-toggle')
+  stage.checked = body?.stage === true
+  autoRead.checked = body?.stageAutoRead === true
+  $('#theme-autoread-row').hidden = !stage.checked
+  stage.onchange = () => saveThemeStage({ stage: stage.checked })
+  autoRead.onchange = () => saveThemeStage({ autoRead: autoRead.checked })
+}
+
+async function saveThemeStage(change) {
+  const res = await api(`${API}/theme-stage`, { method: 'POST', body: change })
+  if (!res.ok) {
+    feedback('#theme-stage-feedback', 'error', res.body?.error ?? t('common.errorStatus', { status: res.status }))
+    loadTheme()
+    return
+  }
+  $('#theme-autoread-row').hidden = res.body?.stage !== true
+  if (res.body?.displayUpdated) feedback('#theme-stage-feedback', 'success', t('theme.stageSaved'))
+  else feedback('#theme-stage-feedback', 'error', t('theme.stageReloadFailed'))
 }
 
 async function applyTheme(theme) {

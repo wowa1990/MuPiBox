@@ -1080,6 +1080,26 @@
           <p class="dim" data-i18n="common.loadingSpaced"></p>
         </div>
       </div>
+      <!-- Kinder-Themes: Cover-Flow-Ansicht (Bühne) + Name vorlesen; nur sichtbar, wenn ein Kinder-Theme aktiv ist -->
+      <div class="card" id="theme-stage-card" hidden>
+        <h3 data-i18n="theme.stageTitle"></h3>
+        <p class="dim" data-i18n="theme.stageHint"></p>
+        <div class="status-row">
+          <span data-i18n="common.active"></span>
+          <label class="toggle">
+            <input type="checkbox" id="theme-stage-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div class="status-row" id="theme-autoread-row">
+          <span data-i18n="theme.autoRead"></span>
+          <label class="toggle">
+            <input type="checkbox" id="theme-autoread-toggle">
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div id="theme-stage-feedback" class="feedback" hidden></div>
+      </div>
     </section>
   </main>
 

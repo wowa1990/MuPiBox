@@ -595,6 +595,11 @@ export const I18N = {
     'theme.reloadLater': 'Später',
     'theme.reloaded': 'Theme „{theme}" gespeichert, das Display übernimmt es gleich.',
     'theme.reloadFailed': 'Theme „{theme}" gespeichert, aber das Display war nicht erreichbar. Es wirkt beim nächsten Neustart.',
+    'theme.stageTitle': 'Cover-Flow-Ansicht',
+    'theme.stageHint': 'Für die Kinder-Themes: ein großes Cover in der Mitte, die Nachbarn kleiner daneben. Wischen oder einen Nachbarn antippen holt ihn in die Mitte, nur das mittlere Cover öffnet.',
+    'theme.autoRead': 'Namen beim Anhalten vorlesen',
+    'theme.stageSaved': 'Gespeichert, das Display übernimmt es gleich.',
+    'theme.stageReloadFailed': 'Gespeichert, aber das Display war nicht erreichbar. Es wirkt beim nächsten Neustart.',
   },
   en: {
     // Allgemein
@@ -1184,6 +1189,11 @@ export const I18N = {
     'theme.reloadLater': 'Later',
     'theme.reloaded': 'Theme "{theme}" saved, the display is picking it up.',
     'theme.reloadFailed': 'Theme "{theme}" saved, but the display could not be reached. It takes effect on the next restart.',
+    'theme.stageTitle': 'Cover Flow view',
+    'theme.stageHint': "For the kids' themes: one big cover in the middle, its neighbours smaller beside it. Swiping or tapping a neighbour brings it to the middle, only the middle cover opens.",
+    'theme.autoRead': 'Read the name aloud when it stops',
+    'theme.stageSaved': 'Saved, the display is picking it up.',
+    'theme.stageReloadFailed': 'Saved, but the display could not be reached. It takes effect on the next restart.',
   },
 }
 

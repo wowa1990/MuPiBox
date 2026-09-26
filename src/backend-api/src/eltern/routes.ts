@@ -1492,7 +1492,14 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     } catch {
       // no registry (older installation): the names as they are
     }
-    res.json({ current, available, labels, labelsDe })
+    res.json({
+      current,
+      available,
+      labels,
+      labelsDe,
+      stage: mb.themeStage === true,
+      stageAutoRead: mb.themeStageAutoRead === true,
+    })
   })
 
   /**
@@ -1535,6 +1542,37 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       return
     }
     res.json({ ok: true, theme })
+  })
+
+  /**
+   * POST /api/eltern/theme-stage  {stage?, autoRead?}
+   * The children's themes' Cover Flow view (mupibox.themeStage) and reading the name aloud when it stops
+   * (mupibox.themeStageAutoRead). The display takes them over right away (same signal as after a theme change).
+   */
+  router.post('/theme-stage', requireSession, requireCsrf, async (req, res) => {
+    const body = (req.body as { stage?: unknown; autoRead?: unknown } | undefined) ?? {}
+    if ((body.stage !== undefined && typeof body.stage !== 'boolean') || (body.autoRead !== undefined && typeof body.autoRead !== 'boolean')) {
+      res.status(400).json({ error: 'stage and autoRead must be true or false' })
+      return
+    }
+    let stage = false
+    let autoRead = false
+    await deps.updateMupiboxConfig((c) => {
+      const m = ((c.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
+      if (typeof body.stage === 'boolean') m.themeStage = body.stage
+      if (typeof body.autoRead === 'boolean') m.themeStageAutoRead = body.autoRead
+      stage = m.themeStage === true
+      autoRead = m.themeStageAutoRead === true
+      c.mupibox = m
+    })
+    let displayUpdated = false
+    try {
+      const r = await fetch('http://127.0.0.1:5005/display/reload-theme', { method: 'POST', signal: AbortSignal.timeout(3000) })
+      displayUpdated = r.ok
+    } catch {
+      // the display takes it over on its next start
+    }
+    res.json({ ok: true, stage, autoRead, displayUpdated })
   })
 
   /**
