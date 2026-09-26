@@ -104,6 +104,56 @@ export class SwiperComponent<T> {
   private speakingTimer: ReturnType<typeof setTimeout> | undefined
   private readonly missingCovers = signal(new Set<string>())
 
+  // km "Bühne" (stage, MuPi-Conf > "Cover-Flow-Ansicht"): the covers around the one in the middle, drawn by hand
+  // (not by swiper) - only these few are in the DOM, so a list of 200 albums moves as easily as one of 5.
+  protected readonly kmStage = computed(() => !this.coverflow() && this.kmTheme.stage())
+  protected readonly stageIndex = signal(0)
+  private readonly stageDragDx = signal(0)
+  protected readonly stageDragging = computed(() => this.stageDragDx() !== 0)
+  private stagePointerX: number | undefined
+  private stageDragged = false
+  // centre distance, size and opacity of the covers 0, 1, 2 and 3 places away from the middle (3: fading in / out)
+  private static readonly STAGE_OFFSET = [0, 250, 420, 560]
+  private static readonly STAGE_SCALE = [1, 0.65, 0.45, 0.35]
+  private static readonly STAGE_OPACITY = [1, 0.6, 0.3, 0]
+  private static readonly STAGE_PIXELS_PER_COVER = 180
+  protected readonly stageItems = computed(() => {
+    const data = this.shownData()
+    // while dragging the position lies between two covers: every cover is where it would be at that position
+    // (a cover coming to the middle grows on the way), so the stage follows the finger
+    const last = data.length - 1
+    const position = Math.max(-0.4, Math.min(this.stageClamp(this.stageIndex(), data.length) - this.stageDragDx() / SwiperComponent.STAGE_PIXELS_PER_COVER, last + 0.4))
+    const at = (table: number[], a: number): number => {
+      const i = Math.min(Math.floor(a), 2)
+      return table[i] + (table[i + 1] - table[i]) * Math.min(a - i, 1)
+    }
+    const items: { index: number; data: SwiperData<T>; transform: string; opacity: number; z: number }[] = []
+    for (let i = Math.max(0, Math.floor(position) - 3); i <= Math.min(last, Math.ceil(position) + 3); i++) {
+      const off = i - position
+      const a = Math.min(Math.abs(off), 3)
+      items.push({
+        index: i,
+        data: data[i],
+        transform: `translateX(${Math.sign(off) * at(SwiperComponent.STAGE_OFFSET, a)}px) scale(${at(SwiperComponent.STAGE_SCALE, a)})`,
+        opacity: at(SwiperComponent.STAGE_OPACITY, a),
+        z: 10 - Math.round(a * 2),
+      })
+    }
+    return items
+  })
+  protected readonly stageCurrent = computed(() => {
+    const data = this.shownData()
+    return data.length > 0 ? data[this.stageClamp(this.stageIndex(), data.length)] : undefined
+  })
+  // position of the scrollbar's thumb (track 200 px): the whole list, not only what is rendered yet
+  protected readonly stageBar = computed(() => {
+    const total = this.data()?.length ?? 0
+    if (total < 2 || this.shownData().length === 0) return undefined
+    const width = Math.max(24, 200 / total)
+    const c = this.stageClamp(this.stageIndex(), total)
+    return { width, x: (c / (total - 1)) * (200 - width) }
+  })
+
   // Since we reset the swiper container when the page is entered / left, we need to
   // manually cache / restore the swiper position.
   private cachedSwiperPosition = 0
@@ -171,6 +221,7 @@ export class SwiperComponent<T> {
     effect(() => {
       if (!this.pageIsShown()) return
       this.selectedIndex = this.cachedSwiperPosition
+      this.stageIndex.set(this.cachedSwiperPosition)
       this.pendingRestore = this.cachedSwiperPosition > 0
     })
 
@@ -205,13 +256,13 @@ export class SwiperComponent<T> {
       if (key === this.shownKey) return
       untracked(() => {
         if (this.shownKey) {
-          const sw = this.swiper()
-          SwiperComponent.positions.set(this.shownKey, this.isFewCovers() ? this.selectedIndex : (sw?.activeIndex ?? 0))
+          SwiperComponent.positions.set(this.shownKey, this.currentPosition())
         }
         this.shownKey = key
         const target = (key ? SwiperComponent.positions.get(key) : undefined) ?? 0
         this.cachedSwiperPosition = target
         this.selectedIndex = target
+        this.stageIndex.set(target)
         this.renderableLimit.set(Math.max(SwiperComponent.RENDER_INITIAL, target + 12))
         this.swiper()?.slideTo(0, 0)
         this.pendingRestore = target > 0
@@ -355,7 +406,7 @@ export class SwiperComponent<T> {
   }
 
   public ionViewWillLeave(): void {
-    this.cachedSwiperPosition = this.isFewCovers() ? this.selectedIndex : (this.swiper()?.activeIndex ?? 0)
+    this.cachedSwiperPosition = this.currentPosition()
     const key = this.positionKey()
     if (key) {
       SwiperComponent.positions.set(key, this.cachedSwiperPosition)
@@ -376,6 +427,7 @@ export class SwiperComponent<T> {
       SwiperComponent.positions.delete(key)
     }
     this.selectedIndex = 0
+    this.stageIndex.set(0)
     this.applyCoverflow()
   }
 
@@ -805,6 +857,67 @@ export class SwiperComponent<T> {
     }
     for (const slide of Array.from(swiper.slides) as HTMLElement[]) {
       slide.style.transition = ''
+    }
+  }
+
+  // Index of the entry the list stands on (remembered when the page is left or the folder level changes).
+  private currentPosition(): number {
+    if (this.kmStage()) return this.stageIndex()
+    return this.isFewCovers() ? this.selectedIndex : (this.swiper()?.activeIndex ?? 0)
+  }
+
+  // --- km "Bühne" ---------------------------------------------------------------------------------------------
+  private stageClamp(index: number, count: number): number {
+    return Math.max(0, Math.min(index, count - 1))
+  }
+
+  // Brings entry i to the middle (reads its name aloud if that is switched on) and renders further ahead if needed.
+  private stageGo(index: number): void {
+    const data = this.shownData()
+    if (data.length === 0) return
+    const before = this.stageClamp(this.stageIndex(), data.length)
+    const c = this.stageClamp(index, data.length)
+    this.stageIndex.set(c)
+    this.cachedSwiperPosition = c
+    this.preloadCoversNear(c)
+    this.maybeGrow()
+    if (c !== before && this.kmTheme.stageAutoRead()) {
+      this.readText(data[c].name)
+    }
+  }
+
+  // Dragging: the whole stage follows the finger; on release it moves by one cover per 180 px.
+  protected stageDown(event: PointerEvent): void {
+    this.stagePointerX = event.clientX
+    this.stageDragged = false
+  }
+
+  protected stageMove(event: PointerEvent): void {
+    if (this.stagePointerX === undefined) return
+    const dx = event.clientX - this.stagePointerX
+    if (Math.abs(dx) > 8) this.stageDragged = true
+    if (this.stageDragged) this.stageDragDx.set(dx)
+  }
+
+  protected stageUp(): void {
+    if (this.stagePointerX === undefined) return
+    this.stagePointerX = undefined
+    const dx = this.stageDragDx()
+    this.stageDragDx.set(0)
+    if (this.stageDragged) {
+      this.stageGo(this.stageIndex() - Math.round(dx / SwiperComponent.STAGE_PIXELS_PER_COVER))
+      // the click that follows the release is not a tap
+      setTimeout(() => (this.stageDragged = false), 0)
+    }
+  }
+
+  // The cover in the middle opens, a side cover comes to the middle.
+  protected kmStageTap(index: number, item: SwiperData<T>): void {
+    if (this.stageDragged) return
+    if (index === this.stageClamp(this.stageIndex(), this.shownData().length)) {
+      this.elementClicked.emit(item)
+    } else {
+      this.stageGo(index)
     }
   }
 

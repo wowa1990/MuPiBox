@@ -86,6 +86,11 @@ body.km {
     --indicator-height: 0;
     --background: transparent;
     --background-checked: var(--km-apricot);
+    // no grey hover / focus field on a tab that was touched but is not the chosen one
+    --background-hover: transparent;
+    --background-hover-opacity: 0;
+    --background-focused: transparent;
+    --background-focused-opacity: 0;
     --color: var(--km-lavender);
     --color-checked: var(--km-ink);
     transition:
