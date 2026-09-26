@@ -8,6 +8,7 @@ import { environment } from 'src/environments/environment'
 import type { CurrentMPlayer } from './current.mplayer'
 import type { Media } from './media'
 import { SpotifyService } from './spotify.service'
+import { KmThemeService } from './theme/km-theme.service'
 
 @Injectable({
   providedIn: 'root',
@@ -38,6 +39,8 @@ export class ExternalPlaybackNavigatorService {
   private readonly pollNow$ = new Subject<void>()
   /** Same idea for "show the new theme now" from the parents' web app (see checkThemeReload). */
   private lastSeenThemeReloadAt: number | null = null
+  // km themes: their body classes (stage view, day/night ...) follow the new theme too
+  private readonly kmTheme = inject(KmThemeService)
   /** Tick-Zähler für die gedrosselte Abfrage auf der Player-Page. */
   private pollTick = 0
 
@@ -199,6 +202,7 @@ export class ExternalPlaybackNavigatorService {
     }
     if (old.length) old[old.length - 1].after(link)
     else document.head.appendChild(link)
+    this.kmTheme.refresh()
     console.log('🎨 Theme reloaded on request from the parents app')
   }
 

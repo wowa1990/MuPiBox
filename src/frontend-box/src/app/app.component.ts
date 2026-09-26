@@ -17,6 +17,7 @@ import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/play
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
 import { StalePageReloadService } from './stale-page-reload.service'
+import { KmThemeService } from './theme/km-theme.service'
 
 @Component({
   selector: 'app-root',
@@ -38,6 +39,7 @@ export class AppComponent {
     _externalPlaybackNavigator: ExternalPlaybackNavigatorService,
     _displayManager: DisplayManagerService,
     _stalePageReload: StalePageReloadService,
+    _kmTheme: KmThemeService,
     playtimeService: PlaytimeService,
     private mediaService: MediaService,
     private currentMediaService: CurrentMediaService,
