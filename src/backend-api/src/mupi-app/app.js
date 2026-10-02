@@ -7974,8 +7974,9 @@ function aboutTop() {
     `<section class="card"><h2>Name der Box</h2><p class="help">Steht auf dem Startbild und oben in der App.</p>
       <div class="field"><label for="ab-name">Name der Box (höchstens ${max} Zeichen)</label><input class="input" id="ab-name" maxlength="${max}" value="${esc(sys.bs?.current?.boxName ?? '')}" placeholder="${esc(sys.bs?.screens?.defaultName ?? 'MuPiBox')}"></div>
       <div class="btns"><button class="btn primary" id="ab-save">Speichern</button></div></section>`,
-    `<section class="card"><h2>Support</h2><p class="help">Für Hilfe im Discord: ein Zip mit Bibliothek, Einstellungen (ohne Passwörter, Tokens und Konten), Netz- und Systemstand.</p>
-      <div class="btns"><a class="btn" href="${API}/support-info" download>${icon('save', 18)}Support-Infos herunterladen</a></div></section>`,
+    `<section class="card"><h2>Problem melden</h2><p class="help">Beschreibe kurz, was nicht klappt. Die Box packt Systemstand, Einstellungen, Bibliothek und das Ende der Logs in ein Zip zum Herunterladen – ohne Passwörter, Tokens, Konten, Chat-IDs, WLAN-Passwörter und MAC-Adressen. Nichts wird automatisch gesendet: Du schickst die Datei selbst weiter, zum Beispiel im Discord.</p>
+      <div class="field"><label for="ab-issue">Was ist das Problem?</label><textarea class="input" id="ab-issue" rows="4" maxlength="2000" placeholder="${esc(tr('Was hast du gemacht, was ist passiert, was hast du erwartet?'))}"></textarea></div>
+      <div class="btns"><button class="btn primary" id="ab-report">${icon('save', 18)}Bericht erstellen und herunterladen</button></div></section>`,
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
       <p class="help" style="margin:0"><span id="ab-since"></span> Einmal pro Minute gemessen, nur im Arbeitsspeicher der Box – nach einem Neustart beginnt der Verlauf neu.</p></section>`,
@@ -8069,6 +8070,30 @@ function mountAbout(root) {
     state.boxName = r.body?.current?.boxName || 'MuPiBox'
     renderChrome(currentPage())
     toast('Gespeichert – das Startbild wird neu erzeugt')
+  }
+  // "Problem melden": the box makes the zip (a few seconds: it reads state and logs), the app saves it as a file
+  $('#ab-report', root).onclick = async (e) => {
+    const btn = e.currentTarget
+    if (btn.disabled) return
+    btn.disabled = true
+    const label = btn.innerHTML
+    btn.innerHTML = `<span class="spin sm"></span>${esc(tr('Bericht wird erstellt …'))}`
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      if (state.csrf) headers['x-mupibox-csrf'] = state.csrf
+      const r = await fetch(`${API}/issue-report`, { method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify({ description: $('#ab-issue', root).value }) }).catch(() => null)
+      if (!r?.ok) return toast(r?.status === 409 ? 'Es wird gerade schon ein Bericht erstellt.' : 'Der Bericht ließ sich nicht erstellen.', 'info')
+      const name = /filename="?([^";]+)"?/.exec(r.headers.get('content-disposition') ?? '')?.[1] ?? 'mupibox-report.zip'
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await r.blob()), download: name })
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+      toast('Bericht heruntergeladen – schicke die Datei mit deiner Beschreibung weiter.')
+    } finally {
+      if (btn.isConnected) {
+        btn.disabled = false
+        btn.innerHTML = label
+      }
+    }
   }
 }
 

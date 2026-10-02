@@ -66,7 +66,7 @@ const SERVICES = [
 ]
 
 // Keys whose values never leave the box (support infos): tokens, passwords, ids of accounts and chats
-const SECRET = /pass|token|secret|clientid|deviceid|username|chatid|account|hash|salt|fingerprint/i
+const SECRET = /pass|token|secret|clientid|deviceid|username|chatid|account|hash|salt|fingerprint|psk|api_?key|webhook|e-?mail|ssid|cookie|private|credential/i
 function withoutSecrets(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutSecrets)
   if (value && typeof value === 'object') {
@@ -75,6 +75,127 @@ function withoutSecrets(value: unknown): unknown {
     return out
   }
   return value
+}
+
+// What may still stand in free text (logs, command output, the library) is cleaned by pattern: MAC addresses, bearer
+// tokens, "password=…"-like pairs and the user:password part of an address
+function scrub(text: string): string {
+  return text
+    .replace(/\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b/gi, 'xx:xx:xx:xx:xx:xx')
+    .replace(/\b[0-9a-f]{32}\b/gi, '(id entfernt)') // (the machine id, which the journal puts into its paths)
+    .replace(/(bearer\s+)[\w.~+/=-]{8,}/gi, '$1(entfernt)')
+    .replace(/((?:access|refresh|id)_?token|client_?secret|password|passwd|psk|authorization)(["']?\s*[:=]\s*["']?)[^\s"',;&}]+/gi, '$1$2(entfernt)')
+    .replace(/(\w+:\/\/)[^\s/:@]+:[^\s/@]+@/g, '$1(entfernt)@')
+}
+
+/** The last `lines` lines of a text file (only its end is read), '' when it is not there. */
+async function tailOf(file: string, lines: number): Promise<string> {
+  try {
+    const handle = await fsp.open(file, 'r')
+    try {
+      const { size } = await handle.stat()
+      const length = Math.min(size, 512 * 1024)
+      const buffer = Buffer.alloc(length)
+      await handle.read(buffer, 0, length, size - length)
+      return buffer.toString('utf8').split('\n').slice(-lines).join('\n')
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return ''
+  }
+}
+
+// The commands whose output goes into system.txt of a problem report: read-only, none of them shows a password
+const REPORT_COMMANDS: [title: string, script: string][] = [
+  ['uname', 'uname -a'],
+  ['DietPi', 'cat /boot/dietpi/.version 2>/dev/null; grep -E "^(PRETTY_NAME|VERSION)=" /etc/os-release'],
+  ['Uptime', 'uptime -p; uptime'],
+  ['Netzteil / Unterspannung (0x0 = in Ordnung)', 'vcgencmd get_throttled 2>&1; vcgencmd measure_temp 2>&1'],
+  ['Arbeitsspeicher', 'free -h'],
+  ['Speicherplatz', 'df -h -x tmpfs -x devtmpfs'],
+  ['Fehlgeschlagene Dienste', 'systemctl --failed --no-legend --no-pager'],
+  ['Startzeit', 'systemd-analyze 2>&1; systemd-analyze blame 2>&1 | head -15'],
+  ['pm2', 'PM2=$(command -v pm2 || echo /usr/local/bin/pm2); "$PM2" ls --no-color 2>&1'],
+  ['Versionen', 'node --version; mpv --version 2>&1 | head -1; chromium --version 2>&1 | head -1'],
+  ['USB-Geräte', 'lsusb 2>&1'],
+  ['Soundkarten', 'aplay -l 2>&1; cat /proc/asound/cards 2>&1'],
+  ['Netzwerk (Adressen)', 'ip -br addr; ip route'],
+  ['Kernel-Meldungen (letzte 200)', 'sudo -n dmesg 2>&1 | tail -200'],
+  ['Warnungen und Fehler seit dem Start (journal, letzte 300)', 'sudo -n journalctl -b -p warning --no-pager -n 300 2>&1'],
+]
+
+let reportRunning = false
+
+/**
+ * The zip of a problem report, in a temp file the caller sends and deletes (null when it could not be made): what the
+ * user wrote, system state, the config without secrets, the library and the ends of the logs. Nothing leaves the box
+ * by itself - the user downloads it and sends it on.
+ */
+async function buildReport(deps: SystemDeps, note: string): Promise<string | null> {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mupibox-support-'))
+  try {
+    const server = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
+    const config = deps.getMupiboxConfig() as Record<string, unknown> | undefined
+    const version = String((config?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
+    const model = (await fsp.readFile('/sys/firmware/devicetree/base/model', 'utf8').catch(() => '')).replace(/\0/g, '')
+    await fsp.writeFile(
+      `${dir}/README.txt`,
+      [
+        `MuPiBox problem report, ${new Date().toISOString()}`,
+        `MuPiBox ${version} on ${model || os.arch()}`,
+        '',
+        'Beschreibung des Problems / description of the problem:',
+        note.trim() || '(keine / none)',
+        '',
+        'Enthalten: system.txt (Systemstand), mupiboxconfig.json (Einstellungen ohne Passwörter, Tokens, Konten, Chat-IDs),',
+        'data.json (Bibliothek), network.json/monitor.json, boot/ (config.txt, cmdline.txt), logs/ (Ende der Logs).',
+        'Passwörter, Tokens, WLAN-Passwörter und MAC-Adressen werden entfernt; geprüft wird per Schlüssel und Muster, daher bitte',
+        'vor dem Weitergeben kurz hineinschauen.',
+      ].join('\n'),
+    )
+    await fsp.writeFile(`${dir}/mupiboxconfig.json`, scrub(JSON.stringify(withoutSecrets(config ?? {}), null, 2)))
+    const library = await fsp.readFile(`${server}/data.json`, 'utf8').catch(() => '')
+    if (library) await fsp.writeFile(`${dir}/data.json`, scrub(library))
+    for (const f of ['monitor.json', 'network.json']) {
+      try {
+        const json = JSON.parse(await fsp.readFile(`${server}/${f}`, 'utf8')) as Record<string, unknown>
+        for (const key of ['mac', 'wifi', 'bssid']) delete json[key]
+        await fsp.writeFile(`${dir}/${f}`, JSON.stringify(json, null, 2))
+      } catch {
+        // not there
+      }
+    }
+
+    const sections: string[] = []
+    for (const [title, script] of REPORT_COMMANDS) {
+      const r = await run('sh', ['-c', script], 20000)
+      sections.push(`## ${title}\n${r.stdout.trim() || '(keine Ausgabe)'}\n`)
+    }
+    const states = await run('systemctl', ['is-active', ...SERVICES.map((s) => `${s}.service`)], 5000)
+    const lines = states.stdout.split('\n')
+    sections.push(`## Dienste\n${SERVICES.map((s, i) => `${s}: ${(lines[i] ?? '').trim() || '?'}`).join('\n')}\n`)
+    await fsp.writeFile(`${dir}/system.txt`, scrub(sections.join('\n')))
+
+    await fsp.mkdir(`${dir}/boot`)
+    for (const f of ['/boot/config.txt', '/boot/cmdline.txt', '/etc/asound.conf']) {
+      const text = await fsp.readFile(f, 'utf8').catch(() => '')
+      if (text) await fsp.writeFile(`${dir}/boot/${path.basename(f)}`, scrub(text))
+    }
+    await fsp.mkdir(`${dir}/logs`)
+    for (const [name, file] of Object.entries(LOGS)) {
+      const text = await tailOf(file, 400)
+      if (text) await fsp.writeFile(`${dir}/logs/${name}.log`, scrub(text))
+    }
+
+    const zip = `${dir}.zip`
+    // (zip when the box has it, else Python's zipfile - both put the folder's content into the root of the zip)
+    let made = (await run('sh', ['-c', `cd '${dir}' && zip -q -r '${zip}' .`], 30000)).ok
+    if (!made) made = (await run('python3', ['-c', 'import shutil,sys;shutil.make_archive(sys.argv[1][:-4],"zip",sys.argv[2])', zip, dir], 30000)).ok
+    return made ? zip : null
+  } finally {
+    fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined)
+  }
 }
 
 let newsCache: { at: number; text: string } | undefined
@@ -264,38 +385,37 @@ export function registerSystemRoutes(router: Router, deps: SystemDeps): void {
    * monitor and network state, versions. As the admin interface's support_data.php, but the secrets are removed by
    * key (its line filter let multi-line values through).
    */
-  router.get('/support-info', requireSession, async (_req, res) => {
-    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mupibox-support-'))
+  const sendReport = async (note: string, res: import('express').Response): Promise<void> => {
+    // (one at a time: it runs a dozen commands and reads the logs)
+    if (reportRunning) {
+      res.status(409).json({ error: 'a report is being made' })
+      return
+    }
+    reportRunning = true
     try {
-      const server = '/home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config'
-      await fsp.copyFile(`${server}/data.json`, `${dir}/data.json`).catch(() => undefined)
-      await fsp.writeFile(`${dir}/mupiboxconfig.json`, JSON.stringify(withoutSecrets(deps.getMupiboxConfig() ?? {}), null, 2))
-      for (const f of ['monitor.json', 'network.json']) {
-        try {
-          const json = JSON.parse(await fsp.readFile(`${server}/${f}`, 'utf8')) as Record<string, unknown>
-          delete json.mac
-          await fsp.writeFile(`${dir}/${f}`, JSON.stringify(json, null, 2))
-        } catch {
-          // not there
-        }
-      }
-      const osRelease = (await fsp.readFile('/etc/os-release', 'utf8').catch(() => '')).match(/^PRETTY_NAME=.*$/m)?.[0] ?? ''
-      const model = (await fsp.readFile('/sys/firmware/devicetree/base/model', 'utf8').catch(() => '')).replace(/\0/g, '')
-      const jq = await run('jq', ['--version'], 5000)
-      const version = String((deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
-      await fsp.writeFile(`${dir}/mupi.info`, [osRelease, model, os.hostname(), os.arch(), `MuPiBox ${version}`, jq.stdout.trim()].join('\n'))
-      const zip = `${dir}.zip`
-      const z = await run('sh', ['-c', `cd '${dir}' && zip -q -r '${zip}' .`], 30000)
-      if (!z.ok) {
+      const zip = await buildReport(deps, note)
+      if (!zip) {
         res.status(500).json({ error: 'zip failed' })
         return
       }
-      res.download(zip, 'support_data.zip', () => {
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-')
+      res.download(zip, `mupibox-report-${stamp}.zip`, () => {
         fsp.rm(zip, { force: true }).catch(() => undefined)
       })
     } finally {
-      fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined)
+      reportRunning = false
     }
+  }
+
+  router.get('/support-info', requireSession, (_req, res) => sendReport('', res))
+
+  /**
+   * POST /api/app/issue-report {description} - "Problem melden": the same zip, with the user's description (up to 2000
+   * characters) as the first thing in README.txt. The app saves the answer as a file; nothing is sent anywhere.
+   */
+  router.post('/issue-report', requireSession, requireCsrf, (req, res) => {
+    const description = String((req.body as { description?: unknown } | undefined)?.description ?? '').slice(0, 2000)
+    return sendReport(description, res)
   })
 
   /**
