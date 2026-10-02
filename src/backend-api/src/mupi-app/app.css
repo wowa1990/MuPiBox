@@ -945,6 +945,12 @@ small.err, .field > small.err { color: var(--mp-danger); }
 .tls-steps details.howto { border-top: 0; padding-top: 0; }
 .drop { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 10px 14px; border: 1.5px dashed var(--mp-border); border-radius: var(--mp-r); background: none; color: var(--mp-muted); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
 .drop.chosen { border-style: solid; border-color: var(--mp-success); color: var(--mp-text); }
+/* the pictures and videos chosen for a problem report */
+.attach-list { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 6px; }
+.attach-list:empty { display: none; }
+.attach-list li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px 4px 12px; border: 1px solid var(--mp-border); border-radius: 12px; }
+.attach-list .attach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.attach-list .attach-size { flex: none; color: var(--mp-muted); font-size: 13px; }
 details.more.plain { border-top: 0; padding-top: 0; }
 details.more.plain > summary { font-size: 17px; color: var(--mp-text); }
 details.more.plain[open] { display: flex; flex-direction: column; gap: 14px; }

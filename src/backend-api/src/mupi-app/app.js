@@ -7976,6 +7976,8 @@ function aboutTop() {
       <div class="btns"><button class="btn primary" id="ab-save">Speichern</button></div></section>`,
     `<section class="card"><h2>Problem melden</h2><p class="help">Beschreibe kurz, was nicht klappt. Die Box packt Systemstand, Einstellungen, Bibliothek und das Ende der Logs in ein Zip zum Herunterladen – ohne Passwörter, Tokens, Konten, Chat-IDs, WLAN-Passwörter und MAC-Adressen. Nichts wird automatisch gesendet: Du schickst die Datei selbst weiter, zum Beispiel im Discord.</p>
       <div class="field"><label for="ab-issue">Was ist das Problem?</label><textarea class="input" id="ab-issue" rows="4" maxlength="2000" placeholder="${esc(tr('Was hast du gemacht, was ist passiert, was hast du erwartet?'))}"></textarea></div>
+      <div class="field"><label>Bilder oder Videos anhängen (freiwillig)</label><button type="button" class="drop" id="ab-attach">${icon('doc', 20)}<span>Dateien wählen</span></button><input type="file" id="ab-files" accept="image/*,video/*,.heic,.heif,.mkv" multiple hidden>
+        <ul class="attach-list" id="ab-attach-list"></ul><small class="help">Bis zu 5 Dateien (Bilder, GIFs, Videos), je höchstens 100 MB, zusammen 150 MB.</small></div>
       <div class="btns"><button class="btn primary" id="ab-report">${icon('save', 18)}Bericht erstellen und herunterladen</button></div></section>`,
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
@@ -8071,24 +8073,90 @@ function mountAbout(root) {
     renderChrome(currentPage())
     toast('Gespeichert – das Startbild wird neu erzeugt')
   }
-  // "Problem melden": the box makes the zip (a few seconds: it reads state and logs), the app saves it as a file
+  // "Problem melden": pictures and videos first (one request each, with the progress in the button), then the box makes the
+  // zip (a few seconds: it reads state and logs) and the app saves it as a file
+  const attached = []
+  const MAX_FILE = 100 * 1024 * 1024
+  const MAX_TOTAL = 150 * 1024 * 1024
+  const isMedia = (f) => /^(image|video)\//.test(f.type) || /\.(jpe?g|png|gif|webp|heic|heif|mp4|m4v|mov|webm|mkv|3gp)$/i.test(f.name)
+  const drawAttached = () => {
+    $('#ab-attach-list', root).innerHTML = attached
+      .map((f, i) => `<li><span class="attach-name">${esc(f.name)}</span><span class="attach-size">${esc(formatBytes(f.size))}</span><button type="button" class="icon-btn" data-rm="${i}" aria-label="${esc(tr('Entfernen'))}">${icon('close', 16)}</button></li>`)
+      .join('')
+  }
+  $('#ab-attach', root).onclick = () => $('#ab-files', root).click()
+  $('#ab-files', root).onchange = (e) => {
+    for (const f of e.target.files) {
+      if (!isMedia(f)) toast(tr('Nur Bilder, GIFs und Videos lassen sich anhängen.'), 'info')
+      else if (f.size > MAX_FILE) toast(tr('Eine Datei ist größer als 100 MB.'), 'info')
+      else if (attached.length >= 5) toast(tr('Es lassen sich höchstens 5 Dateien anhängen.'), 'info')
+      else if (attached.reduce((s, x) => s + x.size, 0) + f.size > MAX_TOTAL) toast(tr('Zusammen dürfen die Anhänge höchstens 150 MB groß sein.'), 'info')
+      else attached.push(f)
+    }
+    e.target.value = ''
+    drawAttached()
+  }
+  $('#ab-attach-list', root).onclick = (e) => {
+    const b = e.target.closest('[data-rm]')
+    if (!b) return
+    attached.splice(Number(b.dataset.rm), 1)
+    drawAttached()
+  }
+  const csrfHeaders = (extra = {}) => (state.csrf ? { ...extra, 'x-mupibox-csrf': state.csrf } : extra)
+  // one file as the body of a PUT (XMLHttpRequest: fetch has no progress for an upload)
+  const putAttachment = (file, progress) =>
+    new Promise((resolve) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('PUT', `${API}/issue-report/attachment?name=${encodeURIComponent(file.name)}`)
+      xhr.withCredentials = true
+      for (const [k, v] of Object.entries(csrfHeaders({ 'Content-Type': 'application/octet-stream' }))) xhr.setRequestHeader(k, v)
+      xhr.upload.onprogress = (ev) => ev.lengthComputable && progress(Math.round((ev.loaded / ev.total) * 100))
+      xhr.onload = () => {
+        let body = null
+        try {
+          body = JSON.parse(xhr.responseText)
+        } catch {
+          /* no JSON */
+        }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body })
+      }
+      xhr.onerror = () => resolve({ ok: false, status: 0, body: null })
+      xhr.send(file)
+    })
+  const ATTACH_ERRORS = { 413: 'Die Anhänge sind zu groß oder zu viele.', 415: 'Dieser Dateityp lässt sich nicht anhängen.', 507: 'Auf der Box ist nicht genug Platz für die Anhänge.' }
   $('#ab-report', root).onclick = async (e) => {
     const btn = e.currentTarget
     if (btn.disabled) return
     btn.disabled = true
     const label = btn.innerHTML
-    btn.innerHTML = `<span class="spin sm"></span>${esc(tr('Bericht wird erstellt …'))}`
+    const busy = (text) => (btn.innerHTML = `<span class="spin sm"></span>${esc(text)}`)
+    busy(tr('Bericht wird erstellt …'))
+    const ids = []
     try {
-      const headers = { 'Content-Type': 'application/json' }
-      if (state.csrf) headers['x-mupibox-csrf'] = state.csrf
-      const r = await fetch(`${API}/issue-report`, { method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify({ description: $('#ab-issue', root).value }) }).catch(() => null)
+      for (const [i, f] of attached.entries()) {
+        const r = await putAttachment(f, (p) => busy(`${tr('Anhang')} ${i + 1}/${attached.length} … ${p} %`))
+        if (!r.ok || !r.body?.id) return toast(ATTACH_ERRORS[r.status] ?? 'Ein Anhang ließ sich nicht hochladen.', 'info')
+        ids.push(r.body.id)
+      }
+      busy(tr('Bericht wird erstellt …'))
+      const r = await fetch(`${API}/issue-report`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ description: $('#ab-issue', root).value, attachments: ids }),
+      }).catch(() => null)
       if (!r?.ok) return toast(r?.status === 409 ? 'Es wird gerade schon ein Bericht erstellt.' : 'Der Bericht ließ sich nicht erstellen.', 'info')
+      ids.length = 0
       const name = /filename="?([^";]+)"?/.exec(r.headers.get('content-disposition') ?? '')?.[1] ?? 'mupibox-report.zip'
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await r.blob()), download: name })
       a.click()
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+      attached.length = 0
+      if (root.isConnected) drawAttached()
       toast('Bericht heruntergeladen – schicke die Datei mit deiner Beschreibung weiter.')
     } finally {
+      // (what was uploaded but not used - the box deletes it after half an hour anyway)
+      for (const id of ids) fetch(`${API}/issue-report/attachment/${id}`, { method: 'DELETE', credentials: 'same-origin', headers: csrfHeaders() }).catch(() => undefined)
       if (btn.isConnected) {
         btn.disabled = false
         btn.innerHTML = label
