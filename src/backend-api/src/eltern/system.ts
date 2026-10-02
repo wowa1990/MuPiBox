@@ -258,6 +258,34 @@ async function reportBase(): Promise<string> {
 
 let reportRunning = false
 
+/** Which box and which code this is: version, install source, hardware, OS, player - for the report and the GitHub issue. */
+async function collectInfo(deps: SystemDeps, userAgent: string) {
+  const config = deps.getMupiboxConfig() as Record<string, unknown> | undefined
+  const version = String((config?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
+  const model = (await fsp.readFile('/sys/firmware/devicetree/base/model', 'utf8').catch(() => '')).replace(/\0/g, '')
+  const cpuinfo = await fsp.readFile('/proc/cpuinfo', 'utf8').catch(() => '')
+  const meminfo = await fsp.readFile('/proc/meminfo', 'utf8').catch(() => '')
+  const osName = (await fsp.readFile('/etc/os-release', 'utf8').catch(() => '')).match(/^PRETTY_NAME="?([^"\n]*)"?/m)?.[1] ?? ''
+  const install = await installInfo()
+  const build = await buildFingerprint()
+  const engine = (await tailOf('/home/dietpi/.pm2/logs/spotify-control-out.log', 4000)).split('\n').reverse().find((l) => l.includes('engine:')) ?? ''
+  const info = {
+    createdAt: new Date().toISOString(),
+    mupibox: { version, installedFrom: install, build },
+    os: { name: osName, kernel: os.release(), arch: os.arch() },
+    hardware: {
+      model,
+      revision: /^Revision\s*:\s*(\S+)/m.exec(cpuinfo)?.[1] ?? '',
+      cpus: os.cpus().length,
+      memTotalMB: Math.round(Number(/^MemTotal:\s*(\d+)/m.exec(meminfo)?.[1] ?? 0) / 1024),
+    },
+    node: process.version,
+    player: engine.replace(/^.*?\]\s*/, ''),
+    userAgent,
+  }
+  return { info, install, version, model, osName }
+}
+
 /**
  * The zip of a problem report, in a temp file the caller sends and deletes (null when it could not be made): what the
  * user wrote, which box and code it is (version, install source, hardware, OS), system state, the config without
@@ -269,28 +297,8 @@ async function buildReport(deps: SystemDeps, note: string, attachments: StagedAt
   try {
     const server = `${BOX_DIR}/server/config`
     const config = deps.getMupiboxConfig() as Record<string, unknown> | undefined
-    const version = String((config?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
-    const model = (await fsp.readFile('/sys/firmware/devicetree/base/model', 'utf8').catch(() => '')).replace(/\0/g, '')
-    const cpuinfo = await fsp.readFile('/proc/cpuinfo', 'utf8').catch(() => '')
-    const meminfo = await fsp.readFile('/proc/meminfo', 'utf8').catch(() => '')
-    const osName = (await fsp.readFile('/etc/os-release', 'utf8').catch(() => '')).match(/^PRETTY_NAME="?([^"\n]*)"?/m)?.[1] ?? ''
-    const install = await installInfo()
-    const build = await buildFingerprint()
-    const engine = (await tailOf('/home/dietpi/.pm2/logs/spotify-control-out.log', 4000)).split('\n').reverse().find((l) => l.includes('engine:')) ?? ''
-    const info = {
-      createdAt: new Date().toISOString(),
-      mupibox: { version, installedFrom: install, build },
-      os: { name: osName, kernel: os.release(), arch: os.arch() },
-      hardware: {
-        model,
-        revision: /^Revision\s*:\s*(\S+)/m.exec(cpuinfo)?.[1] ?? '',
-        cpus: os.cpus().length,
-        memTotalMB: Math.round(Number(/^MemTotal:\s*(\d+)/m.exec(meminfo)?.[1] ?? 0) / 1024),
-      },
-      node: process.version,
-      player: engine.replace(/^.*?\]\s*/, ''),
-      userAgent,
-    }
+    const { info, install, version, model, osName } = await collectInfo(deps, userAgent)
+    const build = info.mupibox.build
     await fsp.writeFile(`${dir}/info.json`, scrub(JSON.stringify(info, null, 2)))
     const source = install.branch ? `branch ${install.branch} of ${install.repo}` : install.tag ? `tag ${install.tag} of ${install.repo}` : (install.updateUrl ?? 'unknown')
     await fsp.writeFile(
@@ -594,6 +602,23 @@ export function registerSystemRoutes(router: Router, deps: SystemDeps): void {
   }
 
   router.get('/support-info', requireSession, (req, res) => sendReport('', [], String(req.headers['user-agent'] ?? ''), res))
+
+  /**
+   * GET /api/app/issue-summary - the box's version, install source, hardware, OS and player in a few lines, for the
+   * issue the app opens on GitHub (nothing in it is secret; the logs and the config stay in the zip).
+   */
+  router.get('/issue-summary', requireSession, async (req, res) => {
+    const { info } = await collectInfo(deps, String(req.headers['user-agent'] ?? ''))
+    const from = info.mupibox.installedFrom
+    res.json({
+      version: info.mupibox.version,
+      installedFrom: { repo: from.repo ?? '', branch: from.branch ?? '', tag: from.tag ?? '', release: from.release ?? '', url: from.updateUrl ?? '' },
+      build: info.mupibox.build,
+      hardware: info.hardware,
+      os: info.os,
+      player: info.player,
+    })
+  })
 
   /**
    * POST /api/app/issue-report {description, attachments: [id]} - "Problem melden": the same zip, with the user's

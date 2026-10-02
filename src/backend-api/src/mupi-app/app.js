@@ -7978,7 +7978,8 @@ function aboutTop() {
       <div class="field"><label for="ab-issue">Was ist das Problem?</label><textarea class="input" id="ab-issue" rows="4" maxlength="2000" placeholder="${esc(tr('Was hast du gemacht, was ist passiert, was hast du erwartet?'))}"></textarea></div>
       <div class="field"><label>Bilder oder Videos anhängen (freiwillig)</label><button type="button" class="drop" id="ab-attach">${icon('doc', 20)}<span>Dateien wählen</span></button><input type="file" id="ab-files" accept="image/*,video/*,.heic,.heif,.mkv" multiple hidden>
         <ul class="attach-list" id="ab-attach-list"></ul><small class="help">Bis zu 5 Dateien (Bilder, GIFs, Videos), je höchstens 100 MB, zusammen 150 MB.</small></div>
-      <div class="btns"><button class="btn primary" id="ab-report">${icon('save', 18)}Bericht erstellen und herunterladen</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="ab-report">${icon('save', 18)}Bericht erstellen und herunterladen</button><button class="btn" id="ab-github">${icon('ext', 18)}Auf GitHub melden</button></div>
+      <p class="help">„Auf GitHub melden“ öffnet die Meldeseite des Projekts mit deiner Beschreibung, Version, Hardware und System – und lädt den Bericht herunter, den du dort anhängst. Gesendet wird erst, wenn du auf GitHub abschickst. Dafür brauchst du ein GitHub-Konto.</p><p class="help" id="ab-gh-link" hidden></p></section>`,
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
       <p class="help" style="margin:0"><span id="ab-since"></span> Einmal pro Minute gemessen, nur im Arbeitsspeicher der Box – nach einem Neustart beginnt der Verlauf neu.</p></section>`,
@@ -8124,15 +8125,70 @@ function mountAbout(root) {
       xhr.send(file)
     })
   const ATTACH_ERRORS = { 413: 'Die Anhänge sind zu groß oder zu viele.', 415: 'Dieser Dateityp lässt sich nicht anhängen.', 507: 'Auf der Box ist nicht genug Platz für die Anhänge.' }
-  $('#ab-report', root).onclick = async (e) => {
-    const btn = e.currentTarget
+  // the box's own issue tracker (a fork's users report to the project they installed from, as the install source says)
+  const ISSUE_REPO = 'splitti/MuPiBox'
+  // GitHub's "new issue" page with the box's facts and the description filled in (the zip is attached there by hand: a
+  // link cannot carry a file); the description is cut down until the address fits the ~8000 characters GitHub takes
+  const issueUrl = (s, text) => {
+    const from = s.installedFrom ?? {}
+    const source = from.branch ? `branch ${from.branch} of ${from.repo}` : from.tag ? `tag ${from.tag} of ${from.repo}` : from.url || '?'
+    const hw = s.hardware ?? {}
+    const make = (t) =>
+      `https://github.com/${ISSUE_REPO}/issues/new?title=${encodeURIComponent(t.trim().split('\n')[0].slice(0, 80))}&body=${encodeURIComponent(
+        [
+          '### Problem',
+          t.trim() || '_(please describe the problem)_',
+          '',
+          '### Box',
+          `- MuPiBox: ${s.version}`,
+          `- Installation: ${source}${from.release ? ` (${from.release})` : ''}`,
+          `- Hardware: ${hw.model} (revision ${hw.revision}), ${hw.memTotalMB} MB RAM`,
+          `- System: ${s.os?.name}, kernel ${s.os?.kernel}, ${s.os?.arch}`,
+          `- Player: ${s.player}`,
+          '',
+          '### Report',
+          '_Please attach the downloaded `mupibox-report-….zip` here (drag the file into this field)._',
+        ].join('\n'),
+      )}`
+    for (const max of [2000, 1000, 400]) {
+      // (cut down: the issue says so, the whole text is in the report's README)
+      const url = make(text.length > max ? `${text.slice(0, max)} … (shortened - the full text is in the report)` : text)
+      if (url.length < 7500) return url
+    }
+    return make('(the description is in the report)')
+  }
+  const reportButtons = [...root.querySelectorAll('#ab-report, #ab-github')]
+  // github: also open the issue page of the project, filled in (the zip then goes into it by hand)
+  const makeReport = async (btn, github) => {
     if (btn.disabled) return
-    btn.disabled = true
+    // (the page is opened now, while the click still counts: after the waiting a browser would block it as a popup)
+    const tab = github ? window.open('about:blank', '_blank') : null
+    if (tab) tab.opener = null
+    for (const b of reportButtons) b.disabled = true
+    const staleLink = $('#ab-gh-link', root)
+    if (staleLink) staleLink.hidden = true
     const label = btn.innerHTML
     const busy = (text) => (btn.innerHTML = `<span class="spin sm"></span>${esc(text)}`)
     busy(tr('Bericht wird erstellt …'))
     const ids = []
     try {
+      if (github) {
+        const s = await api(`${API}/issue-summary`)
+        const link = $('#ab-gh-link', root)
+        if (s.ok && s.body) {
+          const url = issueUrl(s.body, $('#ab-issue', root).value)
+          if (tab) tab.location.href = url
+          else if (link) {
+            // (blocked: the page opens with a tap instead)
+            link.hidden = false
+            link.innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(tr('GitHub-Seite öffnen'))}</a>`
+          }
+        } else {
+          tab?.close()
+          toast('Die Angaben zur Box ließen sich nicht laden.', 'info')
+          return
+        }
+      }
       for (const [i, f] of attached.entries()) {
         const r = await putAttachment(f, (p) => busy(`${tr('Anhang')} ${i + 1}/${attached.length} … ${p} %`))
         if (!r.ok || !r.body?.id) return toast(ATTACH_ERRORS[r.status] ?? 'Ein Anhang ließ sich nicht hochladen.', 'info')
@@ -8153,16 +8209,16 @@ function mountAbout(root) {
       setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
       attached.length = 0
       if (root.isConnected) drawAttached()
-      toast('Bericht heruntergeladen – schicke die Datei mit deiner Beschreibung weiter.')
+      toast(github ? 'Bericht heruntergeladen – hänge die Datei auf der GitHub-Seite an deine Meldung an.' : 'Bericht heruntergeladen – schicke die Datei mit deiner Beschreibung weiter.')
     } finally {
       // (what was uploaded but not used - the box deletes it after half an hour anyway)
       for (const id of ids) fetch(`${API}/issue-report/attachment/${id}`, { method: 'DELETE', credentials: 'same-origin', headers: csrfHeaders() }).catch(() => undefined)
-      if (btn.isConnected) {
-        btn.disabled = false
-        btn.innerHTML = label
-      }
+      for (const b of reportButtons) if (b.isConnected) b.disabled = false
+      if (btn.isConnected) btn.innerHTML = label
     }
   }
+  $('#ab-report', root).onclick = (e) => makeReport(e.currentTarget, false)
+  $('#ab-github', root).onclick = (e) => makeReport(e.currentTarget, true)
 }
 
 /* Neu starten & Ausschalten */
