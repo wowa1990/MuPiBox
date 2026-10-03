@@ -6052,6 +6052,7 @@ async function loadVolume() {
   state.values.set('volMax', Number(r.body.maxVolume ?? 100))
   state.values.set('volFix', r.body.startupVolume != null)
   state.values.set('volStart', Number(r.body.startupVolume ?? 30))
+  state.values.set('keepPlaying', r.body.continuePlayOnLeave === true)
   // (with Bluetooth audio: an own maximum - for headphones)
   state.values.set('volBtOn', r.body.btMaxVolume != null)
   state.values.set('volBtMax', Number(r.body.btMaxVolume ?? Math.min(60, Number(r.body.maxVolume ?? 100))))
@@ -9410,7 +9411,7 @@ const CONTROLLERS = {
         }
         return toast(`Lautstärke ${v} %`)
       }
-      const body = key === 'volBtOn' ? { btMaxVolume: v ? Number(state.values.get('volBtMax')) : null } : key === 'volBtMax' ? (state.values.get('volBtOn') ? { btMaxVolume: v } : null) : key === 'volMax' ? { maxVolume: v } : key === 'volFix' ? { startupVolume: v ? Number(state.values.get('volStart')) : null } : key === 'volStart' && state.values.get('volFix') ? { startupVolume: v } : null
+      const body = key === 'keepPlaying' ? { continuePlayOnLeave: !!v } : key === 'volBtOn' ? { btMaxVolume: v ? Number(state.values.get('volBtMax')) : null } : key === 'volBtMax' ? (state.values.get('volBtOn') ? { btMaxVolume: v } : null) : key === 'volMax' ? { maxVolume: v } : key === 'volFix' ? { startupVolume: v ? Number(state.values.get('volStart')) : null } : key === 'volStart' && state.values.get('volFix') ? { startupVolume: v } : null
       if (!body) return
       const r = await api(`${API}/audio/config`, { method: 'POST', body })
       if (!r.ok) return toast('Nicht gespeichert', 'info')

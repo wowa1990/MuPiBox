@@ -14,6 +14,7 @@ import type { PlaytimePlayState } from './playtime.model'
 import { PlaytimeService } from './playtime.service'
 import { ElternMagicLinkOverlayComponent } from './eltern-magic-link/eltern-magic-link-overlay.component'
 import { PlaytimeBlockedOverlayComponent } from './playtime-blocked-overlay/playtime-blocked-overlay.component'
+import { NowPlayingComponent } from './now-playing/now-playing.component'
 import { PlaytimeChipComponent } from './playtime-chip/playtime-chip.component'
 import { buildResumeMedia } from './resume-builder'
 import { StalePageReloadService } from './stale-page-reload.service'
@@ -23,7 +24,7 @@ import { KmThemeService } from './theme/km-theme.service'
   selector: 'app-root',
   templateUrl: 'app.component.html',
   styleUrls: ['app.component.scss'],
-  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent, ElternMagicLinkOverlayComponent],
+  imports: [IonApp, IonRouterOutlet, PlaytimeBlockedOverlayComponent, PlaytimeChipComponent, ElternMagicLinkOverlayComponent, NowPlayingComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppComponent {

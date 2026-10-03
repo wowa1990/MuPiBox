@@ -2384,6 +2384,13 @@
        "unit": " %"
       },
       {
+       "type": "toggle",
+       "label": "Weiterspielen beim Verlassen des Players",
+       "key": "keepPlaying",
+       "default": false,
+       "help": "Aus: Die Wiedergabe stoppt, wenn das Display den Player verlässt (Zurück-Pfeil). An: Sie läuft weiter; auf der Startseite zeigt eine Leiste „Läuft gerade“ den Titel mit Stopp-Knopf, ein Tipp darauf öffnet den Player wieder."
+      },
+      {
        "type": "buttons",
        "buttons": [
         [
@@ -5656,6 +5663,11 @@
   },
   {
    "l": "Wert beim Start",
+   "where": "Audio › Lautstärke",
+   "id": "lautstaerke"
+  },
+  {
+   "l": "Weiterspielen beim Verlassen des Players",
    "where": "Audio › Lautstärke",
    "id": "lautstaerke"
   },

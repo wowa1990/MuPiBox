@@ -4,6 +4,7 @@
       <div class="mupi-monitor-blocker" (click)="$event.stopPropagation()"></div>
     }
     <mupi-playtime-chip></mupi-playtime-chip>
+    <mupi-now-playing></mupi-now-playing>
     @if (playtimeBlocked()) {
       <mupi-playtime-blocked></mupi-playtime-blocked>
     }

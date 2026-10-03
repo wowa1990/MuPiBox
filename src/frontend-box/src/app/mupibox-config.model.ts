@@ -12,6 +12,8 @@ export interface MupiboxConfig {
     hideScrollbar?: boolean
     // Coverflow theme only: shows the album/folder name under each cover (Admin > Mupi-conf > Theme)
     coverflowShowNames?: boolean
+    // The music keeps playing when the player page is left (web app: Settings > Audio > Volume); else it stops
+    continuePlayOnLeave?: boolean
     // Add other mupibox properties if needed
   }
   timeout: {

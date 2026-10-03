@@ -43,6 +43,7 @@ import {
 import { firstValueFrom, type Observable } from 'rxjs'
 import { environment } from '../../environments/environment'
 import type { AlbumStop } from '../albumstop'
+import { BackgroundPlaybackService } from '../background-playback.service'
 import { CurrentMediaService } from '../current-media.service'
 import { ExternalPlaybackNavigatorService } from '../external-playback-navigator.service'
 import type { CurrentMPlayer } from '../current.mplayer'
@@ -282,6 +283,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   trackListTitle = ''
   pressingCover = false
   listViewTimerMs = 2500
+  // Settings > Audio > Volume: leaving the page does not stop what plays (the start page then shows the "Läuft gerade" bar)
+  private continuePlayOnLeave = false
   listFontFamily = ''
   private longPressTimer: ReturnType<typeof setTimeout> | undefined
   private shuffleTimer: ReturnType<typeof setTimeout> | undefined
@@ -299,6 +302,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
     protected coverFlip: CoverFlipService,
     private playtimeService: PlaytimeService,
     private currentMediaService: CurrentMediaService,
+    private backgroundPlayback: BackgroundPlaybackService,
   ) {
     this.spotify$ = this.mediaService.current$
     this.local$ = this.mediaService.local$
@@ -314,7 +318,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
       }
       // isResumeEntry() instead of a bare category check: it also recognises
       // legacy entries written before the isResume flag existed.
-      if (isResumeEntry(this.media)) {
+      // (not when it is opened again for what plays on in the background or was started from elsewhere: that runs already)
+      if (isResumeEntry(this.media) && navState.externalPlayback !== true) {
         this.resumePlay = true
       }
       // Phase 19 Stufe B: extern getriggerter Track (Eltern-WebApp etc.)
@@ -353,6 +358,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
         if (typeof configuredSeconds === 'number' && configuredSeconds > 0) {
           this.listViewTimerMs = configuredSeconds * 1000
         }
+        this.continuePlayOnLeave = config?.mupibox?.continuePlayOnLeave === true
       },
       error: () => {
         // Keep default listViewTimerMs if config could not be loaded.
@@ -627,6 +633,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
 
   async ionViewWillEnter() {
     this.updateProgression = true
+    // (whatever ran on in the background is on this page again - or is replaced by what starts now)
+    this.backgroundPlayback.clear()
     // (the output as it is now - also changed from the web app or by headphones switched off)
     this.loadOutput()
     clearInterval(this.outputTimer)
@@ -693,17 +701,24 @@ export class PlayerPage implements OnInit, AfterViewInit {
       this.saveResumeFiles()
     }
     this.updateProgression = false
-    if (this.media.shuffle || this.shufflechanged) {
-      this.playerService.sendCmd(PlayerCmds.SHUFFLEOFF)
+    // Playing and set to go on: the playback is handed to the start page's bar (it stops it later, with the same
+    // clean-up as below); paused or ended, the page stops as always
+    const keepPlaying = this.continuePlayOnLeave && this.playing
+    if (keepPlaying) {
+      this.backgroundPlayback.begin(this.media, { shuffled: !!(this.media.shuffle || this.shufflechanged), albumStop: this.albumStop?.albumStop === 'On' })
+    } else {
+      if (this.media.shuffle || this.shufflechanged) {
+        this.playerService.sendCmd(PlayerCmds.SHUFFLEOFF)
+      }
+      this.playerService.sendCmd(PlayerCmds.STOP)
     }
-    this.playerService.sendCmd(PlayerCmds.STOP)
     this.resumePlay = false
     if (this.media.type === 'spotify' && (this.media.category === 'music' || this.media.category === 'other')) {
       if (this.shufflechanged % 2 === 1) {
         this.mediaService.editRawMediaAtIndex(this.media.index, this.media)
       }
     }
-    if (this.albumStop?.albumStop === 'On') {
+    if (!keepPlaying && this.albumStop?.albumStop === 'On') {
       this.playerService.sendCmd(PlayerCmds.ALBUMSTOP)
     }
   }

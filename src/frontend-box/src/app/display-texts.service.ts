@@ -25,6 +25,9 @@ export const DEFAULT_DISPLAY_TEXTS = {
   // list that could not be loaded: NAS folder / radio and podcasts without a connection
   nasUnavailable: 'NAS not reachable',
   offlineLabel: 'No connection',
+  // the bar of the start page while the music goes on after the player page was left (not editable, only translated)
+  nowPlayingLabel: 'Now playing',
+  stopLabel: 'Stop',
   // title of the resume page (km themes; the other themes keep "Resume")
   resumeTitle: 'Continue listening',
   outputTitle: 'Listen with',

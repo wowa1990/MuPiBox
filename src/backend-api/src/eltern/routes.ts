@@ -1238,7 +1238,9 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       const startupVolume = volumePercent(mb.startupVolume) ?? volumePercent(mb.startVolume) ?? null
       // (with Bluetooth audio: an own maximum, null = the same as without)
       const btMaxVolume = volumePercent(mb.btMaxVolume) ?? null
-      bluetoothAudio().then((bluetooth) => res.json({ current, maxVolume, startupVolume, btMaxVolume, bluetooth }))
+      // (the display keeps playing when its player page is left, instead of stopping - see the player page)
+      const continuePlayOnLeave = mb.continuePlayOnLeave === true
+      bluetoothAudio().then((bluetooth) => res.json({ current, maxVolume, startupVolume, btMaxVolume, continuePlayOnLeave, bluetooth }))
     })
   })
 
@@ -1277,15 +1279,23 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   })
 
   /**
-   * POST /api/app/audio/config  {maxVolume?, startupVolume?}  (Phase 18 Item 1)
+   * POST /api/app/audio/config  {maxVolume?, startupVolume?, btMaxVolume?, continuePlayOnLeave?}  (Phase 18 Item 1)
    * Persist the hearing-protection cap and/or the startup-default volume.
    * `startupVolume: null` removes the startup default (so the box keeps
    * wherever the last session left off). Cap is min 10 % to avoid an
    * accidentally-muted box that looks broken.
    */
   router.post('/audio/config', requireSession, requireCsrf, async (req, res) => {
-    const body = (req.body as { maxVolume?: unknown; startupVolume?: unknown; btMaxVolume?: unknown } | undefined) ?? {}
-    const mutations: { maxVolume?: number; startupVolume?: number | null; btMaxVolume?: number | null } = {}
+    const body = (req.body as { maxVolume?: unknown; startupVolume?: unknown; btMaxVolume?: unknown; continuePlayOnLeave?: unknown } | undefined) ?? {}
+    const mutations: { maxVolume?: number; startupVolume?: number | null; btMaxVolume?: number | null; continuePlayOnLeave?: boolean } = {}
+    // whether the display keeps playing when its player page is left (else it stops, as before)
+    if (body.continuePlayOnLeave !== undefined) {
+      if (typeof body.continuePlayOnLeave !== 'boolean') {
+        res.status(400).json({ error: 'continuePlayOnLeave must be true or false' })
+        return
+      }
+      mutations.continuePlayOnLeave = body.continuePlayOnLeave
+    }
     // the maximum while Bluetooth audio is on (headphones); null: the same as without
     if (body.btMaxVolume !== undefined) {
       const v = Number(body.btMaxVolume)
@@ -1322,6 +1332,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     await deps.updateMupiboxConfig((cfg) => {
       const mb = ((cfg.mupibox as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>
       if (mutations.maxVolume !== undefined) mb.maxVolume = mutations.maxVolume
+      if (mutations.continuePlayOnLeave !== undefined) mb.continuePlayOnLeave = mutations.continuePlayOnLeave
       if (mutations.btMaxVolume === null) delete mb.btMaxVolume
       else if (mutations.btMaxVolume !== undefined) mb.btMaxVolume = mutations.btMaxVolume
       // The scripts that set the volume at start and shutdown (chromium-autostart.sh, mupi_shutdown.sh,

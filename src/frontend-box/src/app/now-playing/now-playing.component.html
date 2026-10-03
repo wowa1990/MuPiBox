@@ -1,0 +1,15 @@
+@if (visible()) {
+  <div class="now-playing" role="button" tabindex="0" (click)="open()" (keydown.enter)="open()">
+    <ion-icon name="musical-notes" class="np-icon"></ion-icon>
+    <div class="np-text">
+      <span class="np-label">{{ texts.text('nowPlayingLabel') }}</span>
+      <span class="np-title">{{ title() }}</span>
+      @if (subtitle()) {
+        <span class="np-sub">{{ subtitle() }}</span>
+      }
+    </div>
+    <button type="button" class="np-stop" [disabled]="stopping()" (click)="stopPlayback($event)">
+      <ion-icon name="stop"></ion-icon>{{ texts.text('stopLabel') }}
+    </button>
+  </div>
+}
