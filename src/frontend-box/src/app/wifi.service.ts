@@ -44,6 +44,11 @@ export class WifiService {
     return this.http.post(`${environment.backend.apiUrl}/wifi/configured/${id}/band`, { band }, { responseType: 'text' })
   }
 
+  /** Switches to a saved network at once; answers when it is connected or after 20 s without success. */
+  public connectNetwork(id: number): Observable<{ connected: boolean }> {
+    return this.http.post<{ connected: boolean }>(`${environment.backend.apiUrl}/wifi/configured/${id}/connect`, {})
+  }
+
   public updateNetworkPassword(id: number, password: string): Observable<string> {
     return this.http.post(
       `${environment.backend.apiUrl}/wifi/configured/${id}/password`,

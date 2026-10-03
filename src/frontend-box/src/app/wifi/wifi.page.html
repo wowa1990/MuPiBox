@@ -298,7 +298,10 @@
                 </div>
               }
               <ion-button fill="outline" size="small" (click)="openAddress(wifi)">Address</ion-button>
-              <ion-button fill="outline" size="small" (click)="changeNetworkButtonPressed(wifi)">Change</ion-button>
+              @if (!wifi.current && wifi.available) {
+                <ion-button size="small" (click)="connectSavedNetworkButtonPressed(wifi)" [disabled]="connecting()">Connect</ion-button>
+              }
+              <ion-button fill="outline" size="small" (click)="changeNetworkButtonPressed(wifi)">Change PW</ion-button>
               <ion-button fill="outline" color="danger" size="small" (click)="deleteNetworkButtonPressed(wifi)">Delete</ion-button>
               </div>
             } @else {

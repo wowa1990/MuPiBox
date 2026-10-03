@@ -591,6 +591,36 @@ export class WifiPage {
     this.router.navigate(['/wifi/add'], { state: { newNetworkSsid: network.ssid } })
   }
 
+  // A saved network: switch to it at once (the list shows the spinner meanwhile, the top card follows the live link).
+  protected connecting = signal(false)
+
+  protected connectSavedNetworkButtonPressed(network: WifiNetwork) {
+    if (network.id === undefined || this.connecting()) {
+      return
+    }
+    this.connecting.set(true)
+    this.loading.set(true)
+    this.wifiService.connectNetwork(network.id).subscribe({
+      next: async (result) => {
+        this.connecting.set(false)
+        this.loadNetworks()
+        if (!result.connected) {
+          const alert = await this.alertController.create({
+            cssClass: 'alert',
+            header: 'Not connected',
+            message: `The box could not connect to "${network.ssid}". Is the password still right? "Change PW" sets a new one.`,
+            buttons: ['OK'],
+          })
+          await alert.present()
+        }
+      },
+      error: () => {
+        this.connecting.set(false)
+        this.loadNetworks()
+      },
+    })
+  }
+
   changeNetworkButtonPressed(network: WifiNetwork) {
     this.router.navigate(['/wifi/add'], { state: { editNetwork: { id: network.id, ssid: network.ssid } } })
   }

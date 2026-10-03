@@ -3417,6 +3417,36 @@ app.post('/api/wifi/configured/:id/password', async (req, res) => {
   }
 })
 
+// Switches to a saved network at once (the display's "Connect"): select_network makes wpa_supplicant leave the
+// current network for this one. It also parks every other saved network until enable_network all - which is
+// done afterwards in every case, since a parked network would be written as disabled by the next save_config
+// (a password change, a delete) and the box would no longer roam to it after a restart.
+app.post('/api/wifi/configured/:id/connect', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10)
+  if (Number.isNaN(id)) {
+    res.status(400).send('invalid id')
+    return
+  }
+
+  const wifi = await wifiInterface()
+  try {
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'select_network', String(id)])
+    let connected = false
+    for (let attempt = 0; attempt < 20 && !connected; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const { stdout } = await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'status'])
+      connected = /^wpa_state=COMPLETED$/m.test(stdout) && new RegExp(`^id=${id}$`, 'm').test(stdout)
+    }
+    console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Wifi network ${id}: ${connected ? 'connected' : 'not connected after 20 s'}`)
+    res.status(200).json({ connected })
+  } catch (error) {
+    console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] Error connecting to wifi network ${id}: ${error}`)
+    res.status(500).send('error')
+  } finally {
+    await execFileAsync('sudo', ['wpa_cli', '-i', wifi, 'enable_network', 'all']).catch(() => undefined)
+  }
+})
+
 app.post('/api/add', (req, res) => {
   const lockResult = acquireLock(dataLock, '/api/add')
   if (lockResult === 'locked') {
