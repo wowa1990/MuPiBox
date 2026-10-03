@@ -7979,7 +7979,8 @@ function aboutTop() {
       <div class="field"><label>Bilder oder Videos anhängen (freiwillig)</label><button type="button" class="drop" id="ab-attach">${icon('doc', 20)}<span>Dateien wählen</span></button><input type="file" id="ab-files" accept="image/*,video/*,.heic,.heif,.mkv" multiple hidden>
         <ul class="attach-list" id="ab-attach-list"></ul><small class="help">Bis zu 5 Dateien (Bilder, GIFs, Videos), je höchstens 100 MB, zusammen 150 MB.</small></div>
       <div class="btns"><button class="btn primary" id="ab-report">${icon('save', 18)}Bericht erstellen und herunterladen</button><button class="btn" id="ab-github">${icon('ext', 18)}Auf GitHub melden</button></div>
-      <p class="help">„Auf GitHub melden“ öffnet die Meldeseite des Projekts mit deiner Beschreibung, Version, Hardware und System – und lädt den Bericht herunter, den du dort anhängst. Gesendet wird erst, wenn du auf GitHub abschickst. Dafür brauchst du ein GitHub-Konto.</p><p class="help" id="ab-gh-link" hidden></p></section>`,
+      <p class="help">„Auf GitHub melden“ öffnet die Meldeseite des Projekts mit deiner Beschreibung, Version, Hardware und System – und lädt den Bericht herunter, den du dort anhängst. Gesendet wird erst, wenn du auf GitHub abschickst. Dafür brauchst du ein GitHub-Konto.</p><p class="help" id="ab-gh-link" hidden></p>
+      <div class="gh-steps" id="ab-gh-steps" hidden><b>So geht es weiter:</b><ol><li>Prüfe auf der GitHub-Seite den Titel und deine Beschreibung.</li><li>Hänge die heruntergeladene Datei (mupibox-report-….zip) an: in das Textfeld ziehen, am Handy „Add files“ antippen und die Datei aus „Downloads“ wählen.</li><li>Tippe unten auf „Submit new issue“.</li></ol></div></section>`,
     `<section class="card wide"><div class="hist-head"><h2>Verlauf</h2><div class="pills small" id="ab-range">${[1, 6, 24].map((h) => `<button aria-selected="${sys.range === h}" data-h="${h}">${h} h</button>`).join('')}</div></div>
       <div class="hist-grid" id="ab-charts"><div class="loading"><p>Lade …</p></div></div>
       <p class="help" style="margin:0"><span id="ab-since"></span> Einmal pro Minute gemessen, nur im Arbeitsspeicher der Box – nach einem Neustart beginnt der Verlauf neu.</p></section>`,
@@ -8183,6 +8184,9 @@ function mountAbout(root) {
             link.hidden = false
             link.innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(tr('GitHub-Seite öffnen'))}</a>`
           }
+          // (what to do on the GitHub page: stays here for when one comes back to the app)
+          const steps = $('#ab-gh-steps', root)
+          if (steps) steps.hidden = false
         } else {
           tab?.close()
           toast('Die Angaben zur Box ließen sich nicht laden.', 'info')
