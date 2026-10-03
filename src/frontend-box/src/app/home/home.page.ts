@@ -27,6 +27,7 @@ import { environment } from 'src/environments/environment'
 import type { Artist } from '../artist'
 import { ArtworkService } from '../artwork.service'
 import { CoverFlipService } from '../cover-flip.service'
+import { HeaderVisibilityService } from '../header-visibility.service'
 import { LoadingComponent } from '../loading/loading.component'
 import type { CategoryType } from '../media'
 import { MediaService } from '../media.service'
@@ -62,6 +63,13 @@ export class HomePage extends SwiperIonicEventsHelper {
   private settingsPressTimer = 0
   // km themes: the resume button has the design's clock-with-arrow symbol
   protected readonly km = inject(KmThemeService).isKm
+
+  // The top bar is folded away by a two-finger swipe (HeaderVisibilityService): the covers are then drawn larger
+  protected readonly headerHidden = inject(HeaderVisibilityService).hidden
+  // two fingers in from the edge: the next / the previous category, round and round (the tabs are folded away)
+  private readonly categorySwipes = inject(HeaderVisibilityService)
+    .categorySwipe.pipe(takeUntilDestroyed())
+    .subscribe((step) => this.switchCategory(step))
 
   // Category tabs at the top, in display order; some can be hidden in the admin.
   protected readonly categories: { key: CategoryType; icon: string }[] = [
@@ -219,6 +227,16 @@ export class HomePage extends SwiperIonicEventsHelper {
         }
       })
     })
+  }
+
+  private switchCategory(step: 1 | -1): void {
+    const visible = this.visibleCategories()
+    if (visible.length < 2) return
+    const index = Math.max(
+      0,
+      visible.findIndex((c) => c.key === this.category()),
+    )
+    this.category.set(visible[(index + step + visible.length) % visible.length].key)
   }
 
   protected categoryChanged(event: any): void {

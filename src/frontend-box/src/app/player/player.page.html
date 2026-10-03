@@ -96,7 +96,12 @@
     <div class="km-tl-wrap">
     <!-- every theme: cover and "close" on the left (was the km themes' only; the others had a back arrow in the header) -->
     <div class="km-tl-side">
-      <img [src]="shownCover()" alt="" (error)="coverFailed()">
+      @if (coverMissing()) {
+        <!-- no picture: the card with the folder's name, as on the cover page -->
+        <div class="km-tl-cover"><div class="mupi-no-cover" [style.background]="noCoverStyle(coverTitle()).background" [style.color]="noCoverStyle(coverTitle()).color"><span>{{ coverTitle() }}</span></div></div>
+      } @else {
+        <img [src]="shownCover()" alt="" (error)="coverFailed()">
+      }
       <button class="km-tl-close" (click)="closeTrackList()"><ion-icon name="close"></ion-icon>{{ displayTexts.text('closeShort') }}</button>
     </div>
     <ion-list class="tracklist" [style.font-family]="listFontFamily" [style.--ion-font-family]="listFontFamily">
@@ -135,8 +140,12 @@
   <ion-grid>
     <ion-row>
       <ion-col size="6">
-        <ion-card class="cover-card" [class.km-pressing]="km() && pressingCover" (pointerdown)="coverPointerDown()" (pointerup)="coverPointerUp()" (pointerleave)="coverPointerUp()" (pointercancel)="coverPointerUp()">
-          <img [src]="shownCover()" (error)="coverFailed()" draggable="false" style="-moz-user-select: none;" ondragstart="return false;">
+        <ion-card class="cover-card" [class.reflect]="coverflowTheme" [class.km-pressing]="km() && pressingCover" (pointerdown)="coverPointerDown()" (pointerup)="coverPointerUp()" (pointerleave)="coverPointerUp()" (pointercancel)="coverPointerUp()">
+          @if (coverMissing()) {
+            <div class="mupi-no-cover" [style.background]="noCoverStyle(coverTitle()).background" [style.color]="noCoverStyle(coverTitle()).color"><span>{{ coverTitle() }}</span></div>
+          } @else {
+            <img [src]="shownCover()" (error)="coverFailed()" draggable="false" style="-moz-user-select: none;" ondragstart="return false;">
+          }
           @if ((media.type === 'radio' || media.type === 'rss') && currentPlayedLocal?.loading && km()) {
             <!-- km themes: three bouncing dots on the cover while the stream connects -->
             <div class="km-cover-dots"><i></i><i></i><i></i></div>

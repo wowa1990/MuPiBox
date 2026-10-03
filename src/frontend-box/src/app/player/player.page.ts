@@ -54,6 +54,7 @@ import { KmThemeService } from '../theme/km-theme.service'
 import { LogService } from '../log.service'
 import { isResumeEntry, type Media } from '../media'
 import { MediaService } from '../media.service'
+import { noCoverStyle } from '../no-cover'
 import type { MupiboxConfig } from '../mupibox-config.model'
 import { StatusComponent } from '../status/status.component'
 import { PlayerCmds, PlayerService } from '../player.service'
@@ -185,7 +186,19 @@ export class PlayerPage implements OnInit, AfterViewInit {
 
   private readonly failedCovers = new Set<string>()
   protected coverFailed(): void {
-    if (this.km() && this.cover) this.failedCovers.add(this.cover)
+    if (this.cover) this.failedCovers.add(this.cover)
+  }
+
+  /** No picture (the default one, or one that does not load): the other themes show a grey card with the name instead */
+  protected coverMissing(): boolean {
+    return !this.km() && (!this.cover || this.cover.includes('nocover') || this.failedCovers.has(this.cover))
+  }
+
+  // (the colours of the card: one per folder name, the same as in the lists - see no-cover.ts)
+  protected readonly noCoverStyle = noCoverStyle
+
+  protected coverTitle(): string {
+    return this.media?.title || this.media?.artist || ''
   }
 
   /** km themes: position and length under the progress bar (Spotify, and mplayer when it knows the length) */
@@ -285,6 +298,8 @@ export class PlayerPage implements OnInit, AfterViewInit {
   trackListTitle = ''
   pressingCover = false
   listViewTimerMs = 2500
+  // The Cover Flow theme (Mupi-conf > Theme) mirrors the cover below it, as its lists do
+  protected coverflowTheme = false
   listFontFamily = ''
   private longPressTimer: ReturnType<typeof setTimeout> | undefined
   private shuffleTimer: ReturnType<typeof setTimeout> | undefined
@@ -356,6 +371,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
         if (typeof configuredSeconds === 'number' && configuredSeconds > 0) {
           this.listViewTimerMs = configuredSeconds * 1000
         }
+        this.coverflowTheme = config?.mupibox?.theme === 'coverflow'
       },
       error: () => {
         // Keep default listViewTimerMs if config could not be loaded.
