@@ -49,6 +49,7 @@
 <ul id='ulnews' class='ulnews'>
 <li id='linews' class='linews'>Words: the battery's card says "Charging" and a NAS profile is "applied" - in English both said "Download"; "Hide horizontal scroll bar" works in every view, not only with the theme coverflow, as its help text said.</li>
 <li id='linews' class='linews'>Listening time without a daily limit: the page "Listening time" showed 0 min listened today while the start page had the right minutes - it now takes them from the listening history too.</li>
+<li id='linews' class='linews'>App: <b>Report a problem</b> (Settings &gt; System &gt; About the box): makes a zip with a description, the state of the system, the configuration without secrets and the logs; pictures, GIFs and videos can be attached, and a button opens the report page of the MuPiBox project on GitHub, pre-filled.</li>
 </ul>
 <b>System</b>
 </ul>
