@@ -3627,6 +3627,16 @@
    ]
   },
   {
+   "id": "homeassistant",
+   "slug": "home-assistant",
+   "area": "einstellungen",
+   "parent": "g-dienste",
+   "title": "Home Assistant",
+   "description": "Anzeigen und steuern in Home Assistant",
+   "icon": "home2",
+   "sections": []
+  },
+  {
    "id": "wled",
    "slug": "wled",
    "area": "einstellungen",

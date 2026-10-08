@@ -39,7 +39,8 @@ import { startTlsWatch } from './eltern/tls'
 import { startWeeklySummary } from './eltern/weekly-summary'
 import { startNightDim } from './eltern/night-dim'
 import { startSpeech } from './speech'
-import { startBucketCleanup, parseCookie } from './eltern/middleware'
+import { startBucketCleanup, parseCookie, requireCsrf, requireSession } from './eltern/middleware'
+import { registerHaAppRoutes, registerHaDisplayRoute, startHaApi } from './ha/ha-api'
 import { SESSION_COOKIE, validateSession } from './eltern/auth'
 import { type IncomingMessage, request as httpRequest } from 'node:http'
 import type { Duplex } from 'node:stream'
@@ -1134,6 +1135,21 @@ podcastOffline.start()
 // Where the box plays: speaker or Bluetooth ("Hören mit" on the display, the web app's output row; audio-output.ts)
 registerAudioOutputRoutes(app, { guard: localOrElternSession, getMupiboxConfig: () => getMupiboxConfigSync(), updateMupiboxConfig })
 startAudioWatch()
+
+// The Home Assistant API v1 (ha/ha-api.ts): its own HTTPS port 8443, switched on in the app (Einstellungen › Home
+// Assistant); here the app's routes, the display's view of a pairing and the refusal on the plain port
+const haDeps = {
+  getMupiboxConfig: () => getMupiboxConfigSync() as unknown as Record<string, unknown> | undefined,
+  updateMupiboxConfig,
+  covers: {
+    playingAlbumCover,
+    playingTrackCover: async (file: string) => ((await trackCover(file).catch(() => undefined)) ? `/api/track-cover?file=${encodeURIComponent(file)}` : null),
+  },
+}
+registerHaDisplayRoute(app)
+const haRouter = express.Router()
+registerHaAppRoutes(haRouter, haDeps, { session: requireSession, csrf: requireCsrf })
+app.use('/api/app', haRouter)
 
 // Whether the box has no internet right now (network.json, written every minute by get_network.sh)
 let offlineCheck = { at: 0, offline: false }
@@ -8468,6 +8484,8 @@ if (!testServe) {
   // The Spotify login's 6 months: reminders before the end, a message when Spotify refused it (eltern/spotify-auth-age.ts)
   startSpotifyLoginWatch({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
   startTlsWatch({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig })
+  // the Home Assistant API, when it is switched on (ha/ha-api.ts)
+  startHaApi(haDeps)
   startWeeklySummary({ getMupiboxConfig: getMupiboxConfigSync, updateMupiboxConfig, currentPlayLogStart })
   // "Abends dunkler": the display's brightness in the evening (eltern/night-dim.ts)
   startNightDim(getMupiboxConfigSync)

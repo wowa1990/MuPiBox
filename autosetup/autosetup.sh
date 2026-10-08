@@ -101,6 +101,14 @@ rm -Rf /home/dietpi/mupibox.zip /home/dietpi/MuPiBox-* >&3 2>&3
 	if apt-cache show raspberrypi-utils >/dev/null 2>&1 && ! dpkg -l raspberrypi-utils 2>/dev/null | grep -q '^ii'; then
 		apt-get --yes install raspberrypi-utils >&3 2>&3
 	fi
+	# avahi for the Home Assistant API (scripts/mupibox/ha_mdns.sh): installed, but running only while the API is switched
+	# on in the app - its install starts it, so it is switched off again here unless the API is on
+	if ! dpkg -l avahi-daemon 2>/dev/null | grep -q '^ii'; then
+		apt-get --yes install --no-install-recommends avahi-daemon >&3 2>&3
+	fi
+	if [ "$(/usr/bin/jq -r '.homeAssistant.enabled // false' ${CONFIG} 2>/dev/null)" != "true" ]; then
+		systemctl disable --now avahi-daemon.socket avahi-daemon >&3 2>&3
+	fi
 
 	###############################################################################################
 

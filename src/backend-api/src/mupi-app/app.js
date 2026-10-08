@@ -9231,6 +9231,96 @@ const isSharesSection = (s) => (s.items ?? []).some((it) => it.target === 'freig
 /* the controllers: load(page) reads the box before drawing, mount(root, page) runs after it, change(key, value)
    saves a setting, act / byLabel run the buttons, sections(page) gives the building blocks with the box's values,
    top(page) draws the page's own top part (instead of customTop's), ownNav: the page shows its sub pages itself */
+/* Home Assistant (backend-api ha/ha-api.ts): the API v1 on, pairing opened for 60 s, the paired Home Assistants */
+
+const haState = { data: null, pairUntil: 0 }
+
+async function loadHa() {
+  const r = await api(`${API}/ha`)
+  if (!r.ok) throw new Error(`ha ${r.status}`)
+  haState.data = r.body
+}
+
+function haTop() {
+  const d = haState.data ?? {}
+  const on = d.enabled === true
+  const sw = `<div class="row"><span class="lbl"><b>Home Assistant erlauben</b><small>Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.</small></span><label class="switch"><input type="checkbox" id="ha-on" ${on ? 'checked' : ''} aria-label="Home Assistant erlauben"><span></span></label></div>`
+  const state = on
+    ? d.listening
+      ? `<div class="status-line"><span class="dot ok"></span><span>Bereit unter <b translate="no">https://${esc(location.hostname)}:${esc(d.port)}</b></span></div>`
+      : `<div class="note warn">${icon('info', 18)}<span>Die Schnittstelle startet nicht. Ein Neustart des Servers oder der Box hilft meist.</span></div>`
+    : ''
+  const main = `<section class="card" data-col="1"><div class="card-head"><h2>Home Assistant</h2><span class="chip ${on && d.listening ? 'ok' : ''}">${on ? 'an' : 'aus'}</span></div>${state}${sw}</section>`
+  if (!on || !d.listening) return [main]
+  const left = Math.max(0, Math.round((haState.pairUntil - Date.now()) / 1000))
+  const pair = `<section class="card" data-col="2"><h2>Koppeln</h2>
+    <p class="help">1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.</p>
+    <div class="btns"><button class="btn primary" id="ha-pair" ${left ? 'disabled' : ''}>${left ? `<span id="ha-left">Offen … noch ${left} s</span>` : 'Koppeln erlauben (60 s)'}</button>${left ? '<button class="btn" id="ha-pair-stop">Beenden</button>' : ''}</div>
+    <div class="field"><label>Schlüssel der Box</label><code class="mono ha-key" translate="no">${esc(d.fingerprint ?? '')}</code><small>Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.</small></div></section>`
+  const clients = d.clients ?? []
+  const scopeText = (list) => (list ?? []).map((x) => (x === 'read' ? 'Anzeigen' : x === 'control' ? 'Steuern' : x)).join(' · ')
+  const paired = `<section class="card" data-col="1"><h2>Gekoppelt</h2>${
+    clients.length
+      ? `<div class="rows">${clients
+          .map(
+            (c, i) =>
+              `<div class="entry"><span class="avatar">${icon('home2', 16)}</span><span class="lbl"><b translate="no">${esc(c.client_name)}</b><small>${esc(scopeText(c.scopes))} · seit ${esc(new Date(c.paired_at).toLocaleDateString())}</small></span><button class="btn danger sm" data-ha-rm="${i}">Entfernen</button></div>`,
+          )
+          .join('')}</div>`
+      : '<p class="help" style="margin:0">Noch kein Home Assistant gekoppelt.</p>'
+  }</section>`
+  return [main, pair, paired]
+}
+
+function mountHa(root, page) {
+  const again = async (text, kind) => {
+    if (text) toast(text, kind)
+    await loadHa().catch(() => undefined)
+    if (currentPage()?.id === page.id) renderPage(page, false)
+  }
+  $('#ha-on', root).onchange = async (e) => {
+    const on = e.target.checked
+    const r = await api(`${API}/ha/enabled`, { method: 'POST', body: { on } })
+    again(r.ok && r.body?.ok ? (on ? 'Home Assistant erlaubt' : 'Home Assistant aus') : 'Das hat nicht geklappt', r.ok && r.body?.ok ? 'ok' : 'info')
+  }
+  $('#ha-pair', root)?.addEventListener('click', async () => {
+    const r = await api(`${API}/ha/pairing`, { method: 'POST', body: {} })
+    if (!r.ok) return toast(r.body?.error === 'pairing_in_progress' ? 'Eine Kopplung läuft schon – am Display abbrechen oder warten' : 'Das hat nicht geklappt', 'info')
+    haState.pairUntil = Date.now() + (r.body?.expires_in ?? 60) * 1000
+    again('Koppeln ist 60 s erlaubt – jetzt in Home Assistant starten', 'ok')
+  })
+  $('#ha-pair-stop', root)?.addEventListener('click', async () => {
+    await api(`${API}/ha/pairing`, { method: 'DELETE' })
+    haState.pairUntil = 0
+    again('Koppeln beendet')
+  })
+  for (const b of root.querySelectorAll('[data-ha-rm]')) {
+    b.addEventListener('click', async () => {
+      const c = (haState.data?.clients ?? [])[Number(b.dataset.haRm)]
+      if (!c || !(await ask('Kopplung entfernen?', `„${c.client_name}“ kann die Box danach nicht mehr anzeigen und steuern, bis es neu gekoppelt wird.`, 'Entfernen'))) return
+      const r = await api(`${API}/ha/clients/${encodeURIComponent(c.client_id)}`, { method: 'DELETE' })
+      again(r.ok ? 'Kopplung entfernt' : 'Das hat nicht geklappt', r.ok ? 'ok' : 'info')
+    })
+  }
+  // while pairing is open: the time it still has, every second, and the list again when it ends (a new Home Assistant)
+  if (haState.pairUntil > Date.now()) {
+    every(1000, () => {
+      const left = Math.round((haState.pairUntil - Date.now()) / 1000)
+      const el = $('#ha-left', root)
+      if (left > 0 && el) el.textContent = `Offen … noch ${left} s`
+      else if (left <= 0) {
+        haState.pairUntil = 0
+        again()
+      }
+    })
+  } else {
+    // (a pairing that is just being finished at the box: the new one shows up)
+    every(5000, () => loadHa().then(() => {
+      if (currentPage()?.id === page.id && (haState.data?.clients ?? []).length !== root.querySelectorAll('[data-ha-rm]').length) renderPage(page, false)
+    }).catch(() => undefined))
+  }
+}
+
 const CONTROLLERS = {
   spielzeit: {
     load: loadCaps,
@@ -10363,6 +10453,7 @@ const CONTROLLERS = {
     },
   },
   telegram: { load: loadTelegram, top: tgTop, sections: () => [], mount: mountTelegram },
+  homeassistant: { load: loadHa, top: haTop, sections: () => [], mount: mountHa },
   mqtt: {
     load: loadMqtt,
     // the connection (broker and login), the box's names in MQTT, how often, Home Assistant - saved together

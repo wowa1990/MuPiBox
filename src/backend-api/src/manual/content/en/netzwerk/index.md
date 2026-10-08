@@ -9,6 +9,7 @@ The box works in your home network. This chapter shows how to connect it and how
 | [Password and HTTPS](sicherheit.md) | protect the app, encrypted connection |
 | [Telegram](telegram.md) | parent bot with notifications and remote control |
 | [MQTT and Home Assistant](mqtt.md) | integrate the box into the smart home |
+| [Home Assistant](home-assistant.md) | show and control through the box's Home Assistant interface |
 
 > [!NOTE]
 > The box is meant for the **home network**. Do not make it directly reachable from the internet. If you want access from away, use a VPN for it.

@@ -267,6 +267,13 @@
           "de": "MQTT und Home Assistant",
           "en": "MQTT and Home Assistant"
         }
+      },
+      {
+        "id": "home-assistant",
+        "title": {
+          "de": "Home Assistant",
+          "en": "Home Assistant"
+        }
       }
     ]
   },

@@ -1,0 +1,613 @@
+/**
+ * The Home Assistant API v1 of the box ("Classic"), after splitti's contract
+ * (MuPiBox-homeassistant/docs/classic-api-contract.md, 1.0.0): its own HTTPS listener on port 8443 (as the NG), so
+ * port 8200 and its guard stay as they are.
+ *
+ * - TLS: a key of its own that is never replaced (ha_tls.sh) - Home Assistant pins its SPKI SHA-256, which the box's
+ *   display shows while pairing is open; a new certificate (new IP, renewal) keeps the pin.
+ * - Discovery: _mupibox._tcp over avahi (ha_mdns.sh), only a hint - identity is /info after pairing.
+ * - Pairing: opened for 60 s in the app (Einstellungen › Home Assistant, a signed-in parent); /pair/start then shows a
+ *   six-digit code and the requested rights on the display (never in an answer or a log); /pair/confirm with it gives
+ *   one bearer token per Home Assistant, kept hashed (ha-store.ts), revocable in the app.
+ * - Rights: read and control (phase 1). notify, power and admin are not granted yet (restart/shutdown: 403).
+ * - Every error as {success:false, error, message} with the contract's HTTP status.
+ *
+ * Switched on and off in the app (mupibox.homeAssistant.enabled); off, nothing listens and nothing is announced.
+ */
+
+import { execFile } from 'node:child_process'
+import { createHash, createPublicKey, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
+import { promises as fsp } from 'node:fs'
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
+import os from 'node:os'
+import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
+import { headphonesPlaying } from '../audio-output'
+import { isLoopback } from '../request-guard'
+import { type PlaybackCovers, playbackSnapshot } from '../playback-snapshot'
+import { clientByToken, deviceId, type HaClient, HA_DIR, readClients, type Scope, SCOPES, tokenHash, updateClients } from './ha-store'
+
+export const HA_PORT = 8443
+const PLAYER = 'http://127.0.0.1:5005'
+const SELF = 'http://127.0.0.1:8200'
+const TLS_SCRIPT = '/usr/local/bin/mupibox/ha_tls.sh'
+const MDNS_SCRIPT = '/usr/local/bin/mupibox/ha_mdns.sh'
+const CA_FILE = '/etc/mupibox/tls/ca.crt'
+/** what phase 1 grants (the others need their own approval on the display, later) */
+const GRANTABLE: Scope[] = ['read', 'control']
+const CAPABILITIES = ['play', 'pause', 'stop', 'next', 'previous', 'set_volume', 'mute', 'unmute', 'seek', 'media_metadata']
+const PAIRING_WINDOW_S = 60
+const PAIRING_TTL_S = 300
+const MAX_FAILS = 5
+const COOLDOWN_S = 60
+
+export interface HaDeps {
+  getMupiboxConfig: () => Record<string, unknown> | undefined
+  updateMupiboxConfig: (mutate: (cfg: Record<string, unknown>) => void | false) => Promise<void>
+  covers: PlaybackCovers
+}
+
+const log = (msg: string) => console.log(`${new Date().toLocaleString()}: [ha-api] ${msg}`)
+const warn = (msg: string) => console.warn(`${new Date().toLocaleString()}: [ha-api] ${msg}`)
+
+function run(cmd: string, args: string[], timeout = 30000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => resolve({ ok: !err, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') }))
+  })
+}
+
+const enabledIn = (deps: HaDeps) => ((deps.getMupiboxConfig()?.homeAssistant as { enabled?: unknown } | undefined)?.enabled ?? false) === true
+
+// ---- errors (contract §6) -------------------------------------------------------------------------------------------
+
+function fail(res: Response, status: number, error: string, message: string, headers: Record<string, string> = {}): void {
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v)
+  res.status(status).json({ success: false, error, message })
+}
+
+// ---- TLS identity ---------------------------------------------------------------------------------------------------
+
+let server: HttpsServer | null = null
+let fingerprint = ''
+let tlsTimer: NodeJS.Timeout | null = null
+
+/** SHA-256 of the leaf key's DER SubjectPublicKeyInfo, lowercase hex (what Home Assistant pins) */
+function spkiSha256(certPem: string): string {
+  const der = createPublicKey(certPem).export({ type: 'spki', format: 'der' })
+  return createHash('sha256').update(der).digest('hex')
+}
+
+async function loadTls(): Promise<{ key: string; cert: string } | null> {
+  const made = await run('sudo', [TLS_SCRIPT], 60000)
+  if (!made.ok) warn(`ha_tls.sh: ${made.stderr.trim() || 'failed'}`)
+  try {
+    const [key, cert] = await Promise.all([fsp.readFile(`${HA_DIR}/tls.key`, 'utf8'), fsp.readFile(`${HA_DIR}/tls.crt`, 'utf8')])
+    fingerprint = spkiSha256(cert)
+    return { key, cert }
+  } catch (err) {
+    warn(`no TLS identity: ${(err as Error).message}`)
+    return null
+  }
+}
+
+/** The fingerprint grouped for reading on the display: "45c7 a08f d909 ..." */
+export const groupedFingerprint = () => fingerprint.replace(/(.{4})(?=.)/g, '$1 ')
+
+// ---- pairing (contract §3) ------------------------------------------------------------------------------------------
+
+interface Pending {
+  pairing_id: string
+  client_id: string
+  client_name: string
+  requested: Scope[]
+  granted: Scope[]
+  code: string
+  expiresAt: number
+  fails: number
+}
+
+let windowUntil = 0
+let pending: Pending | null = null
+let cooldownUntil = 0
+// (rate limits: starts per box, confirm attempts per address and in all)
+const hits = new Map<string, number[]>()
+function limited(key: string, max: number, perMs: number): number {
+  const now = Date.now()
+  const list = (hits.get(key) ?? []).filter((t) => now - t < perMs)
+  if (list.length >= max) {
+    hits.set(key, list)
+    return Math.ceil((perMs - (now - list[0])) / 1000)
+  }
+  list.push(now)
+  hits.set(key, list)
+  return 0
+}
+
+function pendingAlive(): Pending | null {
+  if (pending && Date.now() > pending.expiresAt) pending = null
+  return pending
+}
+
+/** What the box's display shows (GET /api/ha-pairing, loopback only) */
+export function pairingForDisplay(): Record<string, unknown> {
+  const p = pendingAlive()
+  const now = Date.now()
+  if (p) {
+    return {
+      active: true,
+      stage: 'code',
+      code: p.code,
+      client_name: p.client_name,
+      scopes: p.granted,
+      expires_in: Math.max(0, Math.round((p.expiresAt - now) / 1000)),
+      fingerprint: groupedFingerprint(),
+    }
+  }
+  if (windowUntil > now) return { active: true, stage: 'waiting', expires_in: Math.round((windowUntil - now) / 1000), fingerprint: groupedFingerprint() }
+  return { active: false }
+}
+
+const UUIDISH = /^[A-Za-z0-9._:-]{8,100}$/
+
+// ---- the API app (port 8443) ----------------------------------------------------------------------------------------
+
+function bearer(req: Request): string {
+  const h = String(req.headers.authorization ?? '')
+  return /^Bearer [A-Za-z0-9._~+/=-]{20,200}$/.test(h) ? h.slice(7) : ''
+}
+
+function requireScope(scope: Scope): RequestHandler {
+  return (req, res, next) => {
+    clientByToken(bearer(req))
+      .then((client) => {
+        if (!client) return fail(res, 401, 'unauthorized', 'Missing, invalid or revoked token')
+        if (!client.scopes.includes(scope)) return fail(res, 403, 'insufficient_scope', `This needs the right "${scope}"`)
+        ;(req as Request & { haClient?: HaClient }).haClient = client
+        next()
+      })
+      .catch(() => fail(res, 500, 'internal_error', 'Token check failed'))
+  }
+}
+
+async function wifiSignalDbm(): Promise<number | null> {
+  // /proc/net/wireless: "wlan0: 0000   58.  -52.  -256 ..." (level in dBm)
+  try {
+    const text = await fsp.readFile('/proc/net/wireless', 'utf8')
+    const m = /^\s*\w+:\s+\S+\s+\S+\s+(-?\d+)\./m.exec(text)
+    const v = m ? Number(m[1]) : Number.NaN
+    // (the driver now and then reports nonsense such as -246: only what a WiFi signal can be)
+    return Number.isFinite(v) && v >= -120 && v < 0 ? v : null
+  } catch {
+    return null
+  }
+}
+
+function ipAddress(): string | null {
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    if (!/^(wlan|eth|en|wl)/.test(name)) continue
+    const v4 = (list ?? []).find((a) => a.family === 'IPv4' && !a.internal)
+    if (v4) return v4.address
+  }
+  return null
+}
+
+async function battery(deps: HaDeps): Promise<{ percent: number | null; charging: boolean | null }> {
+  const hat = deps.getMupiboxConfig()?.mupihat as { hat_active?: unknown } | undefined
+  if (hat?.hat_active !== true) return { percent: null, charging: null }
+  try {
+    const j = JSON.parse(await fsp.readFile('/tmp/mupihat.json', 'utf8')) as { Bat_Percent?: unknown; Charger_Status?: unknown; Charge_Phase?: unknown }
+    const pct = Number(j.Bat_Percent)
+    const status = String(j.Charger_Status ?? '').toLowerCase()
+    const charging = /charge|cc|cv|taper|top-off/.test(status) && !/not charging|done|termination/.test(status)
+    return { percent: Number.isFinite(pct) && pct >= 0 && pct <= 100 ? Math.round(pct) : null, charging: status ? charging : null }
+  } catch {
+    return { percent: null, charging: null }
+  }
+}
+
+async function muted(): Promise<boolean | null> {
+  const r = await run('/usr/bin/amixer', ['sget', 'Master'], 3000)
+  if (!r.ok) return null
+  if (/\[off\]/.test(r.stdout)) return true
+  return /\[on\]/.test(r.stdout) ? false : null
+}
+
+function provider(player: string, source: string): string | null {
+  if (!player) return null
+  if (player === 'spotify') return 'spotify'
+  return ({ local: 'library', nas: 'nas', rss: 'podcast', radio: 'radio' } as Record<string, string>)[source] ?? (source || 'library')
+}
+
+const volumeCap = async (deps: HaDeps): Promise<number> => {
+  const mb = (deps.getMupiboxConfig()?.mupibox ?? {}) as { maxVolume?: unknown; btMaxVolume?: unknown }
+  const pct = (v: unknown) => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : Number.NaN
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? Math.floor(n) : undefined
+  }
+  const bt = pct(mb.btMaxVolume)
+  return bt !== undefined && (await headphonesPlaying().catch(() => false)) ? bt : (pct(mb.maxVolume) ?? 100)
+}
+
+async function playerCommand(path: string): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
+  const r = await fetch(`${PLAYER}/${path}${path.includes('?') ? '&' : '?'}src=ha`, { signal: AbortSignal.timeout(8000) })
+  const body = (await r.json().catch(() => ({}))) as Record<string, unknown>
+  return { ok: r.ok, status: r.status, body }
+}
+
+function buildApp(deps: HaDeps): Express {
+  const app = express()
+  app.disable('x-powered-by')
+  app.use((_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  })
+  app.use(express.json({ limit: '16kb', strict: true }))
+  // (a body that is no JSON: the contract's error, not Express's HTML page)
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (err) return fail(res, 400, 'invalid_request', 'The body is not valid JSON')
+    next()
+  })
+  const v1 = express.Router()
+
+  v1.get('/health', (_req, res) => {
+    res.json({ ok: true, api_version: 1 })
+  })
+
+  // (the box's CA, public: Home Assistant may verify against it after the pinned first contact, as with the NG)
+  v1.get('/tls/ca', async (_req, res) => {
+    try {
+      res.type('application/x-pem-file').send(await fsp.readFile(CA_FILE, 'utf8'))
+    } catch {
+      fail(res, 404, 'not_found', 'No CA certificate')
+    }
+  })
+
+  v1.get('/info', requireScope('read'), async (_req, res) => {
+    const mb = (deps.getMupiboxConfig()?.mupibox ?? {}) as { host?: unknown; version?: unknown }
+    res.json({
+      api_version: 1,
+      device_id: await deviceId(),
+      // (the box's name; "MuPiBox" in front only when it is not in it already - a box called MuPiBox was "MuPiBox MuPiBox")
+      name: ((h) => (/mupibox/i.test(h) ? h : `MuPiBox ${h}`))(String(mb.host || os.hostname())),
+      product: 'mupibox',
+      generation: 'classic',
+      software_version: String(mb.version ?? '') || null,
+      manufacturer: 'MuPiBox',
+      model: 'MuPiBox Classic',
+      capabilities: CAPABILITIES,
+    })
+  })
+
+  v1.get('/state', requireScope('read'), async (_req, res) => {
+    const [snap, bat, dbm, mute] = await Promise.all([playbackSnapshot(deps.covers).catch(() => null), battery(deps), wifiSignalDbm(), muted()])
+    const playback = snap
+      ? {
+          state: !snap.player ? 'idle' : snap.playing ? 'playing' : 'paused',
+          provider: provider(snap.player, snap.source),
+          title: snap.title || null,
+          artist: snap.artist || null,
+          album: snap.album || null,
+          media_id: null,
+          duration: snap.durationMs != null ? Math.round(snap.durationMs / 1000) : null,
+          position: snap.progressMs != null ? Math.round(snap.progressMs / 1000) : null,
+          cover_url: snap.coverUrl ? '/api/ha/v1/media/cover/current' : null,
+          volume: snap.volume,
+          muted: mute,
+        }
+      : { state: 'unavailable', provider: null, title: null, artist: null, album: null, media_id: null, duration: null, position: null, cover_url: null, volume: null, muted: mute }
+    res.json({
+      playback,
+      device: { battery_percent: bat.percent, charging: bat.charging, wifi_signal_dbm: dbm, ip_address: ipAddress(), uptime_seconds: Math.round(os.uptime()) },
+    })
+  })
+
+  v1.get('/media/cover/current', requireScope('read'), async (_req, res) => {
+    const snap = await playbackSnapshot(deps.covers).catch(() => null)
+    const url = snap?.coverUrl ?? ''
+    // only the box's own pictures and Spotify's (no address of anywhere else is fetched for the caller)
+    let target = ''
+    if (url.startsWith('/') && !url.startsWith('//')) target = `${SELF}${url}`
+    else if (/^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com)\//i.test(url)) target = url
+    if (!target) return fail(res, 404, 'not_found', 'No cover for what plays now')
+    try {
+      const r = await fetch(target, { signal: AbortSignal.timeout(8000), redirect: 'error' })
+      const type = r.headers.get('content-type') ?? ''
+      if (!r.ok || !/^image\//.test(type)) return fail(res, 404, 'not_found', 'No cover for what plays now')
+      const bytes = Buffer.from(await r.arrayBuffer())
+      if (bytes.length > 8 * 1024 * 1024) return fail(res, 404, 'not_found', 'The cover is too large')
+      res.type(type).send(bytes)
+    } catch {
+      fail(res, 503, 'temporarily_unavailable', 'The cover could not be fetched')
+    }
+  })
+
+  v1.post('/control', async (req, res) => {
+    const body = (req.body ?? {}) as { command?: unknown; value?: unknown; position?: unknown }
+    const command = typeof body.command === 'string' ? body.command : ''
+    if (!command) return fail(res, 400, 'invalid_request', 'command is missing')
+    const client = await clientByToken(bearer(req)).catch(() => null)
+    if (!client) return fail(res, 401, 'unauthorized', 'Missing, invalid or revoked token')
+    if (command === 'restart' || command === 'shutdown') {
+      // (power is a right of its own, never part of control - and not granted in this version)
+      if (!client.scopes.includes('power')) return fail(res, 403, 'insufficient_scope', 'Restart and shutdown need the right "power"')
+      return fail(res, 422, 'unsupported_command', 'Restart and shutdown are not offered yet')
+    }
+    if (!client.scopes.includes('control')) return fail(res, 403, 'insufficient_scope', 'This needs the right "control"')
+    try {
+      if (['play', 'pause', 'stop', 'next', 'previous'].includes(command)) {
+        // (nothing loaded: no false success - the player answered "ok" to a play with nothing to play)
+        if (command !== 'stop' && !(await playbackSnapshot(deps.covers).catch(() => null))?.player) return fail(res, 409, 'provider_unavailable', 'Nothing is loaded to play - start something on the box first')
+        const r = await playerCommand(command)
+        if (r.status === 423) return fail(res, 409, 'provider_unavailable', 'Playing is blocked right now (listening time or quiet hours)')
+        if (!r.ok) return fail(res, 503, 'temporarily_unavailable', `The player answered ${r.status}`)
+        return void res.json({ success: true })
+      }
+      if (command === 'set_volume') {
+        const v = body.value
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 100) return fail(res, 400, 'invalid_value', 'Volume must be an integer between 0 and 100')
+        // (never above the box's maximum - the one for headphones while they play)
+        const applied = Math.min(v, await volumeCap(deps))
+        const r = await run('/usr/bin/amixer', ['sset', 'Master', `${applied}%`], 3000)
+        if (!r.ok) return fail(res, 500, 'internal_error', 'The volume could not be set')
+        return void res.json({ success: true })
+      }
+      if (command === 'mute' || command === 'unmute') {
+        const r = await run('/usr/bin/amixer', ['sset', 'Master', command], 3000)
+        if (!r.ok) return fail(res, 500, 'internal_error', `${command} failed`)
+        return void res.json({ success: true })
+      }
+      if (command === 'seek') {
+        const pos = body.position
+        if (typeof pos !== 'number' || !Number.isFinite(pos) || pos < 0) return fail(res, 400, 'invalid_value', 'position must be a number of seconds, 0 or more')
+        const snap = await playbackSnapshot(deps.covers).catch(() => null)
+        if (!snap?.player) return fail(res, 409, 'provider_unavailable', 'Nothing plays')
+        let arg: number
+        if (snap.player === 'spotify') arg = Math.round(pos * 1000) // (the player seeks Spotify in ms)
+        else if (snap.durationMs && snap.durationMs > 0) arg = Math.max(0, Math.min(100, Math.round((pos * 1000 * 100) / snap.durationMs))) // (mplayer: in percent)
+        else return fail(res, 409, 'provider_unavailable', 'This cannot be seeked (no length known)')
+        const r = await playerCommand(`seekpos:${arg}`)
+        if (!r.ok) return fail(res, 503, 'temporarily_unavailable', `The player answered ${r.status}`)
+        return void res.json({ success: true })
+      }
+    } catch {
+      return fail(res, 503, 'temporarily_unavailable', 'The player does not answer')
+    }
+    fail(res, 422, 'unsupported_command', `Unknown command "${command}"`)
+  })
+
+  v1.post('/pair/start', (req, res) => {
+    const ip = req.socket.remoteAddress ?? ''
+    const wait = limited('start', 10, 60000) || limited(`start:${ip}`, 5, 60000)
+    if (wait) return fail(res, 429, 'rate_limited', 'Too many pairing attempts', { 'Retry-After': String(wait) })
+    if (Date.now() < cooldownUntil) return fail(res, 429, 'rate_limited', 'Too many wrong codes - wait a moment', { 'Retry-After': String(Math.ceil((cooldownUntil - Date.now()) / 1000)) })
+    const body = (req.body ?? {}) as { client_name?: unknown; client_id?: unknown; requested_scopes?: unknown }
+    const clientId = typeof body.client_id === 'string' ? body.client_id : ''
+    const clientName = typeof body.client_name === 'string' ? body.client_name.trim().slice(0, 60) : ''
+    if (!UUIDISH.test(clientId) || !clientName) return fail(res, 400, 'invalid_request', 'client_id and client_name are needed')
+    const requested = Array.isArray(body.requested_scopes) ? body.requested_scopes : ['read', 'control']
+    if (!requested.every((s) => typeof s === 'string' && (SCOPES as string[]).includes(s))) return fail(res, 400, 'invalid_value', 'Unknown scope')
+    const granted = GRANTABLE.filter((s) => requested.includes(s))
+    if (!granted.length) return fail(res, 400, 'invalid_value', 'None of the requested scopes can be granted')
+    if (pendingAlive()) return fail(res, 409, 'pairing_in_progress', 'Another pairing is waiting for its code')
+    if (windowUntil <= Date.now()) return fail(res, 403, 'pairing_not_enabled', 'Open the pairing in the MuPiBox app first (Settings › Home Assistant)')
+    windowUntil = 0
+    pending = {
+      pairing_id: randomUUID(),
+      client_id: clientId,
+      client_name: clientName,
+      requested: requested as Scope[],
+      granted,
+      code: String(randomInt(0, 1000000)).padStart(6, '0'),
+      expiresAt: Date.now() + PAIRING_TTL_S * 1000,
+      fails: 0,
+    }
+    log(`pairing started by "${clientName}" (${granted.join(', ')}) - the code is on the display`)
+    res.json({ pairing_id: pending.pairing_id, expires_in: PAIRING_TTL_S, code_length: 6, confirmation: 'display_code' })
+  })
+
+  v1.post('/pair/confirm', async (req, res) => {
+    const ip = req.socket.remoteAddress ?? ''
+    const wait = limited('confirm', 30, 60000) || limited(`confirm:${ip}`, 10, 60000)
+    if (wait) return fail(res, 429, 'rate_limited', 'Too many attempts', { 'Retry-After': String(wait) })
+    const body = (req.body ?? {}) as { pairing_id?: unknown; client_id?: unknown; code?: unknown }
+    if (typeof body.pairing_id !== 'string' || typeof body.client_id !== 'string' || typeof body.code !== 'string') {
+      return fail(res, 400, 'invalid_request', 'pairing_id, client_id and code are needed')
+    }
+    const p = pendingAlive()
+    if (!p || p.pairing_id !== body.pairing_id) return fail(res, 410, 'pairing_expired', 'This pairing has expired or was ended')
+    if (p.client_id !== body.client_id) return fail(res, 400, 'invalid_request', 'client_id is not the one of the start')
+    // (only spaces are taken out; compared in constant time)
+    const given = Buffer.from(body.code.replace(/\s+/g, ''), 'utf8')
+    const want = Buffer.from(p.code, 'utf8')
+    const right = given.length === want.length && timingSafeEqual(given, want)
+    if (!right) {
+      p.fails++
+      if (p.fails >= MAX_FAILS) {
+        pending = null
+        cooldownUntil = Date.now() + COOLDOWN_S * 1000
+        warn(`pairing of "${p.client_name}" ended after ${MAX_FAILS} wrong codes`)
+        return fail(res, 410, 'pairing_expired', 'Too many wrong codes - start the pairing again')
+      }
+      return fail(res, 403, 'invalid_pairing_code', 'The code is not right')
+    }
+    pending = null
+    const token = randomBytes(32).toString('base64url')
+    try {
+      await updateClients((list) => [
+        // (pairing again replaces the earlier token of this Home Assistant)
+        ...list.filter((c) => c.client_id !== p.client_id),
+        { client_id: p.client_id, client_name: p.client_name, token_sha256: tokenHash(token), scopes: p.granted, paired_at: new Date().toISOString() },
+      ])
+    } catch (err) {
+      warn(`the pairing could not be kept: ${(err as Error).message}`)
+      return fail(res, 500, 'internal_error', 'The pairing could not be kept')
+    }
+    log(`"${p.client_name}" paired (${p.granted.join(', ')})`)
+    res.json({ success: true, access_token: token, token_type: 'Bearer', scopes: p.granted, device_id: await deviceId() })
+  })
+
+  v1.post('/pair/revoke', async (req, res) => {
+    const client = await clientByToken(bearer(req)).catch(() => null)
+    if (!client) return fail(res, 401, 'unauthorized', 'Missing, invalid or revoked token')
+    const body = (req.body ?? {}) as { client_id?: unknown }
+    if (body.client_id !== client.client_id) return fail(res, 403, 'insufficient_scope', 'A client may revoke only its own token')
+    await updateClients((list) => list.filter((c) => c.client_id !== client.client_id))
+    log(`"${client.client_name}" revoked its pairing`)
+    res.json({ success: true })
+  })
+
+  app.use('/api/ha/v1', v1)
+  app.use((_req, res) => fail(res, 404, 'not_found', 'Unknown path'))
+  // (anything that throws: the contract's error, never a stack trace)
+  app.use((_err: unknown, _req: Request, res: Response, _next: NextFunction) => fail(res, 500, 'internal_error', 'Unexpected failure'))
+  return app
+}
+
+// ---- starting and stopping ------------------------------------------------------------------------------------------
+
+async function start(deps: HaDeps): Promise<boolean> {
+  if (server) return true
+  const tls = await loadTls()
+  if (!tls) return false
+  const id = await deviceId()
+  const s = createHttpsServer({ key: tls.key, cert: tls.cert, minVersion: 'TLSv1.2' }, buildApp(deps))
+  s.headersTimeout = 20000
+  s.requestTimeout = 30000
+  await new Promise<void>((resolve) => {
+    s.once('error', (err) => {
+      warn(`port ${HA_PORT}: ${err.message}`)
+      resolve()
+    })
+    s.listen(HA_PORT, () => resolve())
+  })
+  if (!s.listening) return false
+  server = s
+  const mdns = await run('sudo', [MDNS_SCRIPT, 'on', id, String(HA_PORT)], 15000)
+  if (!mdns.ok) warn(`not announced in the network: ${mdns.stderr.trim()} - Home Assistant can still take the address by hand`)
+  log(`listening on https port ${HA_PORT} (device ${id}, key ${fingerprint.slice(0, 16)}...)`)
+  // a new address or the renewal: a new certificate with the same key, taken over without a restart
+  tlsTimer = setInterval(
+    async () => {
+      const r = await run('sudo', [TLS_SCRIPT], 60000)
+      if (/changed/.test(r.stdout) && server) {
+        try {
+          const [key, cert] = await Promise.all([fsp.readFile(`${HA_DIR}/tls.key`, 'utf8'), fsp.readFile(`${HA_DIR}/tls.crt`, 'utf8')])
+          server.setSecureContext({ key, cert, minVersion: 'TLSv1.2' })
+          fingerprint = spkiSha256(cert)
+          log('new certificate (same key) taken over')
+        } catch (err) {
+          warn(`new certificate not taken over: ${(err as Error).message}`)
+        }
+      }
+    },
+    6 * 3600 * 1000,
+  )
+  tlsTimer.unref()
+  return true
+}
+
+async function stop(): Promise<void> {
+  if (tlsTimer) clearInterval(tlsTimer)
+  tlsTimer = null
+  windowUntil = 0
+  pending = null
+  await run('sudo', [MDNS_SCRIPT, 'off'], 15000)
+  if (server) {
+    const s = server
+    server = null
+    await new Promise<void>((resolve) => s.close(() => resolve()))
+    s.closeAllConnections?.()
+    log('stopped')
+  }
+}
+
+/** At the server's start: on when the app switched it on */
+export function startHaApi(deps: HaDeps): void {
+  if (enabledIn(deps)) start(deps).catch((err) => warn(`start: ${(err as Error).message}`))
+}
+
+// ---- the app (Einstellungen › Home Assistant) and the display ---------------------------------------------------------
+
+export function registerHaAppRoutes(router: Router, deps: HaDeps, guards: { session: RequestHandler; csrf: RequestHandler }): void {
+  /** GET /api/app/ha - switched on, listening, the fingerprint, the paired clients (without their tokens) */
+  router.get('/ha', guards.session, async (_req, res) => {
+    const clients = await readClients()
+    res.json({
+      enabled: enabledIn(deps),
+      listening: !!server,
+      port: HA_PORT,
+      device_id: server ? await deviceId() : null,
+      fingerprint: server ? groupedFingerprint() : null,
+      pairing: pairingForDisplay().active === true,
+      clients: clients.map((c) => ({ client_id: c.client_id, client_name: c.client_name, scopes: c.scopes, paired_at: c.paired_at })),
+    })
+  })
+
+  /** POST /api/app/ha/enabled {on} - the API on or off */
+  router.post('/ha/enabled', guards.session, guards.csrf, async (req, res) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on
+    if (typeof on !== 'boolean') return void res.status(400).json({ error: 'invalid on' })
+    await deps.updateMupiboxConfig((cfg) => {
+      cfg.homeAssistant = { ...((cfg.homeAssistant as Record<string, unknown>) ?? {}), enabled: on }
+    })
+    const ok = on ? await start(deps) : (await stop(), true)
+    res.status(ok ? 200 : 500).json({ ok, listening: !!server })
+  })
+
+  /** POST /api/app/ha/pairing - opens the pairing for 60 s (the display shows the fingerprint, then the code) */
+  router.post('/ha/pairing', guards.session, guards.csrf, (_req, res) => {
+    if (!server) return void res.status(409).json({ error: 'not_listening' })
+    if (pendingAlive()) return void res.status(409).json({ error: 'pairing_in_progress' })
+    windowUntil = Date.now() + PAIRING_WINDOW_S * 1000
+    log('pairing opened in the app for 60 s')
+    // (the display may be off: on, so the fingerprint and then the code can be read)
+    execFile('xset', ['dpms', 'force', 'on'], { env: { ...process.env, DISPLAY: ':0' }, timeout: 5000 }, () => undefined)
+    execFile('xset', ['s', 'reset'], { env: { ...process.env, DISPLAY: ':0' }, timeout: 5000 }, () => undefined)
+    res.json({ ok: true, expires_in: PAIRING_WINDOW_S, fingerprint: groupedFingerprint() })
+  })
+
+  /** DELETE /api/app/ha/pairing - ends an open or waiting pairing */
+  router.delete('/ha/pairing', guards.session, guards.csrf, (_req, res) => {
+    windowUntil = 0
+    pending = null
+    res.json({ ok: true })
+  })
+
+  /** DELETE /api/app/ha/clients/:id - a Home Assistant's pairing revoked (its token stops at once) */
+  router.delete('/ha/clients/:id', guards.session, guards.csrf, async (req, res) => {
+    const id = String(req.params.id)
+    const before = await readClients()
+    if (!before.some((c) => c.client_id === id)) return void res.status(404).json({ error: 'unknown client' })
+    await updateClients((list) => list.filter((c) => c.client_id !== id))
+    log(`a pairing was revoked in the app`)
+    res.json({ ok: true })
+  })
+}
+
+/** The display's view of the pairing (fingerprint, code, rights): the box itself only, never a phone */
+export function registerHaDisplayRoute(app: Express): void {
+  app.get('/api/ha-pairing', (req, res) => {
+    // (isLoopback: on port 8200 from the box itself - not what lighttpd forwards from the network, see request-guard.ts)
+    if (!isLoopback(req)) return void res.status(404).end()
+    res.setHeader('Cache-Control', 'no-store')
+    res.json(pairingForDisplay())
+  })
+  /** POST /api/ha-pairing/open - opens the pairing for 60 s from the box itself (a local action, as the contract allows) */
+  app.post('/api/ha-pairing/open', (req, res) => {
+    if (!isLoopback(req)) return void res.status(404).end()
+    if (!server) return void res.status(409).json({ error: 'not_listening' })
+    if (pendingAlive()) return void res.status(409).json({ error: 'pairing_in_progress' })
+    windowUntil = Date.now() + PAIRING_WINDOW_S * 1000
+    log('pairing opened on the box for 60 s')
+    res.json({ ok: true, expires_in: PAIRING_WINDOW_S })
+  })
+  /** POST /api/ha-pairing/cancel - "Abbrechen" on the display: the open or waiting pairing ends */
+  app.post('/api/ha-pairing/cancel', (req, res) => {
+    if (!isLoopback(req)) return void res.status(404).end()
+    if (windowUntil || pending) log('pairing ended on the display')
+    windowUntil = 0
+    pending = null
+    res.json({ ok: true })
+  })
+  // (the API is HTTPS only: on the plain port it says so instead of a page)
+  app.all(/^\/api\/ha\/v1(\/.*)?$/, (_req, res) => fail(res, 426, 'https_required', `The Home Assistant API is at https://<box>:${HA_PORT}/api/ha/v1`))
+}

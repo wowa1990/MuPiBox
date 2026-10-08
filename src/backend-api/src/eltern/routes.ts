@@ -76,6 +76,7 @@ import { clearArtistAlbumsMemory } from '../artist-albums-store'
 import { clearMetaCache } from '../spotify-sync/meta-cache'
 import { spotifyLoginAge } from './spotify-auth-age'
 import { btBattery, headphonesPlaying } from '../audio-output'
+import { playbackSnapshot } from '../playback-snapshot'
 import {
   REQUESTED_SCOPES,
   buildAuthorizeUrl,
@@ -1665,104 +1666,12 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   /**
    * GET /api/app/playback  (Phase 18 Item 5)
    * Snapshot of what's playing on the box (current track + paused/playing
-   * state). Just proxies the player's own /local — same data the box's
-   * frontend already gets from it.
+   * state), from the player's own /local and /state - see playback-snapshot.ts
+   * (the Home Assistant API reads the same).
    */
   router.get('/playback', requireSession, async (_req, res) => {
     try {
-      const localRes = await fetch('http://127.0.0.1:5005/local', { signal: AbortSignal.timeout(3000) })
-      if (!localRes.ok) {
-        res.status(502).json({ error: 'player unreachable' })
-        return
-      }
-      const local = (await localRes.json()) as Record<string, unknown>
-      const player = String(local.currentPlayer ?? '')
-
-      // The /local fields (playing, currentTrackname, album) are mplayer-side
-      // and stay empty during Spotify playback. For Spotify the canonical
-      // truth is /state.is_playing + /state.item.* — that's the
-      // getMyCurrentPlaybackState response from the Spotify API.
-      let playing = false
-      let title = ''
-      let artist = ''
-      let album = ''
-      let coverUrl: string | null = null
-      let progressMs: number | null = null
-      let durationMs: number | null = null
-      if (player === 'mplayer') {
-        playing = local.playing === true
-        title = String(local.currentTrackname ?? '')
-        album = String(local.album ?? '')
-        // A NAS or local album: path is its folder (NAS path, or <category>/<artist>/<album> in the library);
-        // the artist is the folder above, the cover the one the box shows for it.
-        const source = String(local.currentType ?? '')
-        const folder = String(local.path ?? '')
-        // a radio station or podcast: the picture it was started with (the app passes it on, spotify-control.js ?cover=)
-        if ((source === 'rss' || source === 'radio') && typeof local.cover === 'string' && local.cover) coverUrl = local.cover
-        if ((source === 'nas' || source === 'local') && folder) {
-          const parts = folder.split('/').filter(Boolean)
-          // (<category>/<artist>/<album>: the artist is the folder above the album; an album with its files right in
-          // <category>/<album> has none - the category's name is not its artist)
-          artist = source === 'local' ? (parts.length >= 3 ? parts[parts.length - 2] : '') : (parts[parts.length - 2] ?? '')
-          // the track's own picture (a playlist of different stories) before the album's
-          const trackFile = typeof local.trackFile === 'string' ? local.trackFile : ''
-          coverUrl =
-            (trackFile ? await deps.playingTrackCover?.(trackFile) : null) ??
-            (await deps.playingAlbumCover?.(source, folder)) ??
-            null
-        }
-      } else if (player === 'spotify') {
-        try {
-          const stateRes = await fetch('http://127.0.0.1:5005/state', { signal: AbortSignal.timeout(3000) })
-          if (stateRes.ok) {
-            const state = (await stateRes.json()) as {
-              is_playing?: boolean
-              progress_ms?: number
-              item?: {
-                name?: string
-                duration_ms?: number
-                artists?: Array<{ name?: string }>
-                album?: { name?: string; images?: Array<{ url?: string }> }
-                show?: { name?: string; publisher?: string; images?: Array<{ url?: string }> }
-                images?: Array<{ url?: string }>
-              }
-            }
-            playing = state.is_playing === true
-            if (typeof state.progress_ms === 'number') progressMs = state.progress_ms
-            if (typeof state.item?.duration_ms === 'number') durationMs = state.item.duration_ms
-            if (state.item?.name) title = String(state.item.name)
-            if (state.item?.album?.name) album = String(state.item.album.name)
-            if (state.item?.show?.name) {
-              artist = String(state.item.show.name)
-              if (!album && state.item.show.publisher) album = String(state.item.show.publisher)
-            } else if (Array.isArray(state.item?.artists) && state.item.artists[0]?.name) {
-              artist = String(state.item.artists[0].name)
-            }
-            // Cover art priority: episode-own > show > album. Spotify orders
-            // images largest-first, so [0] is the highest-res available.
-            const candidates = [
-              state.item?.images?.[0]?.url,
-              state.item?.show?.images?.[0]?.url,
-              state.item?.album?.images?.[0]?.url,
-            ].filter((u): u is string => typeof u === 'string' && u.length > 0)
-            if (candidates.length > 0) coverUrl = candidates[0]
-          }
-        } catch {
-          /* state fetch failed → stays not-playing */
-        }
-      }
-      res.json({
-        playing,
-        player,
-        source: String(local.currentType ?? ''),
-        title,
-        artist,
-        album,
-        coverUrl,
-        progressMs,
-        durationMs,
-        volume: typeof local.volume === 'number' ? local.volume : null,
-      })
+      res.json(await playbackSnapshot({ playingAlbumCover: deps.playingAlbumCover, playingTrackCover: deps.playingTrackCover }))
     } catch (err) {
       res.status(502).json({ error: `player unreachable: ${(err as Error).message}` })
     }

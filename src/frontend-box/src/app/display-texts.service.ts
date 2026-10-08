@@ -47,6 +47,15 @@ export const DEFAULT_DISPLAY_TEXTS = {
   outputHeadsetNotFound: 'Headphones not found. Are they on and close by?',
   // the tile of the device that plays now ("Hören mit" window)
   outputPlaying: 'playing',
+  // pairing with Home Assistant (opened in the app; ha-pairing overlay): {c} = the Home Assistant's name
+  haTitle: 'Pair Home Assistant',
+  haWaiting: 'Now start the pairing in Home Assistant.',
+  haKey: 'Key of the box – it must match the one Home Assistant shows:',
+  haWants: '{c} would like to pair',
+  haCode: 'Enter this code in Home Assistant:',
+  haScopeRead: 'see what is playing',
+  haScopeControl: 'control playback',
+  haCancel: 'Cancel',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>
