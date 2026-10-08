@@ -502,15 +502,22 @@ function buildApp(deps: HaDeps): Express {
   })
 
   /** GET /screenshot (read) - what the display shows (PNG; one picture at most every 2 s) */
+  // Never while a pairing is open: the display shows the code then, and a client with read only would read it here
+  // and pair itself with control - the code is meant for whoever stands at the box. A picture taken while a pairing
+  // opened is thrown away, not kept for the next 2 s.
   v1.get('/screenshot', requireScope('read'), async (_req, res) => {
+    const busy = () => fail(res, 409, 'provider_unavailable', 'A pairing is open on the display')
+    if (pairingForDisplay().active) return busy()
     if (Date.now() - lastShot > 2000) {
       shooting ??= run('sh', ['-c', `DISPLAY=:0 XAUTHORITY=/home/dietpi/.Xauthority scrot -o ${SCREENSHOT_FILE}`], 8000).then((r) => {
         shooting = undefined
-        if (r.ok) lastShot = Date.now()
+        lastShot = r.ok && !pairingForDisplay().active ? Date.now() : 0
+        if (!lastShot) fsp.rm(SCREENSHOT_FILE, { force: true }).catch(() => undefined)
         return r.ok
       })
       await shooting
     }
+    if (pairingForDisplay().active) return busy()
     if (!lastShot) return fail(res, 503, 'temporarily_unavailable', 'No picture of the display')
     res.type('image/png').sendFile(SCREENSHOT_FILE, (err) => {
       if (err && !res.headersSent) fail(res, 503, 'temporarily_unavailable', 'No picture of the display')
@@ -714,7 +721,7 @@ function buildApp(deps: HaDeps): Express {
 
 // ---- starting and stopping ------------------------------------------------------------------------------------------
 
-async function start(deps: HaDeps): Promise<boolean> {
+async function startNow(deps: HaDeps): Promise<boolean> {
   if (server) return true
   const tls = await loadTls()
   if (!tls) return false
@@ -755,7 +762,7 @@ async function start(deps: HaDeps): Promise<boolean> {
   return true
 }
 
-async function stop(): Promise<void> {
+async function stopNow(): Promise<void> {
   if (tlsTimer) clearInterval(tlsTimer)
   tlsTimer = null
   windowUntil = 0
@@ -764,11 +771,24 @@ async function stop(): Promise<void> {
   if (server) {
     const s = server
     server = null
-    await new Promise<void>((resolve) => s.close(() => resolve()))
+    const closed = new Promise<void>((resolve) => s.close(() => resolve()))
+    // (at once: an open connection kept close() waiting - and with it the next start, see serial)
     s.closeAllConnections?.()
+    await closed
     log('stopped')
   }
 }
+
+// Start and stop one after the other: switched off while the start still made its key, stop found no server yet and
+// the start went on afterwards - listening on 8443 with the switch off. A start in the queue asks the switch again.
+let switching: Promise<unknown> = Promise.resolve()
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const next = switching.then(fn, fn)
+  switching = next.catch(() => undefined)
+  return next
+}
+const start = (deps: HaDeps): Promise<boolean> => serial(() => (enabledIn(deps) ? startNow(deps) : Promise.resolve(false)))
+const stop = (): Promise<void> => serial(stopNow)
 
 /** At the server's start: on when the app switched it on */
 export function startHaApi(deps: HaDeps): void {
