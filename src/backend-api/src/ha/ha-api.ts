@@ -211,6 +211,85 @@ async function muted(): Promise<boolean | null> {
   return /\[on\]/.test(r.stdout) ? false : null
 }
 
+// System values for Home Assistant's sensors (splitti's integration reads state.metrics: cpu_percent, temperature_c,
+// ram_percent, disk_percent). A value that cannot be read is left out - the sensor is "unavailable" then, not 0.
+let cpuBefore: { idle: number; total: number } | null = null
+async function cpuPercent(): Promise<number | undefined> {
+  try {
+    const line = (await fsp.readFile('/proc/stat', 'utf8')).split('\n')[0]
+    const n = line.trim().split(/\s+/).slice(1).map(Number)
+    const idle = (n[3] ?? 0) + (n[4] ?? 0)
+    const total = n.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0)
+    const before = cpuBefore
+    cpuBefore = { idle, total }
+    // (between two polls of Home Assistant; at the first one the load since the start of the box)
+    const dTotal = before ? total - before.total : total
+    const dIdle = before ? idle - before.idle : idle
+    return dTotal > 0 ? Math.round(((dTotal - dIdle) / dTotal) * 1000) / 10 : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function metrics(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {}
+  const cpu = await cpuPercent()
+  if (cpu !== undefined) out.cpu_percent = cpu
+  try {
+    const t = Number((await fsp.readFile('/sys/class/thermal/thermal_zone0/temp', 'utf8')).trim()) / 1000
+    if (Number.isFinite(t) && t > -40 && t < 150) out.temperature_c = Math.round(t * 10) / 10
+  } catch {
+    // no sensor
+  }
+  try {
+    const mem = await fsp.readFile('/proc/meminfo', 'utf8')
+    const kb = (k: string) => Number(new RegExp(`^${k}:\\s+(\\d+)`, 'm').exec(mem)?.[1] ?? Number.NaN)
+    const total = kb('MemTotal')
+    const avail = kb('MemAvailable')
+    if (total > 0 && Number.isFinite(avail)) out.ram_percent = Math.round((1 - avail / total) * 1000) / 10
+  } catch {
+    // none
+  }
+  try {
+    const st = await fsp.statfs('/')
+    if (st.blocks > 0) out.disk_percent = Math.round((1 - st.bavail / st.blocks) * 1000) / 10
+  } catch {
+    // none
+  }
+  return out
+}
+
+/** The box's outputs as Home Assistant's select lists them (backend audio-output.ts, asked on port 8200 from the box) */
+interface OutputTarget {
+  id: string
+  name: string
+  subtitle: string
+  selectable: boolean
+  available: boolean
+  active: boolean
+}
+async function outputTargets(): Promise<OutputTarget[]> {
+  const r = await fetch(`${SELF}/api/audio-output`, { signal: AbortSignal.timeout(15000) })
+  if (!r.ok) throw new Error(`audio-output ${r.status}`)
+  const o = (await r.json()) as {
+    current?: string
+    devices?: Array<{ mac: string; name: string; connected: boolean; battery?: number }>
+    cards?: Array<{ id: string; name: string; desc: string; kind: string }>
+  }
+  const current = String(o.current ?? 'box')
+  const targets: OutputTarget[] = []
+  const cards = o.cards ?? []
+  if (cards.length < 2) targets.push({ id: 'box', name: 'Box', subtitle: 'Speaker', selectable: true, available: true, active: current === 'box' })
+  for (const c of cards) {
+    targets.push({ id: `card:${c.id}`, name: c.kind === 'amp' ? 'Box' : c.name, subtitle: c.desc || c.kind, selectable: true, available: true, active: current === `card:${c.id}` })
+  }
+  for (const d of o.devices ?? []) {
+    // (a paired device that is off can be chosen: the box connects it, or says it was not found)
+    targets.push({ id: d.mac, name: d.name, subtitle: d.connected ? (Number.isInteger(d.battery) ? `Bluetooth · ${d.battery} %` : 'Bluetooth') : 'Bluetooth (off)', selectable: true, available: true, active: current === d.mac })
+  }
+  return targets
+}
+
 function provider(player: string, source: string): string | null {
   if (!player) return null
   if (player === 'spotify') return 'spotify'
@@ -278,7 +357,10 @@ function buildApp(deps: HaDeps): Express {
   })
 
   v1.get('/state', requireScope('read'), async (_req, res) => {
-    const [snap, bat, dbm, mute] = await Promise.all([playbackSnapshot(deps.covers).catch(() => null), battery(deps), wifiSignalDbm(), muted()])
+    const [snap, bat, dbm, mute, sys] = await Promise.all([playbackSnapshot(deps.covers).catch(() => null), battery(deps), wifiSignalDbm(), muted(), metrics()])
+    // (Spotify's cover as its own address - splitti's integration takes only i.scdn.co/mosaic.scdn.co; the box's own
+    // pictures through /media/cover/current)
+    const spotifyCover = snap?.coverUrl && /^https:\/\/(i|mosaic)\.scdn\.co\//.test(snap.coverUrl) ? snap.coverUrl : null
     const playback = snap
       ? {
           state: !snap.player ? 'idle' : snap.playing ? 'playing' : 'paused',
@@ -289,7 +371,7 @@ function buildApp(deps: HaDeps): Express {
           media_id: null,
           duration: snap.durationMs != null ? Math.round(snap.durationMs / 1000) : null,
           position: snap.progressMs != null ? Math.round(snap.progressMs / 1000) : null,
-          cover_url: snap.coverUrl ? '/api/ha/v1/media/cover/current' : null,
+          cover_url: spotifyCover ?? (snap.coverUrl ? '/api/ha/v1/media/cover/current' : null),
           volume: snap.volume,
           muted: mute,
         }
@@ -297,6 +379,7 @@ function buildApp(deps: HaDeps): Express {
     res.json({
       playback,
       device: { battery_percent: bat.percent, charging: bat.charging, wifi_signal_dbm: dbm, ip_address: ipAddress(), uptime_seconds: Math.round(os.uptime()) },
+      metrics: sys,
     })
   })
 
@@ -317,6 +400,42 @@ function buildApp(deps: HaDeps): Express {
       res.type(type).send(bytes)
     } catch {
       fail(res, 503, 'temporarily_unavailable', 'The cover could not be fetched')
+    }
+  })
+
+  /** GET /outputs (read) - where the box can play: its speaker (or its sound cards) and the paired Bluetooth devices */
+  v1.get('/outputs', requireScope('read'), async (_req, res) => {
+    try {
+      res.json({ targets: await outputTargets() })
+    } catch {
+      fail(res, 503, 'temporarily_unavailable', 'The outputs could not be read')
+    }
+  })
+
+  /** POST /outputs/select {target_id} (control) - play there (a Bluetooth device is connected first, up to ~15 s) */
+  v1.post('/outputs/select', requireScope('control'), async (req, res) => {
+    const id = (req.body as { target_id?: unknown } | undefined)?.target_id
+    if (typeof id !== 'string' || !id) return fail(res, 400, 'invalid_request', 'target_id is missing')
+    let known: OutputTarget[]
+    try {
+      known = await outputTargets()
+    } catch {
+      return fail(res, 503, 'temporarily_unavailable', 'The outputs could not be read')
+    }
+    if (!known.some((t) => t.id === id)) return fail(res, 400, 'invalid_value', 'Unknown output')
+    try {
+      const r = await fetch(`${SELF}/api/audio-output`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: id }),
+        signal: AbortSignal.timeout(45000),
+      })
+      if (r.ok) return void res.json({ success: true })
+      if (r.status === 504) return fail(res, 409, 'provider_unavailable', 'The device was not found - is it switched on?')
+      if (r.status === 409) return fail(res, 409, 'provider_unavailable', 'Another switch is running')
+      return fail(res, 503, 'temporarily_unavailable', `The switch answered ${r.status}`)
+    } catch {
+      fail(res, 503, 'temporarily_unavailable', 'The switch did not answer')
     }
   })
 
