@@ -9,7 +9,8 @@
  * - Pairing: opened for 60 s in the app (Einstellungen › Home Assistant, a signed-in parent); /pair/start then shows a
  *   six-digit code and the requested rights on the display (never in an answer or a log); /pair/confirm with it gives
  *   one bearer token per Home Assistant, kept hashed (ha-store.ts), revocable in the app.
- * - Rights: read and control (phase 1). notify, power and admin are not granted yet (restart/shutdown: 403).
+ * - Rights: read and control; notify (a message on the display, an announcement) and power (restart, shutdown) only
+ *   when they are allowed on the display while pairing ("Alles erlauben"). admin is not offered.
  * - Every error as {success:false, error, message} with the contract's HTTP status.
  *
  * Switched on and off in the app (mupibox.homeAssistant.enabled); off, nothing listens and nothing is announced.
@@ -22,6 +23,8 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from 'n
 import os from 'node:os'
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response, type Router } from 'express'
 import { headphonesPlaying } from '../audio-output'
+import { compareVersions, officialVersions, parseInstalled } from '../eltern/updates'
+import { announce, speechOf } from '../speech'
 import { isLoopback } from '../request-guard'
 import { type PlaybackCovers, playbackSnapshot } from '../playback-snapshot'
 import { clientByToken, deviceId, type HaClient, HA_DIR, readClients, type Scope, SCOPES, tokenHash, updateClients } from './ha-store'
@@ -32,9 +35,12 @@ const SELF = 'http://127.0.0.1:8200'
 const TLS_SCRIPT = '/usr/local/bin/mupibox/ha_tls.sh'
 const MDNS_SCRIPT = '/usr/local/bin/mupibox/ha_mdns.sh'
 const CA_FILE = '/etc/mupibox/tls/ca.crt'
-/** what phase 1 grants (the others need their own approval on the display, later) */
-const GRANTABLE: Scope[] = ['read', 'control']
-const CAPABILITIES = ['play', 'pause', 'stop', 'next', 'previous', 'set_volume', 'mute', 'unmute', 'seek', 'media_metadata']
+/** granted with the code alone */
+const BASIC: Scope[] = ['read', 'control']
+/** granted only when allowed on the display as well */
+const EXTRA: Scope[] = ['notify', 'power']
+const CAPABILITIES = ['play', 'pause', 'stop', 'next', 'previous', 'set_volume', 'mute', 'unmute', 'seek', 'media_metadata', 'outputs', 'screenshot', 'update', 'message', 'speak', 'reboot', 'shutdown']
+const SCREENSHOT_FILE = '/tmp/mupibox-ha-screenshot.png'
 const PAIRING_WINDOW_S = 60
 const PAIRING_TTL_S = 300
 const MAX_FAILS = 5
@@ -100,6 +106,9 @@ interface Pending {
   client_name: string
   requested: Scope[]
   granted: Scope[]
+  /** notify/power asked for: allowed or not on the display before the code is shown */
+  extra: Scope[]
+  decided: boolean
   code: string
   expiresAt: number
   fails: number
@@ -128,9 +137,30 @@ function pendingAlive(): Pending | null {
 }
 
 /** What the box's display shows (GET /api/ha-pairing, loopback only) */
+/** A message Home Assistant sent for the display (POST /message), while it is to be shown */
+export function messageForDisplay(): { title: string; text: string; expires_in: number } | null {
+  if (!message || Date.now() > message.until) {
+    message = null
+    return null
+  }
+  return { title: message.title, text: message.text, expires_in: Math.ceil((message.until - Date.now()) / 1000) }
+}
+
 export function pairingForDisplay(): Record<string, unknown> {
   const p = pendingAlive()
   const now = Date.now()
+  if (p && !p.decided) {
+    // (first the rights beyond showing and controlling: allowed or not - the code comes after that)
+    return {
+      active: true,
+      stage: 'approve',
+      client_name: p.client_name,
+      scopes: p.granted,
+      extra: p.extra,
+      expires_in: Math.max(0, Math.round((p.expiresAt - now) / 1000)),
+      fingerprint: groupedFingerprint(),
+    }
+  }
   if (p) {
     return {
       active: true,
@@ -312,6 +342,36 @@ async function playerCommand(path: string): Promise<{ ok: boolean; status: numbe
   return { ok: r.ok, status: r.status, body }
 }
 
+// ---- phase 2: screenshot, message, quiet time, power -----------------------------------------------------------------
+
+let lastShot = 0
+let shooting: Promise<boolean> | undefined
+/** a message for the display (POST /message), shown until `until` */
+let message: { title: string; text: string; until: number } | null = null
+
+function wakeDisplay(): void {
+  execFile('xset', ['dpms', 'force', 'on'], { env: { ...process.env, DISPLAY: ':0' }, timeout: 5000 }, () => undefined)
+  execFile('xset', ['s', 'reset'], { env: { ...process.env, DISPLAY: ':0' }, timeout: 5000 }, () => undefined)
+}
+
+/** quiet hours (or "Ruhe sofort") hold the box now: no message on the display, no announcement */
+async function quietNow(): Promise<boolean> {
+  try {
+    const r = await fetch(`${SELF}/api/playtime`, { signal: AbortSignal.timeout(3000) })
+    const st = (await r.json()) as { quiet?: { inWindow?: unknown; state?: unknown }; override?: { forceBlockUntil?: unknown } }
+    return st.quiet?.inWindow === true || (typeof st.override?.forceBlockUntil === 'number' && st.override.forceBlockUntil > Date.now())
+  } catch {
+    return false
+  }
+}
+
+/** restart or shutdown a moment after the answer (as the app's buttons: restart.sh / shutdown.sh) */
+function powerAction(action: 'reboot' | 'poweroff', client?: HaClient): void {
+  log(`${action} asked for by "${client?.client_name ?? '?'}"`)
+  const script = action === 'reboot' ? '/usr/local/bin/mupibox/restart.sh' : '/usr/local/bin/mupibox/shutdown.sh'
+  setTimeout(() => execFile('sudo', ['sh', '-c', `${script} &`], { timeout: 10000 }, () => undefined), 1500)
+}
+
 function buildApp(deps: HaDeps): Express {
   const app = express()
   app.disable('x-powered-by')
@@ -353,6 +413,8 @@ function buildApp(deps: HaDeps): Express {
       manufacturer: 'MuPiBox',
       model: 'MuPiBox Classic',
       capabilities: CAPABILITIES,
+      // (splitti's integration shows whether announcements can be made)
+      tts: { enabled: speechOf(deps.getMupiboxConfig()).engine !== 'off' },
     })
   })
 
@@ -439,6 +501,70 @@ function buildApp(deps: HaDeps): Express {
     }
   })
 
+  /** GET /screenshot (read) - what the display shows (PNG; one picture at most every 2 s) */
+  v1.get('/screenshot', requireScope('read'), async (_req, res) => {
+    if (Date.now() - lastShot > 2000) {
+      shooting ??= run('sh', ['-c', `DISPLAY=:0 XAUTHORITY=/home/dietpi/.Xauthority scrot -o ${SCREENSHOT_FILE}`], 8000).then((r) => {
+        shooting = undefined
+        if (r.ok) lastShot = Date.now()
+        return r.ok
+      })
+      await shooting
+    }
+    if (!lastShot) return fail(res, 503, 'temporarily_unavailable', 'No picture of the display')
+    res.type('image/png').sendFile(SCREENSHOT_FILE, (err) => {
+      if (err && !res.headersSent) fail(res, 503, 'temporarily_unavailable', 'No picture of the display')
+    })
+  })
+
+  /** GET /update (read) - a newer version of the box's channel (stable, beta, dev) */
+  v1.get('/update', requireScope('read'), async (_req, res) => {
+    const installed = String((deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined)?.version ?? '')
+    const mine = parseInstalled(installed)
+    const latest = await officialVersions().catch(() => null)
+    if (!latest) return fail(res, 503, 'temporarily_unavailable', 'The versions could not be read (internet?)')
+    const newer = latest[mine.channel]
+    res.json({
+      update_available: !!(newer && mine.number && compareVersions(newer.version, mine.number) > 0),
+      channel: mine.channel,
+      installed,
+      release: newer ? { version: newer.version } : null,
+    })
+  })
+
+  /** POST /message {message, title?, duration_ms?} (notify) - shown on the box's display (not in quiet hours) */
+  v1.post('/message', requireScope('notify'), async (req, res) => {
+    const body = (req.body ?? {}) as { message?: unknown; title?: unknown; duration_ms?: unknown }
+    const text = typeof body.message === 'string' ? body.message.trim() : ''
+    if (!text) return fail(res, 400, 'invalid_request', 'message is missing')
+    if (text.length > 300) return fail(res, 400, 'invalid_value', 'message is longer than 300 characters')
+    if (await quietNow()) return fail(res, 409, 'provider_unavailable', 'Quiet time on the box - nothing is shown')
+    const ms = typeof body.duration_ms === 'number' && Number.isFinite(body.duration_ms) ? body.duration_ms : 8000
+    message = { title: typeof body.title === 'string' ? body.title.trim().slice(0, 60) : '', text, until: Date.now() + Math.max(2000, Math.min(60000, ms)) }
+    wakeDisplay()
+    res.json({ success: true })
+  })
+
+  /** POST /speak {text} (notify) - an announcement through the box's speech output (not in quiet hours) */
+  v1.post('/speak', requireScope('notify'), async (req, res) => {
+    const text = typeof (req.body as { text?: unknown } | undefined)?.text === 'string' ? String((req.body as { text: string }).text).trim() : ''
+    if (!text) return fail(res, 400, 'invalid_request', 'text is missing')
+    if (text.length > 300) return fail(res, 400, 'invalid_value', 'text is longer than 300 characters')
+    if (speechOf(deps.getMupiboxConfig()).engine === 'off') return fail(res, 409, 'provider_unavailable', 'The speech output of the box is switched off')
+    if (await quietNow()) return fail(res, 409, 'provider_unavailable', 'Quiet time on the box - nothing is said')
+    // (said in the background: the announcement waits for what plays, and takes seconds)
+    announce(deps.getMupiboxConfig, text).catch(() => false)
+    res.status(202).json({ success: true, accepted: true })
+  })
+
+  /** POST /power {action: reboot | poweroff} (power) */
+  v1.post('/power', requireScope('power'), (req, res) => {
+    const action = (req.body as { action?: unknown } | undefined)?.action
+    if (action !== 'reboot' && action !== 'poweroff') return fail(res, 400, 'invalid_value', 'action must be reboot or poweroff')
+    powerAction(action, (req as Request & { haClient?: HaClient }).haClient)
+    res.status(202).json({ success: true, accepted: true })
+  })
+
   v1.post('/control', async (req, res) => {
     const body = (req.body ?? {}) as { command?: unknown; value?: unknown; position?: unknown }
     const command = typeof body.command === 'string' ? body.command : ''
@@ -446,9 +572,10 @@ function buildApp(deps: HaDeps): Express {
     const client = await clientByToken(bearer(req)).catch(() => null)
     if (!client) return fail(res, 401, 'unauthorized', 'Missing, invalid or revoked token')
     if (command === 'restart' || command === 'shutdown') {
-      // (power is a right of its own, never part of control - and not granted in this version)
+      // (power is a right of its own, never part of control)
       if (!client.scopes.includes('power')) return fail(res, 403, 'insufficient_scope', 'Restart and shutdown need the right "power"')
-      return fail(res, 422, 'unsupported_command', 'Restart and shutdown are not offered yet')
+      powerAction(command === 'restart' ? 'reboot' : 'poweroff', client)
+      return void res.status(202).json({ success: true, accepted: true })
     }
     if (!client.scopes.includes('control')) return fail(res, 403, 'insufficient_scope', 'This needs the right "control"')
     try {
@@ -504,7 +631,8 @@ function buildApp(deps: HaDeps): Express {
     if (!UUIDISH.test(clientId) || !clientName) return fail(res, 400, 'invalid_request', 'client_id and client_name are needed')
     const requested = Array.isArray(body.requested_scopes) ? body.requested_scopes : ['read', 'control']
     if (!requested.every((s) => typeof s === 'string' && (SCOPES as string[]).includes(s))) return fail(res, 400, 'invalid_value', 'Unknown scope')
-    const granted = GRANTABLE.filter((s) => requested.includes(s))
+    const granted = BASIC.filter((s) => requested.includes(s))
+    const extra = EXTRA.filter((s) => requested.includes(s))
     if (!granted.length) return fail(res, 400, 'invalid_value', 'None of the requested scopes can be granted')
     if (pendingAlive()) return fail(res, 409, 'pairing_in_progress', 'Another pairing is waiting for its code')
     if (windowUntil <= Date.now()) return fail(res, 403, 'pairing_not_enabled', 'Open the pairing in the MuPiBox app first (Settings › Home Assistant)')
@@ -515,11 +643,13 @@ function buildApp(deps: HaDeps): Express {
       client_name: clientName,
       requested: requested as Scope[],
       granted,
+      extra,
+      decided: extra.length === 0,
       code: String(randomInt(0, 1000000)).padStart(6, '0'),
       expiresAt: Date.now() + PAIRING_TTL_S * 1000,
       fails: 0,
     }
-    log(`pairing started by "${clientName}" (${granted.join(', ')}) - the code is on the display`)
+    log(`pairing started by "${clientName}" (${granted.join(', ')}${extra.length ? `, asks for ${extra.join(', ')}` : ''}) - the code is on the display`)
     res.json({ pairing_id: pending.pairing_id, expires_in: PAIRING_TTL_S, code_length: 6, confirmation: 'display_code' })
   })
 
@@ -534,6 +664,7 @@ function buildApp(deps: HaDeps): Express {
     const p = pendingAlive()
     if (!p || p.pairing_id !== body.pairing_id) return fail(res, 410, 'pairing_expired', 'This pairing has expired or was ended')
     if (p.client_id !== body.client_id) return fail(res, 400, 'invalid_request', 'client_id is not the one of the start')
+    if (!p.decided) return fail(res, 403, 'invalid_pairing_code', 'The rights are not decided on the display yet')
     // (only spaces are taken out; compared in constant time)
     const given = Buffer.from(body.code.replace(/\s+/g, ''), 'utf8')
     const want = Buffer.from(p.code, 'utf8')
@@ -708,7 +839,24 @@ export function registerHaDisplayRoute(app: Express): void {
     // (isLoopback: on port 8200 from the box itself - not what lighttpd forwards from the network, see request-guard.ts)
     if (!isLoopback(req)) return void res.status(404).end()
     res.setHeader('Cache-Control', 'no-store')
-    res.json(pairingForDisplay())
+    res.json({ ...pairingForDisplay(), message: messageForDisplay() })
+  })
+  /** POST /api/ha-pairing/approve {all} - on the display: the extra rights (notify, power) allowed or not; then the code */
+  app.post('/api/ha-pairing/approve', (req, res) => {
+    if (!isLoopback(req)) return void res.status(404).end()
+    const p = pendingAlive()
+    if (!p || p.decided) return void res.status(409).json({ error: 'nothing to decide' })
+    const all = (req.body as { all?: unknown } | undefined)?.all === true
+    if (all) p.granted = [...p.granted, ...p.extra]
+    p.decided = true
+    log(`rights decided on the display: ${p.granted.join(', ')}`)
+    res.json({ ok: true, scopes: p.granted })
+  })
+  /** POST /api/ha-pairing/message/close - the message closed on the display */
+  app.post('/api/ha-pairing/message/close', (req, res) => {
+    if (!isLoopback(req)) return void res.status(404).end()
+    message = null
+    res.json({ ok: true })
   })
   /** POST /api/ha-pairing/open - opens the pairing for 60 s from the box itself (a local action, as the contract allows) */
   app.post('/api/ha-pairing/open', (req, res) => {

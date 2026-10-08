@@ -56,6 +56,11 @@ export const DEFAULT_DISPLAY_TEXTS = {
   haScopeRead: 'see what is playing',
   haScopeControl: 'control playback',
   haCancel: 'Cancel',
+  haAlso: 'It also asks for:',
+  haScopeNotify: 'messages and announcements',
+  haScopePower: 'restart and switch off',
+  haAllowAll: 'Allow all',
+  haOnlyBasic: 'Only show and control',
 }
 export type DisplayTextKey = keyof typeof DEFAULT_DISPLAY_TEXTS
 type TextSet = Partial<Record<DisplayTextKey, string>>

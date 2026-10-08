@@ -40,7 +40,12 @@
         "haCode": "Enter this code in Home Assistant:",
         "haScopeRead": "see what is playing",
         "haScopeControl": "control playback",
-        "haCancel": "Cancel"
+        "haCancel": "Cancel",
+        "haAlso": "It also asks for:",
+        "haScopeNotify": "messages and announcements",
+        "haScopePower": "restart and switch off",
+        "haAllowAll": "Allow all",
+        "haOnlyBasic": "Only show and control"
       }
     },
     "de": {
@@ -82,7 +87,12 @@
         "haCode": "Gib diesen Code in Home Assistant ein:",
         "haScopeRead": "sehen, was läuft",
         "haScopeControl": "Wiedergabe steuern",
-        "haCancel": "Abbrechen"
+        "haCancel": "Abbrechen",
+        "haAlso": "Außerdem möchte es:",
+        "haScopeNotify": "Nachrichten und Ansagen",
+        "haScopePower": "Neustart und Ausschalten",
+        "haAllowAll": "Alles erlauben",
+        "haOnlyBasic": "Nur anzeigen und steuern"
       }
     },
     "fr": {
@@ -124,7 +134,12 @@
         "haCode": "Saisis ce code dans Home Assistant :",
         "haScopeRead": "voir ce qui joue",
         "haScopeControl": "piloter la lecture",
-        "haCancel": "Annuler"
+        "haCancel": "Annuler",
+        "haAlso": "Il demande aussi :",
+        "haScopeNotify": "messages et annonces",
+        "haScopePower": "redémarrer et éteindre",
+        "haAllowAll": "Tout autoriser",
+        "haOnlyBasic": "Seulement afficher et piloter"
       }
     },
     "es": {
@@ -166,7 +181,12 @@
         "haCode": "Introduce este código en Home Assistant:",
         "haScopeRead": "ver qué suena",
         "haScopeControl": "controlar la reproducción",
-        "haCancel": "Cancelar"
+        "haCancel": "Cancelar",
+        "haAlso": "También pide:",
+        "haScopeNotify": "mensajes y anuncios",
+        "haScopePower": "reiniciar y apagar",
+        "haAllowAll": "Permitir todo",
+        "haOnlyBasic": "Solo mostrar y controlar"
       }
     },
     "it": {
@@ -208,7 +228,12 @@
         "haCode": "Inserisci questo codice in Home Assistant:",
         "haScopeRead": "vedere cosa suona",
         "haScopeControl": "controllare la riproduzione",
-        "haCancel": "Annulla"
+        "haCancel": "Annulla",
+        "haAlso": "Chiede anche:",
+        "haScopeNotify": "messaggi e annunci",
+        "haScopePower": "riavviare e spegnere",
+        "haAllowAll": "Consenti tutto",
+        "haOnlyBasic": "Solo mostrare e controllare"
       }
     },
     "nl": {
@@ -250,7 +275,12 @@
         "haCode": "Voer deze code in Home Assistant in:",
         "haScopeRead": "zien wat er speelt",
         "haScopeControl": "afspelen bedienen",
-        "haCancel": "Annuleren"
+        "haCancel": "Annuleren",
+        "haAlso": "Het vraagt ook:",
+        "haScopeNotify": "berichten en aankondigingen",
+        "haScopePower": "herstarten en uitschakelen",
+        "haAllowAll": "Alles toestaan",
+        "haOnlyBasic": "Alleen tonen en bedienen"
       }
     },
     "sv": {
@@ -292,7 +322,12 @@
         "haCode": "Ange den här koden i Home Assistant:",
         "haScopeRead": "se vad som spelas",
         "haScopeControl": "styra uppspelningen",
-        "haCancel": "Avbryt"
+        "haCancel": "Avbryt",
+        "haAlso": "Den ber också om:",
+        "haScopeNotify": "meddelanden och utrop",
+        "haScopePower": "starta om och stänga av",
+        "haAllowAll": "Tillåt allt",
+        "haOnlyBasic": "Bara visa och styra"
       }
     },
     "da": {
@@ -334,7 +369,12 @@
         "haCode": "Indtast denne kode i Home Assistant:",
         "haScopeRead": "se hvad der spiller",
         "haScopeControl": "styre afspilningen",
-        "haCancel": "Annuller"
+        "haCancel": "Annuller",
+        "haAlso": "Den beder også om:",
+        "haScopeNotify": "beskeder og meddelelser",
+        "haScopePower": "genstart og sluk",
+        "haAllowAll": "Tillad alt",
+        "haOnlyBasic": "Kun vise og styre"
       }
     },
     "nb": {
@@ -376,7 +416,12 @@
         "haCode": "Skriv inn denne koden i Home Assistant:",
         "haScopeRead": "se hva som spilles",
         "haScopeControl": "styre avspillingen",
-        "haCancel": "Avbryt"
+        "haCancel": "Avbryt",
+        "haAlso": "Den ber også om:",
+        "haScopeNotify": "meldinger og kunngjøringer",
+        "haScopePower": "omstart og slå av",
+        "haAllowAll": "Tillat alt",
+        "haOnlyBasic": "Bare vise og styre"
       }
     },
     "fi": {
@@ -418,7 +463,12 @@
         "haCode": "Syötä tämä koodi Home Assistantiin:",
         "haScopeRead": "nähdä, mikä soi",
         "haScopeControl": "ohjata toistoa",
-        "haCancel": "Peruuta"
+        "haCancel": "Peruuta",
+        "haAlso": "Se pyytää myös:",
+        "haScopeNotify": "viestit ja kuulutukset",
+        "haScopePower": "uudelleenkäynnistys ja sammutus",
+        "haAllowAll": "Salli kaikki",
+        "haOnlyBasic": "Vain näyttää ja ohjata"
       }
     },
     "pl": {
@@ -460,7 +510,12 @@
         "haCode": "Wpisz ten kod w Home Assistant:",
         "haScopeRead": "widzieć, co gra",
         "haScopeControl": "sterować odtwarzaniem",
-        "haCancel": "Anuluj"
+        "haCancel": "Anuluj",
+        "haAlso": "Prosi też o:",
+        "haScopeNotify": "wiadomości i komunikaty",
+        "haScopePower": "ponowne uruchomienie i wyłączanie",
+        "haAllowAll": "Zezwól na wszystko",
+        "haOnlyBasic": "Tylko pokazywać i sterować"
       }
     },
     "pt": {
@@ -502,7 +557,12 @@
         "haCode": "Introduz este código no Home Assistant:",
         "haScopeRead": "ver o que está a tocar",
         "haScopeControl": "controlar a reprodução",
-        "haCancel": "Cancelar"
+        "haCancel": "Cancelar",
+        "haAlso": "Também pede:",
+        "haScopeNotify": "mensagens e anúncios",
+        "haScopePower": "reiniciar e desligar",
+        "haAllowAll": "Permitir tudo",
+        "haOnlyBasic": "Só mostrar e controlar"
       }
     },
     "tr": {
@@ -544,7 +604,12 @@
         "haCode": "Bu kodu Home Assistant’a gir:",
         "haScopeRead": "çalanı görmek",
         "haScopeControl": "oynatmayı kontrol etmek",
-        "haCancel": "İptal"
+        "haCancel": "İptal",
+        "haAlso": "Ayrıca şunları istiyor:",
+        "haScopeNotify": "mesajlar ve anonslar",
+        "haScopePower": "yeniden başlatma ve kapatma",
+        "haAllowAll": "Hepsine izin ver",
+        "haOnlyBasic": "Yalnızca göster ve kontrol et"
       }
     },
     "uk": {
@@ -586,7 +651,12 @@
         "haCode": "Введи цей код у Home Assistant:",
         "haScopeRead": "бачити, що грає",
         "haScopeControl": "керувати відтворенням",
-        "haCancel": "Скасувати"
+        "haCancel": "Скасувати",
+        "haAlso": "Також просить:",
+        "haScopeNotify": "повідомлення й оголошення",
+        "haScopePower": "перезапуск і вимкнення",
+        "haAllowAll": "Дозволити все",
+        "haOnlyBasic": "Лише показувати й керувати"
       }
     },
     "ru": {
@@ -628,7 +698,12 @@
         "haCode": "Введи этот код в Home Assistant:",
         "haScopeRead": "видеть, что играет",
         "haScopeControl": "управлять воспроизведением",
-        "haCancel": "Отмена"
+        "haCancel": "Отмена",
+        "haAlso": "Также просит:",
+        "haScopeNotify": "сообщения и объявления",
+        "haScopePower": "перезапуск и выключение",
+        "haAllowAll": "Разрешить всё",
+        "haOnlyBasic": "Только показывать и управлять"
       }
     },
     "cs": {
@@ -670,7 +745,12 @@
         "haCode": "Zadej tento kód do Home Assistant:",
         "haScopeRead": "vidět, co hraje",
         "haScopeControl": "ovládat přehrávání",
-        "haCancel": "Zrušit"
+        "haCancel": "Zrušit",
+        "haAlso": "Žádá také o:",
+        "haScopeNotify": "zprávy a hlášení",
+        "haScopePower": "restart a vypnutí",
+        "haAllowAll": "Povolit vše",
+        "haOnlyBasic": "Jen zobrazovat a ovládat"
       }
     },
     "el": {
@@ -712,7 +792,12 @@
         "haCode": "Πληκτρολόγησε αυτόν τον κωδικό στο Home Assistant:",
         "haScopeRead": "να βλέπει τι παίζει",
         "haScopeControl": "να ελέγχει την αναπαραγωγή",
-        "haCancel": "Ακύρωση"
+        "haCancel": "Ακύρωση",
+        "haAlso": "Ζητά επίσης:",
+        "haScopeNotify": "μηνύματα και ανακοινώσεις",
+        "haScopePower": "επανεκκίνηση και απενεργοποίηση",
+        "haAllowAll": "Να επιτρέπονται όλα",
+        "haOnlyBasic": "Μόνο εμφάνιση και έλεγχος"
       }
     }
   }

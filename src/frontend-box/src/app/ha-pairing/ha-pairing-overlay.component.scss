@@ -91,3 +91,47 @@
   padding: 10px 18px;
   font-size: 15px;
 }
+
+.ha-extra {
+  font-weight: 600;
+  color: #f4c46b;
+}
+
+// allow the extra rights or not: two buttons side by side
+.ha-choice {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 12px 0 4px;
+}
+
+.ha-btn {
+  background: transparent;
+  color: #e4e4e7;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 16px;
+}
+
+.ha-primary {
+  background: #2f7fc0;
+  border-color: #2f7fc0;
+  color: #fff;
+  font-weight: 600;
+}
+
+// a message Home Assistant sent: big and readable, a tap closes it
+.ha-msg {
+  max-width: 640px;
+
+  h2 {
+    font-size: 26px;
+  }
+}
+
+.ha-msg-text {
+  font-size: 22px !important;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}

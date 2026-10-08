@@ -9264,7 +9264,7 @@ function haTop() {
     <div class="btns"><button class="btn primary" id="ha-pair" ${left ? 'disabled' : ''}>${left ? `<span id="ha-left">Offen … noch ${left} s</span>` : 'Koppeln erlauben (60 s)'}</button>${left ? '<button class="btn" id="ha-pair-stop">Beenden</button>' : ''}</div>
     <div class="field"><label>Schlüssel der Box</label><code class="mono ha-key" translate="no">${esc(d.fingerprint ?? '')}</code><small>Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.</small></div></section>`
   const clients = d.clients ?? []
-  const scopeText = (list) => (list ?? []).map((x) => (x === 'read' ? 'Anzeigen' : x === 'control' ? 'Steuern' : x)).join(' · ')
+  const scopeText = (list) => (list ?? []).map((x) => (x === 'read' ? 'Anzeigen' : x === 'control' ? 'Steuern' : x === 'notify' ? 'Nachrichten und Ansagen' : x === 'power' ? 'Neu starten & Ausschalten' : x)).join(' · ')
   const paired = `<section class="card" data-col="1"><h2>Gekoppelt</h2>${
     clients.length
       ? `<div class="rows">${clients

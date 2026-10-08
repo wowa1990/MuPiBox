@@ -135,7 +135,7 @@ interface Release {
 let versionCache: { at: number; json: Record<string, unknown> } | null = null
 let devDateCache: { at: number; date: string } | null = null
 
-async function officialVersions(): Promise<Record<Channel, Release | null> | null> {
+export async function officialVersions(): Promise<Record<Channel, Release | null> | null> {
   if (!versionCache || Date.now() - versionCache.at > 3600_000) {
     try {
       const r = await fetch(`${REPO_RAW}/version.json`, { signal: AbortSignal.timeout(8000) })
