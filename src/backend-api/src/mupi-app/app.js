@@ -10104,6 +10104,7 @@ const CONTROLLERS = {
       const sc = hw.data.soundcard
       state.values.set('sound', sc.options.find((o) => o.id === sc.current)?.name ?? sc.current)
       state.values.set('jack', !!sc.onboard?.on)
+      state.values.set('hdmi', !!sc.hdmi?.on)
     },
     sections: (page) => [
       ...withoutSave(page).map((sec) => ({
@@ -10141,8 +10142,41 @@ const CONTROLLERS = {
             },
           ]
         : []),
+      // the HDMI sound as a sound card of its own, next to the box's card (not with the onboard output as the card)
+      ...(hw.data.soundcard.hdmi?.applicable
+        ? [
+            {
+              title: 'HDMI-Ton',
+              items: [
+                {
+                  type: 'toggle',
+                  key: 'hdmi',
+                  label: 'HDMI-Ausgang zusätzlich',
+                  help: [
+                    'Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.',
+                    hw.data.soundcard.hdmi.on && !hw.data.soundcard.hdmi.active ? 'Gilt nach einem Neustart der Box.' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                },
+              ],
+            },
+          ]
+        : []),
     ],
     async change(key, v, page) {
+      if (key === 'hdmi') {
+        const r = await api(`${API}/hdmi-audio`, { method: 'POST', body: { on: !!v } })
+        if (!r.ok || r.body?.ok === false) {
+          state.values.set('hdmi', !v)
+          renderPage(page, false)
+          return toast('Das hat nicht geklappt', 'info')
+        }
+        hw.data.soundcard.hdmi.on = !!v
+        renderPage(page, false)
+        if (r.body?.reboot) return offerReboot(v ? 'Der HDMI-Ausgang gilt nach einem Neustart.' : 'Der HDMI-Ausgang ist nach einem Neustart aus.')
+        return toast('Gespeichert')
+      }
       if (key === 'jack') {
         const r = await api(`${API}/onboard-audio`, { method: 'POST', body: { on: !!v } })
         if (!r.ok || r.body?.ok === false) {

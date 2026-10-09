@@ -2786,5 +2786,10 @@
  "العربية",
  "हिन्दी",
  "中文",
- "日本語"
+ "日本語",
+ "HDMI-Ton",
+ "HDMI-Ausgang zusätzlich",
+ "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.",
+ "Der HDMI-Ausgang gilt nach einem Neustart.",
+ "Der HDMI-Ausgang ist nach einem Neustart aus."
 ]
