@@ -9260,9 +9260,9 @@ function haTop() {
   if (!on || !d.listening) return [main]
   const left = Math.max(0, Math.round((haState.pairUntil - Date.now()) / 1000))
   const pair = `<section class="card" data-col="2"><h2>Koppeln</h2>
-    <p class="help">1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.</p>
-    <div class="btns"><button class="btn primary" id="ha-pair" ${left ? 'disabled' : ''}>${left ? `<span id="ha-left">Offen … noch ${left} s</span>` : 'Koppeln erlauben (60 s)'}</button>${left ? '<button class="btn" id="ha-pair-stop">Beenden</button>' : ''}</div>
-    <div class="field"><label>Schlüssel der Box</label><code class="mono ha-key" translate="no">${esc(d.fingerprint ?? '')}</code><small>Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.</small></div></section>`
+    <p class="help">1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.</p>
+    <div class="field"><label>Schlüssel der Box</label><p class="mono-block ha-key" id="ha-key" translate="no">${esc(d.fingerprint ?? '')}</p><div class="btns"><button class="btn" id="ha-copy">Schlüssel kopieren</button></div><small>Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.</small></div>
+    <div class="btns"><button class="btn primary" id="ha-pair" ${left ? 'disabled' : ''}>${left ? `<span id="ha-left">Offen … noch ${left} s</span>` : 'Koppeln erlauben (60 s)'}</button>${left ? '<button class="btn" id="ha-pair-stop">Beenden</button>' : ''}</div></section>`
   const clients = d.clients ?? []
   const scopeText = (list) => (list ?? []).map((x) => (x === 'read' ? 'Anzeigen' : x === 'control' ? 'Steuern' : x === 'notify' ? 'Nachrichten und Ansagen' : x === 'power' ? 'Neu starten & Ausschalten' : x)).join(' · ')
   const paired = `<section class="card" data-col="1"><h2>Gekoppelt</h2>${
@@ -9289,6 +9289,8 @@ function mountHa(root, page) {
     const r = await api(`${API}/ha/enabled`, { method: 'POST', body: { on } })
     again(r.ok && r.body?.ok ? (on ? 'Home Assistant erlaubt' : 'Home Assistant aus') : 'Das hat nicht geklappt', r.ok && r.body?.ok ? 'ok' : 'info')
   }
+  // (the 64 hex characters without the spaces of the grouping - what Home Assistant takes)
+  $('#ha-copy', root)?.addEventListener('click', () => copyText(String(haState.data?.fingerprint ?? '').replace(/\s+/g, '').toLowerCase(), $('#ha-key', root)))
   $('#ha-pair', root)?.addEventListener('click', async () => {
     const r = await api(`${API}/ha/pairing`, { method: 'POST', body: {} })
     if (!r.ok) return toast(r.body?.error === 'pairing_in_progress' ? 'Eine Kopplung läuft schon – am Display abbrechen oder warten' : 'Das hat nicht geklappt', 'info')
@@ -11017,16 +11019,37 @@ function confirmSheet(title, text, onOk) {
   )
 }
 
-function copyText(text) {
+// Copies from a click: the clipboard API where the browser has it (https), else - also when it refuses - the old way
+// with a hidden text field (the app on http). When both fail, never "Kopiert": the shown element (if given) is
+// selected for copying by hand.
+async function copyText(text, shown) {
   const done = () => toast('Kopiert')
-  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(done, () => toast('Kopieren ging nicht', 'info'))
-  const ta = Object.assign(document.createElement('textarea'), { value: text })
-  ta.style.cssText = 'position:fixed;opacity:0'
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return done()
+    } catch {}
+  }
+  const ta = Object.assign(document.createElement('textarea'), { value: text, readOnly: true })
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
   document.body.append(ta)
+  ta.focus()
   ta.select()
-  const ok = document.execCommand('copy')
+  let ok = false
+  try {
+    ok = document.execCommand('copy')
+  } catch {}
   ta.remove()
-  ok ? done() : toast(`Bitte von Hand kopieren: ${text}`, 'info')
+  if (ok) return done()
+  if (shown) {
+    const range = document.createRange()
+    range.selectNodeContents(shown)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(range)
+    return toast('Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)', 'info')
+  }
+  toast(`Bitte von Hand kopieren: ${text}`, 'info')
 }
 
 // A message at the bottom. Answers whether it was a success ('ok'): a page's change() that ends with

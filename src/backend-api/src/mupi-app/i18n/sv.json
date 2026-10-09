@@ -173,7 +173,6 @@
  "1 h 30 min": "1 h 30 min",
  "1 Jahr": "1 år",
  "1 Monat": "1 månad",
- "1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.": "1. Tryck här på ”Tillåt parkoppling”. 2. Lägg till integrationen ”MuPiBox” i Home Assistant – boxen hittas, annars ange adressen ovan. 3. Jämför nyckeln och ange koden som boxens display visar.",
  "10 min": "10 min",
  "10 min · 10×": "10 min · 10×",
  "11 Alben": "11 album",
@@ -1463,7 +1462,6 @@
  "Home Assistant erlauben": "Tillåt Home Assistant",
  "Home Assistant erlaubt": "Home Assistant tillåtet",
  "Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.": "Home Assistant kan då visa och styra boxen (integrationen ”MuPiBox” via HACS). Bara i hemnätverket och krypterat.",
- "Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.": "Home Assistant visar samma nyckel vid parkopplingen. Stämmer den inte, parkoppla inte.",
  "Home-Assistant-Topic": "Home Assistant-topic",
  "Hör-Verlauf": "Lyssnarhistorik",
  "Hörbuch": "Ljudbok",
@@ -1622,7 +1620,6 @@
  "Kopfhörerbuchse": "Hörlursuttag",
  "Kopfzeile mit Hintergrund": "Sidhuvud med bakgrund",
  "Kopieren": "Kopiera",
- "Kopieren ging nicht": "Kopieringen gick inte",
  "Kopiert": "Kopierat",
  "Koppeln": "Parkoppla",
  "Koppeln beendet": "Parkoppling avslutad",
@@ -2790,5 +2787,9 @@
  "HDMI-Ausgang zusätzlich": "HDMI-utgång också",
  "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.": "För en skärm eller tv på HDMI-porten, bredvid boxens ljudkort. Du väljer den i spelaren under «Lyssna med» eller i appen vid utgången.",
  "Der HDMI-Ausgang gilt nach einem Neustart.": "HDMI-utgången gäller efter en omstart.",
- "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI-utgången är av efter en omstart."
+ "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI-utgången är av efter en omstart.",
+ "1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.": "1. Lägg till integrationen «MuPiBox» i Home Assistant – boxen hittas, annars anger du adressen ovan. 2. Kopiera nyckeln nedan och klistra in den i Home Assistant. 3. Tryck här på «Tillåt parkoppling» och i Home Assistant på «Skicka». 4. Ange koden som boxens skärm visar.",
+ "Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.": "Home Assistant frågar efter den här nyckeln vid parkoppling. Den bevisar att Home Assistant pratar med den här boxen – klistra aldrig in en nyckel från någon annan källa.",
+ "Schlüssel kopieren": "Kopiera nyckel",
+ "Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)": "Markerat – kopiera det själv (Ctrl+C eller «Kopiera»)"
 }

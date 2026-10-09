@@ -173,7 +173,6 @@
  "1 h 30 min": "1 h 30 min",
  "1 Jahr": "1 yıl",
  "1 Monat": "1 ay",
- "1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.": "1. Burada “Eşleştirmeye izin ver”e dokun. 2. Home Assistant’a “MuPiBox” entegrasyonunu ekle – kutu bulunur, bulunmazsa yukarıdaki adresi gir. 3. Anahtarı karşılaştır ve kutunun ekranında görünen kodu gir.",
  "10 min": "10 min",
  "10 min · 10×": "10 dk · 10×",
  "11 Alben": "11 albüm",
@@ -1463,7 +1462,6 @@
  "Home Assistant erlauben": "Home Assistant’a izin ver",
  "Home Assistant erlaubt": "Home Assistant’a izin verildi",
  "Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.": "Home Assistant bu durumda kutuyu gösterebilir ve kontrol edebilir (HACS üzerinden “MuPiBox” entegrasyonu). Yalnızca ev ağında ve şifreli.",
- "Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.": "Home Assistant eşleştirirken aynı anahtarı gösterir. Uyuşmuyorsa eşleştirme.",
  "Home-Assistant-Topic": "Home Assistant topic'i",
  "Hör-Verlauf": "Dinleme geçmişi",
  "Hörbuch": "Sesli kitap",
@@ -1622,7 +1620,6 @@
  "Kopfhörerbuchse": "Kulaklık girişi",
  "Kopfzeile mit Hintergrund": "Arka planlı başlık",
  "Kopieren": "Kopyala",
- "Kopieren ging nicht": "Kopyalama işe yaramadı",
  "Kopiert": "Kopyalandı",
  "Koppeln": "Eşleştir",
  "Koppeln beendet": "Eşleştirme bitti",
@@ -2790,5 +2787,9 @@
  "HDMI-Ausgang zusätzlich": "Ayrıca HDMI çıkışı",
  "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.": "HDMI bağlantısındaki bir monitör veya televizyon için, kutunun ses kartının yanında. Oynatıcıda «Şununla dinle» üzerinden veya uygulamada çıkış satırında seçilir.",
  "Der HDMI-Ausgang gilt nach einem Neustart.": "HDMI çıkışı yeniden başlatmadan sonra geçerli olur.",
- "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI çıkışı yeniden başlatmadan sonra kapalıdır."
+ "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI çıkışı yeniden başlatmadan sonra kapalıdır.",
+ "1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.": "1. Home Assistant’ta «MuPiBox» entegrasyonunu ekleyin – kutu bulunur, bulunmazsa yukarıdaki adresi girin. 2. Aşağıdaki anahtarı kopyalayıp Home Assistant’a yapıştırın. 3. Burada «Eşleştirmeye izin ver»e, Home Assistant’ta «Gönder»e dokunun. 4. Kutunun ekranında görünen kodu girin.",
+ "Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.": "Home Assistant eşleştirme sırasında bu anahtarı sorar. Home Assistant’ın bu kutuyla konuştuğunu kanıtlar – başka bir kaynaktan gelen anahtarı asla yapıştırmayın.",
+ "Schlüssel kopieren": "Anahtarı kopyala",
+ "Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)": "Seçildi – lütfen kendiniz kopyalayın (Ctrl+C veya «Kopyala»)"
 }

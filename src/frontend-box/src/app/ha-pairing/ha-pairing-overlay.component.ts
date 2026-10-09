@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
-import { catchError, interval, of, startWith, switchMap } from 'rxjs'
+import { catchError, filter, interval, of, startWith, switchMap } from 'rxjs'
 import { environment } from 'src/environments/environment'
 import { DisplayTextsService } from '../display-texts.service'
 
@@ -27,7 +27,7 @@ interface HaPairing {
  * Home Assistant on the box's own display: pairing - the key's fingerprint to compare with the one Home Assistant
  * shows, the rights beyond showing and controlling to allow or not, then the six-digit code (never in an answer to the
  * network, see the backend: whoever reads it stands at the box) - and the messages Home Assistant sends. Asked every
- * 2 s; the backend answers on the box itself only.
+ * 2 s (every second while something is shown); the backend answers on the box itself only.
  */
 @Component({
   selector: 'mupi-ha-pairing-overlay',
@@ -55,9 +55,12 @@ export class HaPairingOverlayComponent {
   protected readonly extra = computed(() => this.scopeText(this.pairing().extra))
 
   constructor() {
-    interval(2000)
+    // every second while a pairing or a message is shown (the code goes the moment Home Assistant used it, contract
+    // 1.1.0), else every 2 s
+    interval(1000)
       .pipe(
         startWith(0),
+        filter((n) => n % 2 === 0 || this.pairing().active || !!this.pairing().message),
         switchMap(() => this.http.get<HaPairing>(`${environment.backend.apiUrl}/ha-pairing`).pipe(catchError(() => of({ active: false } as HaPairing)))),
         takeUntilDestroyed(inject(DestroyRef)),
       )

@@ -11,13 +11,15 @@ Unter **Einstellungen › Dienste › Home Assistant** schaltest du **Home Assis
 
 ## Koppeln
 
-1. In der App auf **Koppeln erlauben (60 s)** tippen.
-2. In Home Assistant die Integration **MuPiBox** hinzufügen. Die Box erscheint von selbst; sonst die Adresse eingeben, die die App anzeigt.
-3. Home Assistant zeigt einen **Schlüssel**. Das Display der Box zeigt denselben. Stimmen sie überein, in Home Assistant bestätigen. Stimmen sie nicht überein, abbrechen.
-4. Möchte Home Assistant mehr als anzeigen und steuern (**Nachrichten und Ansagen**, **Neustart und Ausschalten**), fragt das Display zuerst: **Alles erlauben** oder **Nur anzeigen und steuern**.
+1. In Home Assistant die Integration **MuPiBox** hinzufügen. Die Box erscheint von selbst; sonst die Adresse eingeben, die die App anzeigt.
+2. Home Assistant fragt nach dem **Schlüssel** der Box. In der App unter **Koppeln** auf **Schlüssel kopieren** tippen und ihn in Home Assistant einfügen. Dort lassen sich auch die zusätzlichen Rechte wählen (**Nachrichten und Ansagen**, **Neustart und Ausschalten**).
+3. In der App auf **Koppeln erlauben (60 s)** tippen, dann in Home Assistant auf **Weiter**.
+4. Hat Home Assistant mehr als anzeigen und steuern gewählt, fragt das Display zuerst: **Alles erlauben** oder **Nur anzeigen und steuern**.
 5. Das Display zeigt einen **sechsstelligen Code** und die Rechte, die Home Assistant bekommt. Den Code in Home Assistant eingeben.
 
-Der Code steht nur auf dem Display der Box. Wer ihn eingibt, hat die Box also vor sich. Er gilt 5 Minuten und nur einmal. Nach fünf falschen Versuchen ist die Kopplung beendet, und es geht nach einer Minute neu. Auch die zusätzlichen Rechte lassen sich nur am Display erlauben. Wer sie später doch geben will, entfernt die Kopplung und koppelt neu.
+Der Schlüssel beweist, dass Home Assistant wirklich mit deiner Box spricht und nicht mit einem anderen Gerät im Netz. Nimm ihn deshalb nur aus der App (oder vom Display der Box, das ihn beim Koppeln ebenfalls zeigt), nie aus einer anderen Quelle. Klappt das Kopieren im Browser nicht, markiert die App den Schlüssel, dann kopierst du ihn selbst.
+
+Der Code steht nur auf dem Display der Box. Wer ihn eingibt, hat die Box also vor sich. Er gilt 5 Minuten und nur einmal. Nach fünf falschen Versuchen ist die Kopplung beendet, und es geht nach einer Minute neu. Auch die zusätzlichen Rechte lassen sich nur am Display erlauben. Sollen sie später dazukommen oder wegfallen, in Home Assistant bei der MuPiBox auf **Konfigurieren** gehen: Home Assistant koppelt dann neu (wieder mit **Koppeln erlauben** in der App, Freigabe und Code am Display) und entfernt die alte Kopplung danach selbst.
 
 ## Was Home Assistant noch kann
 

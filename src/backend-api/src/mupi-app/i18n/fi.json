@@ -173,7 +173,6 @@
  "1 h 30 min": "1 h 30 min",
  "1 Jahr": "1 vuosi",
  "1 Monat": "1 kuukausi",
- "1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.": "1. Napauta tästä ”Salli yhdistäminen”. 2. Lisää Home Assistantiin integraatio ”MuPiBox” – laatikko löytyy, muuten syötä yllä oleva osoite. 3. Vertaa avainta ja syötä koodi, jonka laatikon näyttö näyttää.",
  "10 min": "10 min",
  "10 min · 10×": "10 min · 10×",
  "11 Alben": "11 albumia",
@@ -1463,7 +1462,6 @@
  "Home Assistant erlauben": "Salli Home Assistant",
  "Home Assistant erlaubt": "Home Assistant sallittu",
  "Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.": "Home Assistant voi silloin näyttää ja ohjata laatikkoa (integraatio ”MuPiBox” HACSin kautta). Vain kotiverkossa ja salattuna.",
- "Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.": "Home Assistant näyttää yhdistettäessä saman avaimen. Jos se ei täsmää, älä yhdistä.",
  "Home-Assistant-Topic": "Home Assistant -topic",
  "Hör-Verlauf": "Kuunteluhistoria",
  "Hörbuch": "Äänikirja",
@@ -1622,7 +1620,6 @@
  "Kopfhörerbuchse": "Kuulokeliitäntä",
  "Kopfzeile mit Hintergrund": "Yläpalkki taustalla",
  "Kopieren": "Kopioi",
- "Kopieren ging nicht": "Kopiointi ei onnistunut",
  "Kopiert": "Kopioitu",
  "Koppeln": "Paritus",
  "Koppeln beendet": "Yhdistäminen lopetettu",
@@ -2790,5 +2787,9 @@
  "HDMI-Ausgang zusätzlich": "Myös HDMI-lähtö",
  "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.": "Näytölle tai televisiolle HDMI-liitännässä, laatikon äänikortin rinnalle. Valitse se soittimessa kohdasta «Kuuntele» tai sovelluksessa ulostulon rivillä.",
  "Der HDMI-Ausgang gilt nach einem Neustart.": "HDMI-lähtö tulee voimaan uudelleenkäynnistyksen jälkeen.",
- "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI-lähtö on pois uudelleenkäynnistyksen jälkeen."
+ "Der HDMI-Ausgang ist nach einem Neustart aus.": "HDMI-lähtö on pois uudelleenkäynnistyksen jälkeen.",
+ "1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.": "1. Lisää Home Assistantiin integraatio «MuPiBox» – laatikko löytyy, muuten syötä yllä oleva osoite. 2. Kopioi alla oleva avain ja liitä se Home Assistantiin. 3. Napauta tässä «Salli parinmuodostus» ja Home Assistantissa «Lähetä». 4. Syötä koodi, jonka laatikon näyttö näyttää.",
+ "Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.": "Home Assistant kysyy tätä avainta parinmuodostuksessa. Se todistaa, että Home Assistant puhuu juuri tämän laatikon kanssa – älä koskaan liitä avainta muualta.",
+ "Schlüssel kopieren": "Kopioi avain",
+ "Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)": "Valittu – kopioi itse (Ctrl+C tai «Kopioi»)"
 }

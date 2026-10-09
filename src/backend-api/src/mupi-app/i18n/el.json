@@ -173,7 +173,6 @@
  "1 h 30 min": "1 h 30 min",
  "1 Jahr": "1 έτος",
  "1 Monat": "1 μήνας",
- "1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.": "1. Πάτα εδώ «Να επιτρέπεται η σύζευξη». 2. Πρόσθεσε στο Home Assistant την ενσωμάτωση «MuPiBox» – το box εντοπίζεται, αλλιώς βάλε τη διεύθυνση από πάνω. 3. Σύγκρινε το κλειδί και γράψε τον κωδικό που δείχνει η οθόνη του box.",
  "10 min": "10 min",
  "10 min · 10×": "10 λ · 10×",
  "11 Alben": "11 άλμπουμ",
@@ -1463,7 +1462,6 @@
  "Home Assistant erlauben": "Να επιτρέπεται το Home Assistant",
  "Home Assistant erlaubt": "Το Home Assistant επιτρέπεται",
  "Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.": "Το Home Assistant μπορεί τότε να εμφανίζει και να ελέγχει το box (ενσωμάτωση «MuPiBox» μέσω HACS). Μόνο στο οικιακό δίκτυο και κρυπτογραφημένα.",
- "Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.": "Το Home Assistant δείχνει το ίδιο κλειδί κατά τη σύζευξη. Αν δεν ταιριάζει, μην κάνεις σύζευξη.",
  "Home-Assistant-Topic": "Topic Home Assistant",
  "Hör-Verlauf": "Ιστορικό ακρόασης",
  "Hörbuch": "Ηχητικό βιβλίο",
@@ -1622,7 +1620,6 @@
  "Kopfhörerbuchse": "Υποδοχή ακουστικών",
  "Kopfzeile mit Hintergrund": "Κεφαλίδα με φόντο",
  "Kopieren": "Αντιγραφή",
- "Kopieren ging nicht": "Η αντιγραφή απέτυχε",
  "Kopiert": "Αντιγράφηκε",
  "Koppeln": "Ζευγάρωμα",
  "Koppeln beendet": "Η σύζευξη τελείωσε",
@@ -2790,5 +2787,9 @@
  "HDMI-Ausgang zusätzlich": "Και έξοδος HDMI",
  "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.": "Για οθόνη ή τηλεόραση στη θύρα HDMI, δίπλα στην κάρτα ήχου του κουτιού. Επιλέγεται στο πρόγραμμα αναπαραγωγής μέσω «Ακούστε με» ή στην εφαρμογή, στη γραμμή εξόδου.",
  "Der HDMI-Ausgang gilt nach einem Neustart.": "Η έξοδος HDMI ισχύει μετά από επανεκκίνηση.",
- "Der HDMI-Ausgang ist nach einem Neustart aus.": "Η έξοδος HDMI είναι κλειστή μετά από επανεκκίνηση."
+ "Der HDMI-Ausgang ist nach einem Neustart aus.": "Η έξοδος HDMI είναι κλειστή μετά από επανεκκίνηση.",
+ "1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.": "1. Προσθέστε στο Home Assistant την ενσωμάτωση «MuPiBox» – το κουτί βρίσκεται μόνο του, αλλιώς πληκτρολογήστε τη διεύθυνση παραπάνω. 2. Αντιγράψτε το κλειδί παρακάτω και επικολλήστε το στο Home Assistant. 3. Πατήστε εδώ «Να επιτρέπεται η σύζευξη» και στο Home Assistant «Υποβολή». 4. Πληκτρολογήστε τον κωδικό που δείχνει η οθόνη του κουτιού.",
+ "Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.": "Το Home Assistant ζητά αυτό το κλειδί κατά τη σύζευξη. Αποδεικνύει ότι το Home Assistant μιλά με αυτό το κουτί – μην επικολλάτε ποτέ κλειδί από άλλη πηγή.",
+ "Schlüssel kopieren": "Αντιγραφή κλειδιού",
+ "Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)": "Επιλέχθηκε – αντιγράψτε το μόνοι σας (Ctrl+C ή «Αντιγραφή»)"
 }

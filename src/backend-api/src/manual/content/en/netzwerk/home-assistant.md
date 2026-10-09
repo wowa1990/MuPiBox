@@ -11,13 +11,15 @@ Under **Settings › Services › Home Assistant** switch on **Allow Home Assist
 
 ## Pairing
 
-1. In the app tap **Allow pairing (60 s)**.
-2. In Home Assistant add the **MuPiBox** integration. The box shows up by itself; otherwise enter the address the app shows.
-3. Home Assistant shows a **key**. The box's display shows the same one. If they match, confirm in Home Assistant. If they do not match, cancel.
-4. If Home Assistant asks for more than showing and controlling (**messages and announcements**, **restart and switch off**), the display asks first: **Allow all** or **Only show and control**.
+1. In Home Assistant add the **MuPiBox** integration. The box shows up by itself; otherwise enter the address the app shows.
+2. Home Assistant asks for the box's **key**. In the app tap **Copy key** under **Pair** and paste it into Home Assistant. The additional rights can be chosen there too (**messages and announcements**, **restart and switch off**).
+3. In the app tap **Allow pairing (60 s)**, then **Submit** in Home Assistant.
+4. If Home Assistant chose more than showing and controlling, the display asks first: **Allow all** or **Only show and control**.
 5. The display shows a **six-digit code** and the rights Home Assistant gets. Enter the code in Home Assistant.
 
-The code is shown only on the box's display, so whoever enters it has the box in front of them. It is valid for 5 minutes and only once. After five wrong attempts the pairing ends, and it can be started again after a minute. The additional rights, too, can only be allowed on the display. To give them later after all, remove the pairing and pair again.
+The key proves that Home Assistant is really talking to your box and not to another device in the network. So take it only from the app (or from the box's display, which shows it while pairing too), never from anywhere else. If copying does not work in the browser, the app selects the key and you copy it yourself.
+
+The code is shown only on the box's display, so whoever enters it has the box in front of them. It is valid for 5 minutes and only once. After five wrong attempts the pairing ends, and it can be started again after a minute. The additional rights, too, can only be allowed on the display. To add or drop them later, go to **Configure** at the MuPiBox in Home Assistant: Home Assistant then pairs again (again with **Allow pairing** in the app, approval and code on the display) and removes the old pairing by itself.
 
 ## What else Home Assistant can do
 

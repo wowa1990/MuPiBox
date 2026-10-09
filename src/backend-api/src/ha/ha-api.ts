@@ -6,9 +6,10 @@
  * - TLS: a key of its own that is never replaced (ha_tls.sh) - Home Assistant pins its SPKI SHA-256, which the box's
  *   display shows while pairing is open; a new certificate (new IP, renewal) keeps the pin.
  * - Discovery: _mupibox._tcp over avahi (ha_mdns.sh), only a hint - identity is /info after pairing.
- * - Pairing: opened for 60 s in the app (Einstellungen › Home Assistant, a signed-in parent); /pair/start then shows a
- *   six-digit code and the requested rights on the display (never in an answer or a log); /pair/confirm with it gives
- *   one bearer token per Home Assistant, kept hashed (ha-store.ts), revocable in the app.
+ * - Pairing (contract 1.1.0 §2-3): the app (Einstellungen › Home Assistant, a signed-in parent) shows the key's
+ *   fingerprint to copy into Home Assistant and opens the pairing for 60 s; /pair/start then shows a six-digit code and
+ *   the requested rights on the display (never in an answer or a log); /pair/confirm with it gives one bearer token per
+ *   Home Assistant, kept hashed (ha-store.ts), revocable in the app.
  * - Rights: read and control; notify (a message on the display, an announcement) and power (restart, shutdown) only
  *   when they are allowed on the display while pairing ("Alles erlauben"). admin is not offered.
  * - Every error as {success:false, error, message} with the contract's HTTP status.
@@ -39,7 +40,7 @@ const CA_FILE = '/etc/mupibox/tls/ca.crt'
 const BASIC: Scope[] = ['read', 'control']
 /** granted only when allowed on the display as well */
 const EXTRA: Scope[] = ['notify', 'power']
-const CAPABILITIES = ['play', 'pause', 'stop', 'next', 'previous', 'set_volume', 'mute', 'unmute', 'seek', 'media_metadata', 'outputs', 'screenshot', 'update', 'message', 'speak', 'reboot', 'shutdown']
+const CAPABILITIES = ['play', 'pause', 'stop', 'next', 'previous', 'set_volume', 'mute', 'unmute', 'seek', 'media_metadata', 'outputs', 'screenshot', 'update', 'message', 'speak', 'reboot', 'poweroff']
 const SCREENSHOT_FILE = '/tmp/mupibox-ha-screenshot.png'
 const PAIRING_WINDOW_S = 60
 const PAIRING_TTL_S = 300
@@ -578,12 +579,8 @@ function buildApp(deps: HaDeps): Express {
     if (!command) return fail(res, 400, 'invalid_request', 'command is missing')
     const client = await clientByToken(bearer(req)).catch(() => null)
     if (!client) return fail(res, 401, 'unauthorized', 'Missing, invalid or revoked token')
-    if (command === 'restart' || command === 'shutdown') {
-      // (power is a right of its own, never part of control)
-      if (!client.scopes.includes('power')) return fail(res, 403, 'insufficient_scope', 'Restart and shutdown need the right "power"')
-      powerAction(command === 'restart' ? 'reboot' : 'poweroff', client)
-      return void res.status(202).json({ success: true, accepted: true })
-    }
+    // (restart and shutdown only through POST /power - contract 1.1.0: never through /control)
+    if (command === 'restart' || command === 'shutdown') return fail(res, 422, 'unsupported_command', 'Restart and shutdown go through POST /power')
     if (!client.scopes.includes('control')) return fail(res, 403, 'insufficient_scope', 'This needs the right "control"')
     try {
       if (['play', 'pause', 'stop', 'next', 'previous'].includes(command)) {

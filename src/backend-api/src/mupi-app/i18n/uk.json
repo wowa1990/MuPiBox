@@ -173,7 +173,6 @@
  "1 h 30 min": "1 h 30 min",
  "1 Jahr": "1 рік",
  "1 Monat": "1 місяць",
- "1. Hier „Koppeln erlauben“ tippen. 2. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 3. Den Schlüssel vergleichen und den Code eingeben, den das Display der Box zeigt.": "1. Торкнися тут «Дозволити під’єднання». 2. Додай у Home Assistant інтеграцію «MuPiBox» – бокс знайдеться, інакше введи адресу вище. 3. Порівняй ключ і введи код, який показує екран бокса.",
  "10 min": "10 min",
  "10 min · 10×": "10 хв · 10×",
  "11 Alben": "11 альбомів",
@@ -1463,7 +1462,6 @@
  "Home Assistant erlauben": "Дозволити Home Assistant",
  "Home Assistant erlaubt": "Home Assistant дозволено",
  "Home Assistant kann die Box dann anzeigen und steuern (Integration „MuPiBox“ über HACS). Nur im Heimnetz und verschlüsselt.": "Home Assistant зможе показувати й керувати боксом (інтеграція «MuPiBox» через HACS). Лише в домашній мережі та зашифровано.",
- "Home Assistant zeigt beim Koppeln denselben Schlüssel. Stimmt er nicht überein, nicht koppeln.": "Home Assistant під час під’єднання показує той самий ключ. Якщо він не збігається, не під’єднуй.",
  "Home-Assistant-Topic": "Топік Home Assistant",
  "Hör-Verlauf": "Історія прослуховування",
  "Hörbuch": "Аудіокнига",
@@ -1622,7 +1620,6 @@
  "Kopfhörerbuchse": "Роз’єм для навушників",
  "Kopfzeile mit Hintergrund": "Заголовок із фоном",
  "Kopieren": "Копіювати",
- "Kopieren ging nicht": "Копіювання не вдалося",
  "Kopiert": "Скопійовано",
  "Koppeln": "Спарувати",
  "Koppeln beendet": "Під’єднання завершено",
@@ -2790,5 +2787,9 @@
  "HDMI-Ausgang zusätzlich": "Додатково вихід HDMI",
  "Für einen Monitor oder Fernseher am HDMI-Anschluss, neben der Soundkarte der Box. Gewählt wird im Player über „Hören mit“ oder in der App bei der Ausgabe.": "Для монітора чи телевізора на роз’ємі HDMI, поруч зі звуковою картою скриньки. Обирається в плеєрі через «Слухати через» або в застосунку в рядку виходу.",
  "Der HDMI-Ausgang gilt nach einem Neustart.": "Вихід HDMI діятиме після перезапуску.",
- "Der HDMI-Ausgang ist nach einem Neustart aus.": "Вихід HDMI буде вимкнено після перезапуску."
+ "Der HDMI-Ausgang ist nach einem Neustart aus.": "Вихід HDMI буде вимкнено після перезапуску.",
+ "1. In Home Assistant die Integration „MuPiBox“ hinzufügen – die Box wird gefunden, sonst die Adresse oben eingeben. 2. Den Schlüssel unten kopieren und in Home Assistant einfügen. 3. Hier „Koppeln erlauben“ tippen und in Home Assistant auf „Weiter“. 4. Den Code eingeben, den das Display der Box zeigt.": "1. Додайте в Home Assistant інтеграцію «MuPiBox» – скриньку буде знайдено, інакше введіть адресу вище. 2. Скопіюйте ключ нижче й вставте його в Home Assistant. 3. Торкніться тут «Дозволити з’єднання» і в Home Assistant «Надіслати». 4. Введіть код, який показує екран скриньки.",
+ "Home Assistant fragt beim Koppeln nach diesem Schlüssel. Er beweist, dass Home Assistant mit dieser Box spricht – nie einen Schlüssel aus einer anderen Quelle einfügen.": "Home Assistant запитує цей ключ під час з’єднання. Він підтверджує, що Home Assistant говорить саме з цією скринькою – ніколи не вставляйте ключ з іншого джерела.",
+ "Schlüssel kopieren": "Копіювати ключ",
+ "Markiert – bitte selbst kopieren (Strg+C oder „Kopieren“)": "Виділено – скопіюйте самостійно (Ctrl+C або «Копіювати»)"
 }
