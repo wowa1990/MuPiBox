@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve:backend-api"],
+      "port": 8200
+    },
+    {
+      "name": "frontend-box",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve:frontend-box"],
+      "port": 4200
+    }
+  ]
+}
