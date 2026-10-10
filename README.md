@@ -133,7 +133,16 @@ The app's texts are German in the source; the translations live in
 `src/backend-api/src/mupi-app/i18n/<lang>.json` (at least `en.json`). Add a line to `news.txt` for a change
 users will notice.
 
-The Dockerfile in the root directory is meant for a production-like test of a freshly built `deploy.zip`
-(`npm run docker:build`, then `npm run docker:start`). It currently does not build on `main`: it copies
-`dev/customize/mplayer-wrapper/index.js` and `bin/nodejs/spotify-control.js`, which are no longer in the
-repository. Until it is repaired, test on a box.
+Without a box, the Dockerfile in the root directory gives a production-like test of freshly built zips: it
+installs `bin/nodejs/deploy.zip` and `AdminInterface/release/www.zip` the way autosetup does (Node 22, pm2,
+lighttpd with PHP and the proxy to the app). `npm run docker:build`, then `npm run docker:start`; the app is at
+http://localhost/app/, the old admin interface at http://localhost/index.php, the display UI at http://localhost:8200/
+(with the player beside it on port 5005, as the kiosk on a box has it; from another device in the network the
+display goes through the API instead, as a phone does). There is no sound device and no hardware in the container:
+Spotify plays (the display plays it in the browser, see below), while radio, local files, NAS and podcasts run through
+mpv inside the container and stay silent; the WiFi, GPIO and display pages do not work. A backup of your own box
+(Settings › Backup) can be
+restored into the container, on the app's Backup page or with `docker cp backup.zip mupibox:/tmp/` and
+`docker exec mupibox unzip -o /tmp/backup.zip -d /`; then `docker exec mupibox /usr/local/bin/mupibox/setting_update.sh`
+(carries the Spotify login into the servers' configs) and `docker restart mupibox`. Spotify then plays through the
+display at http://localhost:8200/ in a browser with Widevine (Chrome, Edge, Safari) and comes out of your computer.

@@ -71,7 +71,7 @@ cd src && ./deploy.sh            # interactive: builds all, flattens www/browser
 AdminInterface/zip.sh            # -> AdminInterface/release/www.zip
 node src/backend-api/src/manual/build.mjs [outDir]
 node tools/theme-preview/render.mjs [--only blue,kuschelmond]   # needs a frontend-box build and Chrome
-npm run docker:build && npm run docker:start                    # production-like container; broken on main (Dockerfile copies files that no longer exist)
+npm run docker:build && npm run docker:start                    # production-like container from the two release zips (no audio, no hardware)
 ```
 
 ## Local development of the app (`/app`)
