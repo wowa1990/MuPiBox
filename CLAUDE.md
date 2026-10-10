@@ -80,7 +80,14 @@ Verified on macOS with Node 22:
 
 1. `npm install` at the root.
 2. Create the backend's dev config (gitignored):
-   `cp config/templates/www.json src/backend-api/config/config.json && cp config/templates/monitor.json src/backend-api/config/monitor.json`
+   `cp config/templates/www.json src/backend-api/config/config.json && cp config/templates/monitor.json config/templates/mupiboxconfig.json src/backend-api/config/`
+   and `echo '{"onlinestate":"online","ip":"127.0.0.1"}' > src/backend-api/config/network.json`. The display's
+   `isOnline()` ignores a network.json without `ip` and treats the box as offline (no radio, no Spotify player).
+   Without `mupiboxconfig.json` the display gets no theme id from `/api/config`, never sets `body.km`, and renders
+   the generic layout (collapsed player icons, scroll bar on the name cards). A real box's state: `unzip -o -j` the
+   `mupiboxconfig.json` and `data.json` of a box backup into that folder and copy the Spotify client id and secret
+   into `config.json`; the app's restore route answers `501 restore_on_box_only` under `NODE_ENV=development`
+   (it unpacks to `/` with sudo, which hung waiting for a password under an IDE run).
 3. `npm run serve:backend-api`, then open `http://localhost:8200/app/`.
 
 - No build step for the app: `app.js`, `app.css`, `schema.json`, `i18n/*.json` are served straight out of
@@ -88,17 +95,22 @@ Verified on macOS with Node 22:
   changes restart the server through `tsx watch`.
 - Login: without `/etc/mupibox/mupiboxconfig.json` there is no password and `interfacelogin.state` is off, so
   `GET /api/app/session` hands out an open session and the app logs in by itself.
-- What does not work off-box: everything that reads the box config (hard-coded `/etc/mupibox/mupiboxconfig.json`,
-  answers `503 config not yet loaded`), shells out to `/usr/local/bin/mupibox/*.sh`, `sudo`, `amixer`, pm2, or
-  talks to the player on :5005. The start page therefore shows "Keine Verbindung zur Box". Optional: create
-  `/etc/mupibox/mupiboxconfig.json` from `config/templates/mupiboxconfig.json` (needs sudo, make it writable for
-  your user) and config-backed pages start answering.
+- Under `NODE_ENV=development` the backend reads and writes the box config at `src/backend-api/config/mupiboxconfig.json`
+  (on a box `/etc/mupibox/mupiboxconfig.json`, written through sudo and a shared flock; both are switched on
+  `productionServe` in server.ts, as is the thumbnail cache dir). What still does not work off-box: everything that
+  shells out to `/usr/local/bin/mupibox/*.sh`, `sudo`, `amixer`, pm2, or talks to the player on :5005. The start
+  page therefore shows "Keine Verbindung zur Box".
 - Loop against a real box: the deploy zip is unpacked to `/home/dietpi/.mupibox/Sonos-Kids-Controller-master/`,
   so copying `src/backend-api/src/mupi-app/*` into `.../Sonos-Kids-Controller-master/mupi-app/` and reloading
   `http://<box>/app/` is enough for app changes (no restart). For backend changes: `npm run build:backend-api`,
   copy `src/deploy/server.js` over `.../Sonos-Kids-Controller-master/server.js`, `pm2 restart server` as dietpi.
 - The Angular display UI from ng serve (:4200) talks to the backend on `<hostname>:8200`; CORS allows same-host
-  origins on any port, so this works against the local backend.
+  origins on any port, so this works against the local backend. Paths the display takes from its own origin as on a
+  box (`/api/spotify/cover/...`, `/rss-covers/`, `/active_theme.css`, `/theme-data/...`) are covered by the
+  `development` configuration in `angular.json`: `/api` and `/rss-covers` are proxied to :8200
+  (`proxy.conf.json`), the theme comes from `src/dev/active_theme.css` (an `@import` of one of `themes/*.css`,
+  served at `/themes/`) and the themes' pictures and fonts from `themes/` at `/theme-data/`. Production builds are
+  untouched by this.
 
 ## Architecture
 

@@ -12,12 +12,14 @@ ln -sfn resume.json active_resume.json
 # The display takes the box for offline until /api/network says onlinestate "online" (then no radio, and the Spotify
 # player is not even started). On a box the network check (check_network.sh, get_network.sh) writes /tmp/network.json;
 # here it is written once with what the container has.
+# (a file in server/config, not the box's symlink to /tmp: with docker:start that folder is the host's
+# src/backend-api/config, and a symlink into the container's /tmp would be dangling for a backend run on the host)
 ip=$(hostname -I | awk '{print $1}')
 jq -n --arg host "$(hostname)" --arg ip "$ip" \
   '{onlinestate: "online", host: $host, ip: $ip, mac: "", wifi: "", wifilink: "", wifisignal: "", gateway: "", dns: "", subnet: "", interface: "eth0"}' \
-  > /tmp/network.json
+  > /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json
+cp /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json /tmp/network.json
 chmod 666 /tmp/network.json
-ln -sfn /tmp/network.json /home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/network.json
 
 cd /home/dietpi/.mupibox/Sonos-Kids-Controller-master
 pm2 start server.js

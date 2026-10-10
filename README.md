@@ -70,12 +70,20 @@ All contributions, e.g. reporting issues, are welcome.
 Develop in a GitHub codespace (`.devcontainer`) or locally with Node.js 22 (PHP 8 only for the admin interface).
 
 1. Fork this repository and run `npm install` in the root folder once.
-2. Copy the config templates:
-   `cp config/templates/www.json src/backend-api/config/config.json && cp config/templates/monitor.json src/backend-api/config/monitor.json`
+2. Copy the config templates (the box's own `mupiboxconfig.json` too: without it the display does not know its
+   theme and draws the plain layout, and the app's pages answer 503), and give the display an "online" network
+   state (on a box the network check writes it; without it the display shows radio as unavailable and never starts
+   its Spotify player):
+   `cp config/templates/www.json src/backend-api/config/config.json && cp config/templates/monitor.json config/templates/mupiboxconfig.json src/backend-api/config/`
+   `echo '{"onlinestate":"online","ip":"127.0.0.1"}' > src/backend-api/config/network.json`
 3. `npm run serve:backend-api` and open http://localhost:8200/app/ – the app, served straight from
    `src/backend-api/src/mupi-app` (edit, reload). Away from a box, pages that need its hardware or
-   config show no data. `npm run serve:frontend-box` for the display UI (http://localhost:4200),
+   config show no data. `npm run serve:frontend-box` for the display UI (http://localhost:4200; it proxies `/api`
+   to the backend and takes its theme from `src/frontend-box/src/dev/active_theme.css`, change the theme there),
    `npm run serve:admin` for the admin interface (http://127.0.0.1:8000), `npm run serve` for all of them.
+   Your own box's library and settings: take the two files out of a backup of the box (Settings › Backup) into
+   that folder, `unzip -o -j <backup>.zip etc/mupibox/mupiboxconfig.json home/dietpi/.mupibox/Sonos-Kids-Controller-master/server/config/data.json -d src/backend-api/config/`
+   (the app's own restore page works on a box only). The Spotify client id and secret go into `config.json` by hand.
 4. `npm run lint` (Biome) before you commit. Tests: `npm run test:frontend-box` and
    `npm run test --workspace=mupibox-backend-api`.
 5. Create a branch, commit, push and open a pull request.
