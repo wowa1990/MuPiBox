@@ -208,7 +208,6 @@ STEP=0
 
 	###############################################################################################
 
-
 	echo -e "XXX\n${STEP}\nInstall pm2... \nXXX"
 	before=$(date +%s)
 	npm install pm2 -g >&3 2>&3
@@ -235,25 +234,19 @@ STEP=0
 
 	echo -e "XXX\n${STEP}\nClean and create directories... \nXXX"
 	before=$(date +%s)
+	
 	rm -Rf /home/dietpi/.mupibox /home/dietpi/MuPiBox >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/chromium_cache >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/tts_files >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/sysmedia/sound >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/sysmedia/images >&3 2>&3
+	
+	mkdir -p /home/dietpi/.mupibox/{chromium_cache,Sonos-Kids-Controller-master,spotifycontroller-main/config} >&3 2>&3
 	mkdir -p /home/dietpi/.cache/spotify >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/audiobook >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/music >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/other >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/NAS >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/cover >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/media/youtube-dl >&3 2>&3
-	mkdir -p /home/dietpi/MuPiBox/themes >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/Sonos-Kids-Controller-master/ >&3 2>&3
-	mkdir -p /home/dietpi/.mupibox/spotifycontroller-main/config >&3 2>&3
-	mkdir -p /usr/local/bin/mupibox >&3 2>&3
+	mkdir -p /home/dietpi/MuPiBox/{tts_files,themes,sysmedia/{sound,images},media/{audiobook,music,other,NAS,cover,youtube-dl}} >&3 2>&3
+
 	mkdir -p /etc/mupibox >&3 2>&3
+	mkdir -p /usr/local/bin/mupibox >&3 2>&3
 	mkdir -p /var/log/mupibox/ >&3 2>&3
+	
 	chown -R dietpi:dietpi /home/dietpi/.mupibox /home/dietpi/MuPiBox >&3 2>&3
+	
 	after=$(date +%s)
 	echo -e "## Clean and create directories ## finished after $((after - before)) seconds" >&3 2>&3
 	STEP=$((STEP + 1))
@@ -339,22 +332,52 @@ STEP=0
 
 	echo -e "XXX\n${STEP}\nPreconfigure Samba... \nXXX"
 	before=$(date +%s)
+	
 	# The Samba share (the box in the Windows network) installed and set up, but off: the app switches it on
 	# (Einstellungen › Dienste, eltern/services.ts) - then at once and without internet. Nothing was installed for it
 	# before (smb.conf and the password went nowhere, smbd was "switched on" without being there), the app installed it
 	# at its first switch-on. With it its announcement (WS-Discovery): wsdd2 (Debian 12 and 13), else wsdd.
 	WSD=$(apt-cache show wsdd2 >/dev/null 2>&1 && echo wsdd2 || echo wsdd)
 	apt-get --yes install samba ${WSD} >&3 2>&3
-	mkdir -p /etc/samba >&3 2>&3
 	mv -f ${MUPI_SRC}/config/templates/smb.conf /etc/samba/smb.conf >&3 2>&3
 	(echo "mupibox"; echo "mupibox") | smbpasswd -s -a dietpi >&3 2>&3
+	
 	# (the package starts them: off until the app switches the share on; the domain controller is never needed)
-	for u in smbd nmbd samba-ad-dc wsdd wsdd2; do
+	for u in smbd nmbd samba-ad-dc ${WSD}; do
 		systemctl cat ${u}.service >/dev/null 2>&1 || continue
 		systemctl disable --now ${u}.service >&3 2>&3
 	done
+	
 	after=$(date +%s)
 	echo -e "## Preconfigure Samba ## finished after $((after - before)) seconds" >&3 2>&3
+	STEP=$((STEP + 1))
+
+	###############################################################################################
+
+	echo -e "XXX\n${STEP}\nPreconfigure FTP... \nXXX"
+	before=$(date +%s)
+	
+	apt-get --yes install proftpd >&3 2>&3
+	mv -f ${MUPI_SRC}/config/templates/proftpd.conf /etc/proftpd/proftpd.conf >&3 2>&3
+	systemctl catproftpd.service >/dev/null 2>&1 || continue
+	systemctl disable --now proftpd >&3 2>&3
+	
+	after=$(date +%s)
+	echo -e "## Preconfigure FTP ## finished after $((after - before)) seconds" >&3 2>&3
+	STEP=$((STEP + 1))
+
+	###############################################################################################
+
+	echo -e "XXX\n${STEP}\nPreconfigure VNC... \nXXX"
+	before=$(date +%s)	
+	
+	apt-get --yes install x11vnc websockify >&3 2>&3
+	git clone https://github.com/novnc/noVNC.git /usr/share/novnc >&3 2>&3
+	chown -R dietpi:dietpi /usr/share/novnc >&3 2>&3
+	# Keine Dienste zu deaktivieren da die nicht von der Installation eingerichtet werden
+	
+	after=$(date +%s)
+	echo -e "## Preconfigure VNC ## finished after $((after - before)) seconds" >&3 2>&3
 	STEP=$((STEP + 1))
 
 	###############################################################################################
