@@ -20,6 +20,8 @@
                   }
                   @if (currentData.done) {
                     <span class="ep-done" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
+                  } @else if (currentData.started) {
+                    <span class="ep-done ep-started" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
                   } @else if (currentData.progress) {
                     <span class="ep-progress" aria-hidden="true"><i [style.width.%]="currentData.progress"></i></span>
                   }
@@ -80,6 +82,8 @@
                   }
                   @if (it.data.done) {
                     <span class="ep-done" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
+                  } @else if (it.data.started) {
+                    <span class="ep-done ep-started" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
                   } @else if (it.data.progress) {
                     <span class="ep-progress" aria-hidden="true"><i [style.width.%]="it.data.progress"></i></span>
                   }
@@ -151,6 +155,8 @@
                   }
                   @if (currentData.done) {
                     <span class="ep-done" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
+                  } @else if (currentData.started) {
+                    <span class="ep-done ep-started" aria-hidden="true"><ion-icon name="checkmark"></ion-icon></span>
                   } @else if (currentData.progress) {
                     <span class="ep-progress" aria-hidden="true"><i [style.width.%]="currentData.progress"></i></span>
                   }

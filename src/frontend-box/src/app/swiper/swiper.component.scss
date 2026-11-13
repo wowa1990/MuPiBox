@@ -696,6 +696,7 @@ swiper-container.coverflow {
     }
 }
 
+// heard to its end: green (an album and a podcast's episode alike); an album started: yellow (5.1, #180)
 .ep-done {
     position: absolute;
     right: 10px;
@@ -703,12 +704,19 @@ swiper-container.coverflow {
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6);
+    background: #2f9e5b;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
     color: #fff;
     display: grid;
     place-items: center;
     font-size: 22px;
     z-index: 3;
+}
+
+.ep-started {
+    background: #f2c12e;
+    color: #3a2c00;
 }
 
 // A tile whose day's limit is used up (5.1, "Kachel-Limit"): the cover paler, a lock in its middle - it stays where it

@@ -23,6 +23,7 @@ import { newestFirst, pickEpisodes } from '../episode-pick'
 import { LoadingComponent } from '../loading/loading.component'
 import { CategoryType, isSyncManaged, Media, MediaSorting } from '../media'
 import { HeaderVisibilityService } from '../header-visibility.service'
+import { HeardService } from '../heard.service'
 import { MediaService } from '../media.service'
 import { MediaUnavailableComponent } from '../media-unavailable/media-unavailable.component'
 import { StatusComponent } from '../status/status.component'
@@ -84,8 +85,13 @@ export class MedialistPage extends SwiperIonicEventsHelper {
     const type = this.artist()?.coverMedia?.type
     return (!this.isLoading() && this.media()?.length === 0 && (type === 'rss' || type === 'nas')) || this.spotifyUnavailable()
   })
+  // what was heard of the albums (5.1, #180): a yellow tick when started, a green one when heard to its end
+  private readonly heard = inject(HeardService)
   protected swiperData: Signal<SwiperData<Media>[]> = computed(() => {
+    const heard = this.heard.items()
     return this.media()?.map((media) => {
+      // (a podcast's episodes keep their own: episodeDone / episodeProgress - they have no key here)
+      const state = this.heard.stateOf(media, heard)
       return {
         // Phase 14e: display title falls back to title_override when the
         // parent has customised it via the Eltern-WebApp; keeps the
@@ -106,7 +112,8 @@ export class MedialistPage extends SwiperIonicEventsHelper {
         synced: isSyncManaged(media),
         isNew: media.episodeNew === true,
         progress: media.episodeProgress,
-        done: media.episodeDone === true,
+        done: media.episodeDone === true || state === 'finished',
+        started: state === 'started',
       }
     })
   })
@@ -124,6 +131,14 @@ export class MedialistPage extends SwiperIonicEventsHelper {
     if (!this.tileOpen()) return
     const token = this.tileTime.view(this.artist()?.coverMedia)
     onCleanup(() => this.tileTime.leave(token))
+  })
+
+  // the ticks asked for again while the list is open: a player window over it (Winamp) leaves the page where it is
+  protected readonly heardSync = effect((onCleanup) => {
+    if (!this.tileOpen()) return
+    this.heard.refresh()
+    const timer = setInterval(() => this.heard.refresh(), 30_000)
+    onCleanup(() => clearInterval(timer))
   })
 
   override ionViewWillEnter(): void {
