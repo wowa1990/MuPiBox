@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Hiçbir şey bulunamadı: Synology Photos tanıma (kişiler, yerler, konular) kutunun hesabı için kapalı ya da henüz adı olan bir şey yok.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Akıllı albümler kendiliğinden değişir: kutu onları diğerleri gibi eşitler.",
  "{} Foto": "{} fotoğraf",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Bir göstergeyi tutamağından tut ve başka bir yere taşı. Küçük bir ekran iki göstergeyi yan yana, geniş bir ekran sığdığı kadarını gösterir."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Bir göstergeyi tutamağından tut ve başka bir yere taşı. Küçük bir ekran iki göstergeyi yan yana, geniş bir ekran sığdığı kadarını gösterir.",
+ "Gehört": "Dinlendi",
+ "Noch nicht gehört": "Henüz dinlenmedi",
+ "Als gehört markieren": "Dinlendi olarak işaretle",
+ "Als ungehört markieren": "Dinlenmedi olarak işaretle",
+ "Als gehört markiert": "Dinlendi olarak işaretlendi",
+ "Als ungehört markiert": "Dinlenmedi olarak işaretlendi",
+ "Alle als ungehört markieren": "Tümünü dinlenmedi olarak işaretle",
+ "{} als ungehört markiert": "{} dinlenmedi olarak işaretlendi",
+ "Haken an angefangenen und gehörten Folgen": "Başlanan ve dinlenen bölümlerde işaret",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Sarı: başlandı, yeşil: sonuna kadar dinlendi – ekrandaki bölüm listesinde ve kitaplıkta. Kitaplıkta albümden değiştirilir.",
+ "Haken an": "İşaretler açık",
+ "Haken aus": "İşaretler kapalı"
 }

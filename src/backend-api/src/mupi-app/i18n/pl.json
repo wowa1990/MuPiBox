@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nic nie znaleziono: rozpoznawanie w Synology Photos (osoby, miejsca, motywy) jest wyłączone dla konta skrzynki albo nic jeszcze nie ma nazwy.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Inteligentne albumy zmieniają się same: skrzynka synchronizuje je jak wszystkie inne.",
  "{} Foto": "{} zdjęcie",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Chwyć wskaźnik za uchwyt i przesuń go w inne miejsce. Mały wyświetlacz pokazuje dwa zegary obok siebie, szeroki tyle, ile się zmieści."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Chwyć wskaźnik za uchwyt i przesuń go w inne miejsce. Mały wyświetlacz pokazuje dwa zegary obok siebie, szeroki tyle, ile się zmieści.",
+ "Gehört": "Wysłuchane",
+ "Noch nicht gehört": "Jeszcze nie wysłuchane",
+ "Als gehört markieren": "Oznacz jako wysłuchane",
+ "Als ungehört markieren": "Oznacz jako niewysłuchane",
+ "Als gehört markiert": "Oznaczono jako wysłuchane",
+ "Als ungehört markiert": "Oznaczono jako niewysłuchane",
+ "Alle als ungehört markieren": "Oznacz wszystko jako niewysłuchane",
+ "{} als ungehört markiert": "{} oznaczono jako niewysłuchane",
+ "Haken an angefangenen und gehörten Folgen": "Znaczniki przy rozpoczętych i wysłuchanych odcinkach",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Żółty: rozpoczęte, zielony: wysłuchane do końca – na liście odcinków na wyświetlaczu i w bibliotece. Zmiana w bibliotece przy albumie.",
+ "Haken an": "Znaczniki włączone",
+ "Haken aus": "Znaczniki wyłączone"
 }

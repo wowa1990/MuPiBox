@@ -2640,6 +2640,8 @@ const SYNC_API = '/api/spotify-sync'
 const lib = { items: null, local: {}, nas: [], cat: 'all', src: 'all', q: '', sync: null, subs: null, nasProfile: '', covers: null, mounts: 0 }
 
 async function loadLib() {
+  // (what was heard: the ticks in the sheets)
+  const heardDone = loadHeard()
   const [data, sync, nas, subs, profiles, covers, ...local] = await Promise.all([
     // (the box's names first: its own pictures go through the app's address, see ownCover)
     loadBoxHosts().then(() => api('/api/data')),
@@ -2663,6 +2665,7 @@ async function loadLib() {
   lib.nasProfile = active ? (active.name === 'standard' ? 'Standard' : active.name) : ''
   lib.covers = covers.ok ? (covers.body?.entries ?? []).filter((e) => e.status === 'found').length : null
   CATS.forEach(([c], i) => (lib.local[c] = Array.isArray(local[i].body) ? local[i].body : []))
+  await heardDone
 }
 
 // After a change the lists of Hören are read again too
@@ -3077,6 +3080,95 @@ async function mountTileLimit(sheet, keys, name) {
   }
 }
 
+/* What of the library was heard (5.1, #180): a yellow tick at an album that was started, a green one at an album heard
+   to its end - the ticks the display shows in its list of episodes (the player notes them, heard.ts keeps them; the
+   keys as frontend-box heard-key.ts forms them). Per album "Als gehört / Als ungehört markieren", per artist or folder
+   "Alle als ungehört markieren". Switched off (Bedienung › Weiterhören): nothing of it here. */
+
+const heard = { enabled: false, items: {} }
+async function loadHeard() {
+  const r = await api(`${API}/heard`)
+  if (!r.ok) return
+  heard.enabled = r.body?.enabled !== false
+  heard.items = r.body?.items && typeof r.body.items === 'object' ? r.body.items : {}
+}
+function heardKeyOfItem(it) {
+  if (!it) return null
+  const ok = (k) => (k.length <= 400 && !k.includes('\n') ? k : null)
+  if (it.type === 'nas' || it.nasPath) return it.nasIsContainer || !it.nasPath ? null : ok(`nas:${it.nasPath}`)
+  if (it.type === 'library') {
+    if (it.libraryIsContainer) return null
+    if (it.libraryPath) return ok(`lib:${it.libraryPath}`)
+    const cat = it.category === 'resume' ? it.resumelocalalbum : it.category
+    return it.artist && it.title ? ok(`lib:${cat || 'audiobook'}/${it.artist}/${it.title}`) : null
+  }
+  if (it.type === 'tidal') return it.tidalKind === 'artist' || !it.id ? null : ok(`tidal:${it.tidalKind === 'playlist' ? 'playlist' : 'album'}:${it.id}`)
+  if (it.type === 'spotify') {
+    if (it.playlistid) return ok(`spotify:playlist:${it.playlistid}`)
+    if (it.id) return ok(`spotify:album:${it.id}`)
+    if (it.showid) return ok(`spotify:episode:${it.showid}`)
+    if (it.audiobookid) return ok(`spotify:show:${it.audiobookid}`)
+  }
+  return null
+}
+const heardOf = (key) => (heard.enabled && key ? (heard.items[key] ?? null) : null)
+// the tick at a row of a list ('' without one)
+function heardTick(key) {
+  const s = heardOf(key)
+  return s ? `<span class="heard-tick ${s}" title="${esc(s === 'finished' ? 'Gehört' : 'Angefangen')}">${icon('check', 14)}</span>` : ''
+}
+// an album's line in its sheet: how far it was heard, the buttons that change it
+function heardLine(key) {
+  return heard.enabled && key ? `<div class="heard-line" data-heard-key="${esc(key)}">${heardLineInner(key)}</div>` : ''
+}
+function heardLineInner(key) {
+  const s = heardOf(key)
+  const what = s === 'finished' ? 'Gehört' : s === 'started' ? 'Angefangen' : 'Noch nicht gehört'
+  return `${heardTick(key) || '<span class="heard-tick none"></span>'}<span class="lbl">${esc(what)}</span>${
+    s ? '<button type="button" class="btn sm" data-heard-set="unheard">Als ungehört markieren</button>' : ''
+  }${s === 'finished' ? '' : '<button type="button" class="btn sm" data-heard-set="finished">Als gehört markieren</button>'}`
+}
+async function setHeard(keys, state) {
+  for (let i = 0; i < keys.length; i += 2000) {
+    const r = await api(`${API}/heard`, { method: 'POST', body: { keys: keys.slice(i, i + 2000), state } })
+    if (!r.ok) {
+      toast('Das hat nicht geklappt', 'info')
+      return false
+    }
+    if (r.body?.items && typeof r.body.items === 'object') heard.items = r.body.items
+  }
+  return true
+}
+// "Alle als ungehört markieren" of an artist or a folder (keys: those of its albums) - only when one of them has a tick
+function heardAllButton(keys) {
+  return heard.enabled && keys.some((k) => heardOf(k)) ? '<button class="btn" data-heard-none>Alle als ungehört markieren</button>' : ''
+}
+// the albums' keys below a folder of the SD card or the NAS (prefix 'lib:' / 'nas:'), its own titles among them
+function heardKeysBelow(prefix, path) {
+  const own = `${prefix}${path}`
+  return Object.keys(heard.items).filter((k) => k === own || k.startsWith(`${own}/`))
+}
+// a sheet's line and its "Alle als ungehört" (reopen: the sheet drawn again, its ticks with it)
+function wireHeard(sheet, allKeys, reopen) {
+  for (const line of sheet.querySelectorAll('[data-heard-key]')) {
+    line.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-heard-set]')
+      if (!b) return
+      b.disabled = true
+      const done = await setHeard([line.dataset.heardKey], b.dataset.heardSet)
+      if (!line.isConnected) return
+      line.innerHTML = heardLineInner(line.dataset.heardKey)
+      if (done) toast(b.dataset.heardSet === 'finished' ? 'Als gehört markiert' : 'Als ungehört markiert')
+    })
+  }
+  sheet.querySelector('[data-heard-none]')?.addEventListener('click', async (e) => {
+    e.currentTarget.disabled = true
+    const marked = allKeys.filter((k) => heardOf(k))
+    if (marked.length && (await setHeard(marked, 'unheard'))) toast(tr(`${marked.length} als ungehört markiert`))
+    reopen()
+  })
+}
+
 // A group: one entry opens right away, several are listed first
 function openLibGroup(g) {
   if (g.kind === 'local') return openLocalSheet(g.folder)
@@ -3112,6 +3204,8 @@ function openLibGroup(g) {
       : ''
   // (the display's tiles of these entries: a day's limit for them)
   const tileKeys = [...new Set(items.map(tileKeyOfItem).filter(Boolean))]
+  // (what was heard of them: a tick at each, all as not heard at once)
+  const heardKeys = [...new Set(items.map(heardKeyOfItem).filter(Boolean))]
   openSheet(
     `<h2 translate="no">${esc(g.artist)}</h2><p class="help" style="margin:0">${esc(libSub(g))}${g.src === 'spotify-sync' && !sub ? ' – kommt vom Spotify-Sync.' : ''}</p>
      ${tileKeys.length ? tileLimitField() : ''}
@@ -3119,11 +3213,11 @@ function openLibGroup(g) {
      ${
        entries.length
          ? `<div class="rows">${entries
-             .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span><span class="chev">${icon('chevron', 18)}</span></button>`)
+             .map((e, i) => `<button class="entry lib-row" data-e="${i}"><span class="lbl"><b translate="no">${esc(e.title)}</b></span>${heardTick(heardKeyOfItem(e.item))}<span class="chev">${icon('chevron', 18)}</span></button>`)
              .join('')}</div>`
          : `<p class="help" style="margin:0">Keine Folgen auf der Box. Was der Bereich und die Schalter zulassen, bringt der nächste Sync.</p>`
      }
-     <div class="btns">${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
+     <div class="btns">${heardAllButton(heardKeys)}${groupBtn}<button class="btn" data-close>Schließen</button></div>`,
     (sheet, close) => {
       sheet.querySelector('[data-close]').onclick = close
       // (each tile with its own name - the display's name of it - when the group is several of them)
@@ -3152,6 +3246,7 @@ function openLibGroup(g) {
         )
       })
       // (back from an entry: the list where it was)
+      wireHeard(sheet, heardKeys, () => openLibGroup(g))
       if (g.scrollTop) sheet.scrollTop = g.scrollTop
       for (const b of sheet.querySelectorAll('[data-e]')) {
         b.onclick = () => {
@@ -3355,17 +3450,21 @@ async function loadArtistAlbums(item, box) {
     box.innerHTML = '<p class="help">Keine Alben gefunden.</p>'
     return
   }
-  // (the first ten, the others on request: an artist with hundreds of albums would push the sheet's buttons far down)
+  // (the albums' ticks as the display shows them; the first ten, the others on request: an artist with hundreds of albums
+  // would push the sheet's buttons far down)
+  const heardKeys = albums.map((al) => `spotify:album:${al.id}`)
   const draw = (all) => {
     const shown = all ? albums : albums.slice(0, 10)
     box.innerHTML = `<p class="help" style="margin:0 0 6px">${esc(`${albums.length} ${albums.length === 1 ? 'Album' : 'Alben'}`)}</p><div class="rows">${shown
       .map(
         (al) => `<div class="entry"><span class="lib-thumb">${al.cover ? `<img src="${esc(al.cover)}" alt="" loading="lazy">` : ''}</span>
-          <span class="lbl"><b translate="no">${esc(al.name || al.id)}</b>${al.release_date ? `<small>${esc(String(al.release_date).slice(0, 4))}</small>` : ''}</span></div>`,
+          <span class="lbl"><b translate="no">${esc(al.name || al.id)}</b>${al.release_date ? `<small>${esc(String(al.release_date).slice(0, 4))}</small>` : ''}</span>${heardTick(`spotify:album:${al.id}`)}</div>`,
       )
-      .join('')}</div>${shown.length < albums.length ? `<div class="btns"><button class="btn" data-all-albums>${esc(`Alle ${albums.length} Alben zeigen`)}</button></div>` : ''}`
+      .join('')}</div>${shown.length < albums.length || heardAllButton(heardKeys) ? `<div class="btns">${heardAllButton(heardKeys)}${shown.length < albums.length ? `<button class="btn" data-all-albums>${esc(`Alle ${albums.length} Alben zeigen`)}</button>` : ''}</div>` : ''}`
     for (const img of box.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
     box.querySelector('[data-all-albums]')?.addEventListener('click', () => draw(true))
+    // (all of the artist's albums as not heard: the list drawn again)
+    wireHeard(box, heardKeys, () => draw(all))
   }
   draw(false)
 }
@@ -3408,6 +3507,7 @@ function openEntrySheet(item, back = null) {
     `${back ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(back.title)}</span></button>` : ''}
      <h2 translate="no">${esc(item.title_override ?? item.title ?? item.artist_override ?? item.artist ?? 'Eintrag')}</h2>
      <p class="help" style="margin:0">${isSync ? 'Kommt vom Spotify-Sync. Was du hier einträgst, gilt statt der Werte von Spotify; leer = der Wert von Spotify.' : 'Von Hand hinzugefügt.'}</p>
+     ${heardLine(heardKeyOfItem(item))}
      ${tileKeys.length ? tileLimitField() : ''}
      ${fields
        .map(([k, l]) => {
@@ -3436,6 +3536,7 @@ function openEntrySheet(item, back = null) {
       sheet.querySelector('[data-close]').onclick = back ? back.open : close
       sheet.querySelector('[data-back]')?.addEventListener('click', back?.open)
       void mountTileLimit(sheet, tileKeys, tileNameOfItem(item))
+      wireHeard(sheet, [], () => openEntrySheet(item, back))
       const placer = place ? wirePlace(sheet, 'e', () => sheet.querySelector('#e-cat').value) : null
       if (placer) sheet.querySelector('#e-cat').addEventListener('change', () => void placer.reload())
       if (wholeArtist) loadArtistAlbums(item, sheet.querySelector('#e-albums'))
@@ -3673,8 +3774,9 @@ function pickLocalCover(folder, parent, done) {
 // own sheet; a folder that is an album itself opens as one. parent: the folder above, to go back to.
 async function openLocalSheet(folder, parent = null) {
   if (!folder.libraryIsContainer) return openLocalAlbumSheet(folder, parent)
-  const r = await api(`/api/library/children?path=${encodeURIComponent(folder.libraryPath)}`)
+  const [r] = await Promise.all([api(`/api/library/children?path=${encodeURIComponent(folder.libraryPath)}`), loadHeard()])
   const albums = (Array.isArray(r.body) ? r.body : []).filter((a) => !a.ownFiles)
+  const heardKeys = heardKeysBelow('lib:', folder.libraryPath)
   const thumb = (cover) => `<span class="lib-thumb">${cover ? `<img src="${esc(stampedCover(cover))}" alt="" loading="lazy">` : icon('image', 18)}</span>`
   openSheet(
     `${parent ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(parent.title)}</span></button>` : ''}
@@ -3682,9 +3784,9 @@ async function openLocalSheet(folder, parent = null) {
        <div class="lbl"><h2 translate="no">${esc(folder.title)}</h2><p class="help" style="margin:0">${esc(['Ordner auf der SD-Karte', catLabel(folder.category), `${albums.length} ${albums.length === 1 ? 'Album' : 'Alben'}`].join(' · '))}</p>
        <button class="btn sm" data-cover>${icon('image', 16)}${folder.cover ? 'Cover ändern' : 'Cover wählen'}</button></div></div>
      ${parent ? '' : tileLimitField()}
-     ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.libraryIsContainer ? '<small>Ordner</small>' : ''}</span><span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
+     ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.libraryIsContainer ? '<small>Ordner</small>' : ''}</span>${a.libraryIsContainer ? '' : heardTick(`lib:${a.libraryPath}`)}<span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
      <div class="dl-card" id="dl-card" hidden></div>
-     <div class="btns"><button class="btn danger" data-all>Ganzen Ordner löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
+     <div class="btns">${heardAllButton(heardKeys)}<button class="btn danger" data-all>Ganzen Ordner löschen</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
       const back = () => (parent ? openLocalSheet(parent) : close())
@@ -3693,6 +3795,7 @@ async function openLocalSheet(folder, parent = null) {
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(folder, parent, (f) => openLocalSheet(f, parent))
       if (!parent) void mountTileLimit(sheet, [`lib:${folder.libraryPath}`], String(folder.title ?? ''))
       for (const b of sheet.querySelectorAll('[data-a]')) b.onclick = () => openLocalSheet(albums[Number(b.dataset.a)], folder)
+      wireHeard(sheet, heardKeys, () => openLocalSheet(folder, parent))
       fillFolderDownloads(sheet, folder, albums)
       sheet.querySelector('[data-all]').onclick = () => {
         close()
@@ -3761,8 +3864,9 @@ function changeNasPlace(folder, reopen) {
 // and plays. The NAS administration (login, shown folders, downloads) is a button away.
 async function openNasSheet(folder, parent = null) {
   if (!folder.nasIsContainer) return openNasAlbumSheet(folder, parent)
-  const r = await api(`/api/nas/children?path=${encodeURIComponent(folder.nasPath)}`)
+  const [r] = await Promise.all([api(`/api/nas/children?path=${encodeURIComponent(folder.nasPath)}`), loadHeard()])
   const albums = Array.isArray(r.body) ? r.body : []
+  const heardKeys = heardKeysBelow('nas:', folder.nasPath)
   const thumb = (cover) => `<span class="lib-thumb">${cover ? `<img src="${esc(cover)}" alt="" loading="lazy">` : icon('folder', 18)}</span>`
   openSheet(
     `${parent ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(parent.title)}</span></button>` : ''}
@@ -3772,10 +3876,11 @@ async function openNasSheet(folder, parent = null) {
      ${parent ? '' : nasPlaceLine(folder)}
      ${parent ? '' : tileLimitField()}
      ${r.ok ? '' : `<p class="help" style="margin:0">Das NAS antwortet gerade nicht.</p>`}
-     ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.nasIsContainer ? '<small>Ordner</small>' : ''}</span><span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
-     <div class="btns"><button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
+     ${albums.length ? `<div class="section-label" style="margin:0">Alben</div><div class="rows">${albums.map((a, i) => `<button class="entry lib-row" data-a="${i}">${thumb(a.cover)}<span class="lbl"><b translate="no">${esc(a.title)}</b>${a.nasIsContainer ? '<small>Ordner</small>' : ''}</span>${a.nasIsContainer ? '' : heardTick(`nas:${a.nasPath}`)}<span class="chev">${icon('chevron', 18)}</span></button>`).join('')}</div>` : ''}
+     <div class="btns">${heardAllButton(heardKeys)}<button class="btn" data-admin>NAS-Verwaltung</button><button class="btn" data-close>${parent ? 'Zurück' : 'Schließen'}</button></div>`,
     (sheet, close) => {
       for (const img of sheet.querySelectorAll('img')) img.addEventListener('error', () => img.remove(), { once: true })
+      wireHeard(sheet, heardKeys, () => openNasSheet(folder, parent))
       const back = () => (parent ? openNasSheet(parent) : close())
       sheet.querySelector('[data-close]').onclick = back
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
@@ -3798,6 +3903,7 @@ function openNasAlbumSheet(album, parent) {
     `${parent ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(parent.title)}</span></button>` : ''}
      <span class="album-cover">${album.cover ? `<img src="${esc(album.cover)}" alt="">` : icon('folder', 40)}</span>
      <div class="album-title"><h2 translate="no">${esc(album.title)}</h2><p class="help" style="margin:0">${esc(['Album auf dem NAS', parent?.title].filter(Boolean).join(' · '))}</p></div>
+     ${heardLine(`nas:${album.nasPath}`)}
      ${parent ? '' : nasPlaceLine(album)}
      ${parent ? '' : tileLimitField()}
      <button class="btn primary block" data-play>${icon('phones', 18)}Abspielen</button>
@@ -3817,6 +3923,7 @@ function openNasAlbumSheet(album, parent) {
       }
       sheet.querySelector('[data-cover]').onclick = () => pickNasCover(album, parent, (f) => openNasAlbumSheet(f, parent))
       if (!parent) void mountTileLimit(sheet, [`nas:${album.nasPath}`], String(album.title ?? ''))
+      wireHeard(sheet, [], () => openNasAlbumSheet(album, parent))
       sheet.querySelector('[data-place]')?.addEventListener('click', () => changeNasPlace(album, (f) => openNasAlbumSheet(f, null)))
     },
   )
@@ -3893,6 +4000,7 @@ function openLocalAlbumSheet(album, parent) {
     `${parent ? `<button class="sheet-back" data-back>${icon('back', 18)}<span translate="no">${esc(parent.title)}</span></button>` : ''}
      <span class="album-cover">${album.cover ? `<img src="${esc(stampedCover(album.cover))}" alt="">` : icon('image', 40)}</span>
      <div class="album-title"><h2 translate="no">${esc(album.title)}</h2><p class="help" style="margin:0">${esc(['Album auf der SD-Karte', catLabel(album.category), parent?.title].filter(Boolean).join(' · '))}</p></div>
+     ${heardLine(`lib:${album.libraryPath}`)}
      <button class="btn primary block" data-cover>${icon('image', 18)}${album.cover ? 'Cover ändern' : 'Cover wählen'}</button>
      ${parent ? '' : tileLimitField()}
      <div id="dl-album"></div><div class="section-label dl-head" id="dl-head" hidden><span>Titel</span><span></span></div><div class="rows" id="dl-tracks"></div>
@@ -3904,6 +4012,7 @@ function openLocalAlbumSheet(album, parent) {
       sheet.querySelector('[data-back]')?.addEventListener('click', back)
       sheet.querySelector('[data-cover]').onclick = () => pickLocalCover(album, parent, (f) => openLocalAlbumSheet(f, parent))
       if (!parent) void mountTileLimit(sheet, [`lib:${album.libraryPath}`], String(album.title ?? ''))
+      wireHeard(sheet, [], () => openLocalAlbumSheet(album, parent))
       fillAlbumDownloads(sheet, album)
       sheet.querySelector('[data-del]').onclick = () => {
         close()
@@ -8495,6 +8604,7 @@ async function loadControls() {
   state.values.set('epNew', o.newEpisodes !== false)
   state.values.set('epNewDays', `${o.newEpisodeDays ?? 7} Tage`)
   state.values.set('epProgress', o.episodeProgress !== false)
+  state.values.set('heardMarks', o.heardMarks !== false)
 }
 
 // The category of each tab (by its hidden key)
@@ -16496,6 +16606,8 @@ const CONTROLLERS = {
             { type: 'stepper', key: 'resume', label: 'Einträge unter „Fortsetzen“', help: 'So viele zuletzt gehörte Titel bietet das Display zum Weiterhören an.', min: 1, max: 99 },
             it('epResume', { label: 'Podcast-Folgen an der letzten Stelle weiterhören' }),
             it('epDays', { dep: 'epResume' }),
+            // (5.1, #180: the ticks of heard.ts - on the display's list of episodes and in the library)
+            { type: 'toggle', key: 'heardMarks', label: 'Haken an angefangenen und gehörten Folgen', help: 'Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.' },
           ],
         },
         {
@@ -16564,6 +16676,10 @@ const CONTROLLERS = {
         if ([3, 7, 14].includes(days)) return saveDisplayOptions({ newEpisodeDays: days })
       }
       if (key === 'epProgress') return saveDisplayOptions({ episodeProgress: !!v })
+      if (key === 'heardMarks') {
+        heard.enabled = !!v
+        return saveDisplayOptions({ heardMarks: !!v }, v ? 'Haken an' : 'Haken aus')
+      }
     },
   },
   displaylive: { top: liveTop, sections: () => [], mount: mountLive },

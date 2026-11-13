@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Intet fundet: genkendelsen i Synology Photos (personer, steder, motiver) er slået fra for boksens konto, eller der er endnu intet med navn.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smarte album ændrer sig af sig selv: boksen synkroniserer dem som alle andre.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tag fat i et ur i grebet og flyt det til et andet sted. Et lille display viser to målere ved siden af hinanden, et bredt så mange, som der er plads til."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tag fat i et ur i grebet og flyt det til et andet sted. Et lille display viser to målere ved siden af hinanden, et bredt så mange, som der er plads til.",
+ "Gehört": "Hørt",
+ "Noch nicht gehört": "Ikke hørt endnu",
+ "Als gehört markieren": "Markér som hørt",
+ "Als ungehört markieren": "Markér som ikke hørt",
+ "Als gehört markiert": "Markeret som hørt",
+ "Als ungehört markiert": "Markeret som ikke hørt",
+ "Alle als ungehört markieren": "Markér alle som ikke hørt",
+ "{} als ungehört markiert": "{} markeret som ikke hørt",
+ "Haken an angefangenen und gehörten Folgen": "Flueben ved påbegyndte og hørte afsnit",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Gul: påbegyndt, grøn: hørt til ende – i displayets liste over afsnit og i biblioteket. Ændres i biblioteket ved albummet.",
+ "Haken an": "Flueben til",
+ "Haken aus": "Flueben fra"
 }

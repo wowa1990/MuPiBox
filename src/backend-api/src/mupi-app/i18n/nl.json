@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Niets gevonden: de herkenning van Synology Photos (personen, plaatsen, onderwerpen) staat uit voor het account van de box, of er is nog niets met een naam.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Slimme albums veranderen vanzelf: de box synchroniseert ze zoals alle andere.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Pak een meter bij de greep en verplaats hem naar een andere plek. Een klein scherm toont twee meters naast elkaar, een breed scherm zoveel als er passen."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Pak een meter bij de greep en verplaats hem naar een andere plek. Een klein scherm toont twee meters naast elkaar, een breed scherm zoveel als er passen.",
+ "Gehört": "Beluisterd",
+ "Noch nicht gehört": "Nog niet beluisterd",
+ "Als gehört markieren": "Markeren als beluisterd",
+ "Als ungehört markieren": "Markeren als niet beluisterd",
+ "Als gehört markiert": "Gemarkeerd als beluisterd",
+ "Als ungehört markiert": "Gemarkeerd als niet beluisterd",
+ "Alle als ungehört markieren": "Alles markeren als niet beluisterd",
+ "{} als ungehört markiert": "{} gemarkeerd als niet beluisterd",
+ "Haken an angefangenen und gehörten Folgen": "Vinkjes bij begonnen en beluisterde afleveringen",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Geel: begonnen, groen: tot het einde beluisterd – in de afleveringenlijst van het display en in de bibliotheek. Wijzigen in de bibliotheek bij het album.",
+ "Haken an": "Vinkjes aan",
+ "Haken aus": "Vinkjes uit"
 }

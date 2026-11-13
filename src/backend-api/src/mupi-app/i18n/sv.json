@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Inget hittades: igenkänningen i Synology Photos (personer, platser, motiv) är avstängd för boxens konto, eller så finns det inget med namn än.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smarta album ändras av sig själva: boxen synkroniserar dem som alla andra.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Ta tag i en mätare i greppet och flytta den till en annan plats. En liten display visar två mätare bredvid varandra, en bred så många som ryms."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Ta tag i en mätare i greppet och flytta den till en annan plats. En liten display visar två mätare bredvid varandra, en bred så många som ryms.",
+ "Gehört": "Lyssnad",
+ "Noch nicht gehört": "Inte lyssnad än",
+ "Als gehört markieren": "Markera som lyssnad",
+ "Als ungehört markieren": "Markera som inte lyssnad",
+ "Als gehört markiert": "Markerad som lyssnad",
+ "Als ungehört markiert": "Markerad som inte lyssnad",
+ "Alle als ungehört markieren": "Markera alla som inte lyssnade",
+ "{} als ungehört markiert": "{} markerade som inte lyssnade",
+ "Haken an angefangenen und gehörten Folgen": "Bockar vid påbörjade och lyssnade avsnitt",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Gul: påbörjad, grön: lyssnad till slutet – i displayens avsnittslista och i biblioteket. Ändras i biblioteket vid albumet.",
+ "Haken an": "Bockar på",
+ "Haken aus": "Bockar av"
 }

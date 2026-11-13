@@ -59,6 +59,16 @@ describe('heardKeyOf', () => {
     const displayKeyOf = (mod.heardKeyOf ?? mod.default?.heardKeyOf) as (m: unknown) => string | null
     for (const e of ENTRIES) assert.equal(displayKeyOf(e), heardKeyOf(e), JSON.stringify(e))
   })
+
+  it('is the same key the app forms (its library sheets)', () => {
+    // (the app is one script for the browser: its function taken out of it as it stands)
+    const app = fs.readFileSync(path.join(process.cwd(), 'src', 'mupi-app', 'app.js'), 'utf8')
+    const start = app.indexOf('function heardKeyOfItem(it) {')
+    const end = app.indexOf('\nconst heardOf', start)
+    assert.ok(start >= 0 && end > start)
+    const appKeyOf = new Function(`${app.slice(start, end)}; return heardKeyOfItem`)() as (m: unknown) => string | null
+    for (const e of ENTRIES) assert.equal(appKeyOf(e), heardKeyOf(e), JSON.stringify(e))
+  })
 })
 
 describe('HeardStore', () => {

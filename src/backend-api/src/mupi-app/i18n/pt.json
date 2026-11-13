@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nada encontrado: o reconhecimento do Synology Photos (pessoas, locais, motivos) está desativado para a conta da caixa, ou ainda não há nada com nome.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Os álbuns inteligentes mudam sozinhos: a caixa sincroniza-os como todos os outros.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Segura num medidor pela pega e move-o para outro lugar. Um ecrã pequeno mostra dois mostradores lado a lado, um largo tantos quantos couberem."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Segura num medidor pela pega e move-o para outro lugar. Um ecrã pequeno mostra dois mostradores lado a lado, um largo tantos quantos couberem.",
+ "Gehört": "Ouvido",
+ "Noch nicht gehört": "Ainda não ouvido",
+ "Als gehört markieren": "Marcar como ouvido",
+ "Als ungehört markieren": "Marcar como não ouvido",
+ "Als gehört markiert": "Marcado como ouvido",
+ "Als ungehört markiert": "Marcado como não ouvido",
+ "Alle als ungehört markieren": "Marcar tudo como não ouvido",
+ "{} als ungehört markiert": "{} marcados como não ouvidos",
+ "Haken an angefangenen und gehörten Folgen": "Visto nos episódios começados e ouvidos",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Amarelo: começado, verde: ouvido até ao fim – na lista de episódios do ecrã e na biblioteca. Altera-se na biblioteca, no álbum.",
+ "Haken an": "Visto ativado",
+ "Haken aus": "Visto desativado"
 }

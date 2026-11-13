@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Δεν βρέθηκε τίποτα: η αναγνώριση του Synology Photos (άτομα, τοποθεσίες, θέματα) είναι απενεργοποιημένη για τον λογαριασμό του κουτιού ή δεν υπάρχει ακόμη τίποτα με όνομα.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Τα έξυπνα άλμπουμ αλλάζουν μόνα τους: το κουτί τα συγχρονίζει όπως όλα τα άλλα.",
  "{} Foto": "{} φωτογραφία",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Πιάσε ένα όργανο από τη λαβή και μετακίνησέ το σε άλλη θέση. Μια μικρή οθόνη δείχνει δύο καντράν δίπλα-δίπλα, μια πλατιά όσα χωρούν."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Πιάσε ένα όργανο από τη λαβή και μετακίνησέ το σε άλλη θέση. Μια μικρή οθόνη δείχνει δύο καντράν δίπλα-δίπλα, μια πλατιά όσα χωρούν.",
+ "Gehört": "Ακούστηκε",
+ "Noch nicht gehört": "Δεν έχει ακουστεί ακόμα",
+ "Als gehört markieren": "Σήμανση ως ακουσμένο",
+ "Als ungehört markieren": "Σήμανση ως μη ακουσμένο",
+ "Als gehört markiert": "Σημάνθηκε ως ακουσμένο",
+ "Als ungehört markiert": "Σημάνθηκε ως μη ακουσμένο",
+ "Alle als ungehört markieren": "Σήμανση όλων ως μη ακουσμένα",
+ "{} als ungehört markiert": "{} σημάνθηκαν ως μη ακουσμένα",
+ "Haken an angefangenen und gehörten Folgen": "Σημάδια σε επεισόδια που ξεκίνησαν και ακούστηκαν",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Κίτρινο: ξεκίνησε, πράσινο: ακούστηκε ως το τέλος – στη λίστα επεισοδίων της οθόνης και στη βιβλιοθήκη. Αλλαγή στη βιβλιοθήκη, στο άλμπουμ.",
+ "Haken an": "Σημάδια ενεργά",
+ "Haken aus": "Σημάδια ανενεργά"
 }

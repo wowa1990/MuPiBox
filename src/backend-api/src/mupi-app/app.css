@@ -617,6 +617,12 @@ select.input { appearance: auto; }
 .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .tags .chip { font-size: 11px; padding: 2px 8px; }
 .lib-row .chev { color: var(--mp-muted); }
+/* what was heard (5.1, #180): yellow = started, green = heard to its end - as on the display */
+.heard-tick { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; background: #2f9e5b; color: #fff; }
+.heard-tick.started { background: #f2c12e; color: #3a2c00; }
+.heard-tick.none { background: none; border: 2px solid var(--mp-border); }
+.heard-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.heard-line .lbl { flex: 1; min-width: 0; }
 .lib-list > .loading { margin: 24px auto; }
 .btn.sm { min-height: 36px; height: 36px; padding: 0 12px; font-size: 13px; flex: none; }
 .entry.out { opacity: .55; }

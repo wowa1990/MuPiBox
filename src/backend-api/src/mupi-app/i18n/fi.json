@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Mitään ei löytynyt: Synology Photosin tunnistus (henkilöt, paikat, aiheet) on pois päältä laatikon tililtä, tai nimettyä ei ole vielä.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Älykkäät albumit muuttuvat itsestään: laatikko synkronoi ne kuten muutkin.",
  "{} Foto": "{} kuva",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tartu mittariin kahvasta ja siirrä se toiseen kohtaan. Pieni näyttö näyttää kaksi mittaria vierekkäin, leveä niin monta kuin mahtuu."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Tartu mittariin kahvasta ja siirrä se toiseen kohtaan. Pieni näyttö näyttää kaksi mittaria vierekkäin, leveä niin monta kuin mahtuu.",
+ "Gehört": "Kuunneltu",
+ "Noch nicht gehört": "Ei vielä kuunneltu",
+ "Als gehört markieren": "Merkitse kuunnelluksi",
+ "Als ungehört markieren": "Merkitse kuuntelemattomaksi",
+ "Als gehört markiert": "Merkitty kuunnelluksi",
+ "Als ungehört markiert": "Merkitty kuuntelemattomaksi",
+ "Alle als ungehört markieren": "Merkitse kaikki kuuntelemattomiksi",
+ "{} als ungehört markiert": "{} merkitty kuuntelemattomiksi",
+ "Haken an angefangenen und gehörten Folgen": "Merkit aloitetuissa ja kuunnelluissa jaksoissa",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Keltainen: aloitettu, vihreä: kuunneltu loppuun – näytön jaksoluettelossa ja kirjastossa. Muutetaan kirjastossa albumin kohdalla.",
+ "Haken an": "Merkit päällä",
+ "Haken aus": "Merkit pois"
 }

@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Non è stato trovato nulla: il riconoscimento di Synology Photos (persone, luoghi, soggetti) è disattivato per l’account del box, oppure non c’è ancora nulla con un nome.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Gli album intelligenti cambiano da soli: il box li sincronizza come tutti gli altri.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Prendi uno strumento dalla maniglia e spostalo in un altro punto. Un display piccolo mostra due quadranti affiancati, uno largo tanti quanti ne entrano."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Prendi uno strumento dalla maniglia e spostalo in un altro punto. Un display piccolo mostra due quadranti affiancati, uno largo tanti quanti ne entrano.",
+ "Gehört": "Ascoltato",
+ "Noch nicht gehört": "Non ancora ascoltato",
+ "Als gehört markieren": "Segna come ascoltato",
+ "Als ungehört markieren": "Segna come non ascoltato",
+ "Als gehört markiert": "Segnato come ascoltato",
+ "Als ungehört markiert": "Segnato come non ascoltato",
+ "Alle als ungehört markieren": "Segna tutto come non ascoltato",
+ "{} als ungehört markiert": "{} segnati come non ascoltati",
+ "Haken an angefangenen und gehörten Folgen": "Spunte sugli episodi iniziati e ascoltati",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Giallo: iniziato, verde: ascoltato fino alla fine – nell’elenco degli episodi del display e nella libreria. Si cambia nella libreria, sull’album.",
+ "Haken an": "Spunte attive",
+ "Haken aus": "Spunte disattivate"
 }

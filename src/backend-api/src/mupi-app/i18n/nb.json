@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Fant ingenting: gjenkjenningen i Synology Photos (personer, steder, motiver) er slått av for kontoen til boksen, eller det finnes ennå ingenting med navn.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smarte album endrer seg av seg selv: boksen synkroniserer dem som alle andre.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Ta tak i en måler i grepet og flytt den til et annet sted. Et lite display viser to målere ved siden av hverandre, et bredt så mange som det er plass til."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Ta tak i en måler i grepet og flytt den til et annet sted. Et lite display viser to målere ved siden av hverandre, et bredt så mange som det er plass til.",
+ "Gehört": "Hørt",
+ "Noch nicht gehört": "Ikke hørt ennå",
+ "Als gehört markieren": "Merk som hørt",
+ "Als ungehört markieren": "Merk som ikke hørt",
+ "Als gehört markiert": "Merket som hørt",
+ "Als ungehört markiert": "Merket som ikke hørt",
+ "Alle als ungehört markieren": "Merk alle som ikke hørt",
+ "{} als ungehört markiert": "{} merket som ikke hørt",
+ "Haken an angefangenen und gehörten Folgen": "Haker ved påbegynte og hørte episoder",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Gul: påbegynt, grønn: hørt til slutt – i skjermens episodeliste og i biblioteket. Endres i biblioteket ved albumet.",
+ "Haken an": "Haker på",
+ "Haken aus": "Haker av"
 }

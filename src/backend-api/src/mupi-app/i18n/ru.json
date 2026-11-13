@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Ничего не найдено: распознавание в Synology Photos (люди, места, объекты) отключено для учётной записи коробки, или ничего с названием ещё нет.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Умные альбомы меняются сами: коробка синхронизирует их, как и все остальные.",
  "{} Foto": "{} фото",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Возьми прибор за ручку и перенеси на другое место. Маленький дисплей показывает два циферблата рядом, широкий — столько, сколько поместится."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Возьми прибор за ручку и перенеси на другое место. Маленький дисплей показывает два циферблата рядом, широкий — столько, сколько поместится.",
+ "Gehört": "Прослушано",
+ "Noch nicht gehört": "Ещё не прослушано",
+ "Als gehört markieren": "Отметить как прослушанное",
+ "Als ungehört markieren": "Отметить как непрослушанное",
+ "Als gehört markiert": "Отмечено как прослушанное",
+ "Als ungehört markiert": "Отмечено как непрослушанное",
+ "Alle als ungehört markieren": "Отметить всё как непрослушанное",
+ "{} als ungehört markiert": "{} отмечено как непрослушанное",
+ "Haken an angefangenen und gehörten Folgen": "Галочки у начатых и прослушанных выпусков",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Жёлтая: начато, зелёная: прослушано до конца – в списке выпусков на дисплее и в библиотеке. Изменить можно в библиотеке у альбома.",
+ "Haken an": "Галочки включены",
+ "Haken aus": "Галочки выключены"
 }

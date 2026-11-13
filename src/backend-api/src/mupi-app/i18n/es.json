@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "No se ha encontrado nada: el reconocimiento de Synology Photos (personas, lugares, motivos) está desactivado para la cuenta de la caja, o aún no hay nada con nombre.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Los álbumes inteligentes cambian solos: la caja los sincroniza como los demás.",
  "{} Foto": "{} foto",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Agarra un indicador por el asa y muévelo a otro lugar. Una pantalla pequeña muestra dos relojes uno junto a otro; una ancha, tantos como quepan."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Agarra un indicador por el asa y muévelo a otro lugar. Una pantalla pequeña muestra dos relojes uno junto a otro; una ancha, tantos como quepan.",
+ "Gehört": "Escuchado",
+ "Noch nicht gehört": "Aún no escuchado",
+ "Als gehört markieren": "Marcar como escuchado",
+ "Als ungehört markieren": "Marcar como no escuchado",
+ "Als gehört markiert": "Marcado como escuchado",
+ "Als ungehört markiert": "Marcado como no escuchado",
+ "Alle als ungehört markieren": "Marcar todo como no escuchado",
+ "{} als ungehört markiert": "{} marcados como no escuchados",
+ "Haken an angefangenen und gehörten Folgen": "Marcas en episodios empezados y escuchados",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Amarillo: empezado, verde: escuchado hasta el final – en la lista de episodios de la pantalla y en la biblioteca. Se cambia en la biblioteca, en el álbum.",
+ "Haken an": "Marcas activadas",
+ "Haken aus": "Marcas desactivadas"
 }

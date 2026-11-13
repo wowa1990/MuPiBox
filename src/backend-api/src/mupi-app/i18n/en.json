@@ -3915,5 +3915,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nothing found: the recognition of Synology Photos (people, places, subjects) is off for the box's account, or there is nothing with a name yet.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Smart albums change by themselves: the box syncs them like all the others.",
  "{} Foto": "{} photo",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Take a dial by its grip and move it to another place. A small display shows two dials side by side, a wide one as many as fit."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Take a dial by its grip and move it to another place. A small display shows two dials side by side, a wide one as many as fit.",
+ "Gehört": "Listened",
+ "Noch nicht gehört": "Not listened yet",
+ "Als gehört markieren": "Mark as listened",
+ "Als ungehört markieren": "Mark as not listened",
+ "Als gehört markiert": "Marked as listened",
+ "Als ungehört markiert": "Marked as not listened",
+ "Alle als ungehört markieren": "Mark all as not listened",
+ "{} als ungehört markiert": "{} marked as not listened",
+ "Haken an angefangenen und gehörten Folgen": "Ticks on started and finished episodes",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Yellow: started, green: listened to the end – in the display’s list of episodes and in the library. Change it in the library at the album.",
+ "Haken an": "Ticks on",
+ "Haken aus": "Ticks off"
 }

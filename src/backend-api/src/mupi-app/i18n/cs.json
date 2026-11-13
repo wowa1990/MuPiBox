@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Nic nenalezeno: rozpoznávání v Synology Photos (osoby, místa, motivy) je pro účet krabičky vypnuté, nebo zatím nic nemá název.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Chytrá alba se mění sama: krabička je synchronizuje jako všechna ostatní.",
  "{} Foto": "{} fotka",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Uchopte měřicí přístroj za úchyt a přesuňte ho na jiné místo. Malý displej ukazuje dva ciferníky vedle sebe, široký tolik, kolik se jich vejde."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Uchopte měřicí přístroj za úchyt a přesuňte ho na jiné místo. Malý displej ukazuje dva ciferníky vedle sebe, široký tolik, kolik se jich vejde.",
+ "Gehört": "Poslechnuto",
+ "Noch nicht gehört": "Zatím neposlechnuto",
+ "Als gehört markieren": "Označit jako poslechnuté",
+ "Als ungehört markieren": "Označit jako neposlechnuté",
+ "Als gehört markiert": "Označeno jako poslechnuté",
+ "Als ungehört markiert": "Označeno jako neposlechnuté",
+ "Alle als ungehört markieren": "Označit vše jako neposlechnuté",
+ "{} als ungehört markiert": "{} označeno jako neposlechnuté",
+ "Haken an angefangenen und gehörten Folgen": "Zaškrtnutí u rozehraných a dohraných dílů",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Žlutá: rozehráno, zelená: dohráno do konce – v seznamu dílů na displeji a v knihovně. Změnit lze v knihovně u alba.",
+ "Haken an": "Zaškrtnutí zapnuto",
+ "Haken aus": "Zaškrtnutí vypnuto"
 }

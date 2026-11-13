@@ -3899,5 +3899,17 @@
  "Nichts gefunden: Die Erkennung von Synology Photos (Personen, Orte, Motive) ist für das Konto der Box aus, oder es gibt noch nichts mit Namen.": "Rien trouvé : la reconnaissance de Synology Photos (personnes, lieux, sujets) est désactivée pour le compte de la box, ou rien n'a encore de nom.",
  "Intelligente Alben ändern sich von selbst: Die Box gleicht sie wie alle anderen ab.": "Les albums intelligents changent d'eux-mêmes : la box les synchronise comme les autres.",
  "{} Foto": "{} photo",
- "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Saisis un cadran par sa poignée et déplace-le ailleurs. Un petit écran affiche deux cadrans côte à côte, un écran large autant qu’il en tient."
+ "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.": "Saisis un cadran par sa poignée et déplace-le ailleurs. Un petit écran affiche deux cadrans côte à côte, un écran large autant qu’il en tient.",
+ "Gehört": "Écouté",
+ "Noch nicht gehört": "Pas encore écouté",
+ "Als gehört markieren": "Marquer comme écouté",
+ "Als ungehört markieren": "Marquer comme non écouté",
+ "Als gehört markiert": "Marqué comme écouté",
+ "Als ungehört markiert": "Marqué comme non écouté",
+ "Alle als ungehört markieren": "Tout marquer comme non écouté",
+ "{} als ungehört markiert": "{} marqués comme non écoutés",
+ "Haken an angefangenen und gehörten Folgen": "Coches sur les épisodes commencés et écoutés",
+ "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Jaune : commencé, vert : écouté jusqu’au bout – dans la liste des épisodes de l’écran et dans la bibliothèque. À modifier dans la bibliothèque, sur l’album.",
+ "Haken an": "Coches activées",
+ "Haken aus": "Coches désactivées"
 }
