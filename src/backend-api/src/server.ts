@@ -69,6 +69,7 @@ import { registerAudioOutputRoutes, startAudioWatch } from './audio-output'
 import { episodeKey, MAX_KEEP, type OfflineEpisode, PodcastOffline } from './podcast-offline'
 import { setFeedHeadReader } from './podcast-search'
 import { EpisodeState, episodeStateSettings } from './episode-state'
+import { HEARD_KEY, HeardStore, heardSettings } from './heard'
 import { uiScale } from './ui-scale'
 import { confirmDisplayTest, displayTestState } from './app-api/display-profile'
 import { browserGuard, corsOptionsFor, isAllowedHost, isLoopback, localOnly, localOrElternSession, logValue, PROXY_PORT, setConfiguredHosts, viaProxy } from './request-guard'
@@ -1270,6 +1271,35 @@ app.get('/api/rssfeed/episode-duration', async (req, res) => {
 const episodeState = new EpisodeState(LIBRARY_DIR, () =>
   episodeStateSettings(getMupiboxConfigSync()?.mupibox as Record<string, unknown> | undefined),
 )
+
+// What of the library was started or heard to its end (heard.ts, 5.1): the player tells it, the display shows ticks at
+// the covers of the list. The first time, what "Weiterhören" holds counts as started.
+const heardStore = new HeardStore(LIBRARY_DIR, () => {
+  try {
+    const list = JSON.parse(fs.readFileSync(resumeFile, 'utf8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+})
+
+// the display: every tick (none when the parents switched them off)
+app.get('/api/heard', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const { enabled } = heardSettings(getMupiboxConfigSync()?.mupibox as Record<string, unknown> | undefined)
+  res.json({ enabled, items: enabled ? heardStore.all() : {} })
+})
+
+// the player: {key, state: started|finished} - a minute of it played, its end reached
+app.post('/api/heard/note', (req, res) => {
+  const key = typeof req.body?.key === 'string' ? req.body.key : ''
+  const state = req.body?.state
+  if (!HEARD_KEY.test(key) || (state !== 'started' && state !== 'finished')) {
+    res.status(400).json({ error: 'invalid' })
+    return
+  }
+  res.json({ changed: heardStore.note(key, state) })
+})
 
 app.get('/api/rssfeed/cached', async (req, res) => {
   const rssUrl = req.query.url
@@ -8726,6 +8756,7 @@ app.use(
     photoNas,
     // (the Immich key kept as the NAS password: encrypted with this box's own key)
     photoSecret: { encrypt: nasEncrypt, decrypt: nasDecrypt },
+    heard: heardStore,
     localLibrary: {
       root: libraryRoot,
       categories: libraryCategories,

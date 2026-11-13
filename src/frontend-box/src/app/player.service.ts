@@ -8,6 +8,7 @@ import { CurrentMediaService } from './current-media.service'
 import { LogService } from './log.service'
 import type { Media } from './media'
 import { SpotifyService } from './spotify.service'
+import { heardQuery } from './heard-key'
 import { tileQuery } from './tile-key'
 import { TileTimeService } from './tile-time.service'
 
@@ -331,7 +332,10 @@ export class PlayerService {
     const room = this.spotifyService.isPlayerReady() ? this.spotifyService.getDeviceId() : 'current'
     const baseUrl = `${environment.backend.playerUrl}/${room}/`
     if (media) this.tileTime.noteStart(media)
-    this.http.get(baseUrl + url + (media ? tileQuery(url, media) : '')).subscribe({
+    // (and what of the library it is, for the ticks of what was heard - heard-key.ts)
+    const tile = media ? tileQuery(url, media) : ''
+    const heard = media ? heardQuery(url + tile, media) : ''
+    this.http.get(baseUrl + url + tile + heard).subscribe({
       // (its tile's day's limit is used up: the player refused it - the bar says so, the player page goes back)
       error: (e: HttpErrorResponse) => {
         const body = e.error as { error?: unknown; tile?: unknown } | null

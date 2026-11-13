@@ -89,6 +89,7 @@ export class SpotifyPlayerService {
     this.setupNetworkMonitoring()
     this.setupDeviceCheck()
     this.playerState$.subscribe((state) => this.reportSilence(state))
+    this.playerState$.subscribe((state) => this.reportProgress(state))
   }
 
   // What the box's player was told last: whether this player is silent (see reportSilence)
@@ -100,6 +101,39 @@ export class SpotifyPlayerService {
    * time only while something plays, and a pause from a phone over Spotify Connect left its own pause flag unset (a
    * silent box counted as playing). Only changes, and again with the device check (the box's player restarted).
    */
+  // what was told last by reportProgress: its track and state, the position and when
+  private progressReported: { what: string; pos: number; paused: boolean; at: number } | null = null
+
+  /**
+   * Where the display's player is - at each change of its state (a track, a pause, a seek): the box's player counts the
+   * ticks of what was heard by it (5.1, spotify-control.js "Heard": the last 30 s of the last track). Only changes: a
+   * state that only moved on in time is not told again.
+   */
+  private reportProgress(state: SpotifyWebPlaybackState | null): void {
+    const track = state?.track_window?.current_track
+    if (!this.shouldUsePlayer() || !this.deviceId || !state || !track) return
+    const idOf = (uri: string | null | undefined) => /^spotify:[a-z]+:([A-Za-z0-9]+)$/.exec(uri ?? '')?.[1] ?? ''
+    const trackId = track.id ?? idOf(track.uri)
+    const pos = Math.max(0, Math.round(state.position || 0))
+    const next = state.track_window.next_tracks?.length ?? 0
+    const what = `${trackId}|${next}|${state.context?.uri ?? ''}`
+    const last = this.progressReported
+    const now = Date.now()
+    if (last && last.what === what && last.paused === state.paused && Math.abs((last.paused ? last.pos : last.pos + now - last.at) - pos) < 2000) return
+    this.progressReported = { what, pos, paused: state.paused, at: now }
+    const q = new URLSearchParams({
+      device: this.deviceId,
+      track: trackId,
+      pos: String(pos),
+      dur: String(Math.max(0, Math.round(track.duration_ms || 0))),
+      paused: state.paused ? '1' : '0',
+      next: String(next),
+      ctx: state.context?.uri ?? '',
+      album: idOf(track.album?.uri),
+    })
+    this.http.get(`${environment.backend.playerUrl}/display/spotify-progress?${q}`).subscribe({ error: () => {} })
+  }
+
   private reportSilence(state: SpotifyWebPlaybackState | null, again = false, deviceToldAgain = false): void {
     // (only the kiosk's own player, once it has its device - the display's page opened in a browser elsewhere has no
     // player, and its "silent" counted the playing box as silent; the box's player checks the device too)

@@ -565,6 +565,7 @@ player.on('playlist-finish', () => {
   // to its list at once instead of waiting 10 s for the player to stay silent
   if (currentMeta.currentPlayer === 'mplayer') currentMeta.finished = true
   albumNow()?.onFinished?.() // (an album that is no folder: it played to its end)
+  heardPlaylistFinished()
   extensions.emit('finished')
   // Library album finished naturally — drop its resume entry so the user
   // isn't offered "weiterhören" at the very end next time. Spotify and RSS
@@ -620,6 +621,144 @@ function deleteResumeForFinishedLibraryAlbum() {
   })
   req.write(body)
   req.end()
+}
+
+// --- Heard (5.1, issue #180): the ticks at the covers of a list on the display ---
+// What plays counts as "started" after a minute of playing and as "finished" when its last track played to its last 30 s
+// (or to its end); the two moments go to the backend (heard.ts), which keeps them. What plays is named with its start
+// (?heard=, by the display and the app), else it is formed from what plays (a start from Telegram, Home Assistant, an
+// extension) - the same keys: lib:<folder>, nas:<path>, tidal:<album|playlist>:<id>, spotify:<kind>:<id>.
+// Podcast episodes have their own (the episode positions); radio has none.
+const HEARD_KEY = /^(lib|nas|tidal|spotify):[^\n]{1,400}$/
+const HEARD_STARTED_S = 60
+const HEARD_END_S = 30
+// given: the key the start named, for the playback it started (gen); key: what is counted now
+const heardState = { given: null, gen: -1, key: null, played: 0, started: false, finished: false, track: 0, settle: 0 }
+// what the display's Spotify player last told of what it plays (see /display/spotify-progress)
+let spotifyProgress = null
+const spotifyLastFetchFailed = new Map() // album id -> when asking for its last track failed (not again for a while)
+
+function startHeard(given) {
+  Object.assign(heardState, { given, gen: playbackRequest, key: null, played: 0, started: false, finished: false, track: 0, settle: 0 })
+  spotifyProgress = null
+}
+
+function heardKeyNow() {
+  // (the key the start named - only for the playback it started: a list of tracks the app plays starts without one)
+  if (heardState.given && heardState.gen === playbackRequest) return heardState.given
+  const p = currentMeta.path
+  if (currentMeta.currentPlayer === 'mplayer') {
+    if (!p) return null
+    if (currentMeta.currentType === 'local') return `lib:${p}`
+    if (currentMeta.currentType === 'nas') return `nas:${p}`
+    if (currentMeta.currentType === 'tidal') return `tidal:${p}`
+    return null
+  }
+  if (currentMeta.currentPlayer === 'spotify') {
+    const m = /^spotify:(album|playlist|episode|show):([A-Za-z0-9]+)/.exec(currentMeta.activeSpotifyId || '')
+    return m ? `spotify:${m[1]}:${m[2]}` : null
+  }
+  return null
+}
+
+function noteHeard(key, state) {
+  if (!HEARD_KEY.test(key)) return
+  const body = JSON.stringify({ key, state })
+  const req = http.request(
+    { host: '127.0.0.1', port: 8200, path: '/api/heard/note', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+    (response) => {
+      response.resume()
+      log.debug(`${now()}: [Spotify Control] heard ${state} ${key}: ${response.statusCode}`)
+    },
+  )
+  req.on('error', (err) => log.debug(`${now()}: [Spotify Control] heard note failed: ${err.message}`))
+  req.write(body)
+  req.end()
+}
+
+// Whether the Spotify track that plays is the last of what was started: an episode is its own; an album's last track as
+// Spotify lists it (asked once per album); else the display's player has nothing after it
+function spotifyIsLast(p) {
+  const m = /^spotify:(album|playlist|episode|show):([A-Za-z0-9]+)/.exec(currentMeta.activeSpotifyId || '')
+  if (!m) return false
+  if (m[1] === 'episode') return true
+  // (Spotify went on with something else - its autoplay: not what was started)
+  if (p.ctx && p.ctx !== `spotify:${m[1]}:${m[2]}`) return false
+  // (nothing after it in what was started; or an album's last track - Spotify's autoplay may line up others after it)
+  return p.next === 0 || (m[1] === 'album' && !!p.track && spotifyAlbumLastTrack.get(m[2]) === p.track)
+}
+
+// The last track of an album by its id, for spotifyIsLast (kept with the grace check's, see spotifyLastTrackOfAlbum)
+async function learnSpotifyAlbumEnd(id) {
+  if (spotifyAlbumLastTrack.has(id) || spotifyBlockedUntil()) return
+  const failed = spotifyLastFetchFailed.get(id)
+  if (failed && Date.now() - failed < 10 * 60_000) return
+  spotifyLastFetchFailed.set(id, Date.now()) // (also while it is asked: once at a time)
+  try {
+    const { body } = await spotifyApi.getAlbum(id)
+    const total = body?.tracks?.total ?? body?.total_tracks ?? 0
+    const items = body?.tracks?.items ?? []
+    if (total > 0 && items.length >= total && items[total - 1]?.id) {
+      if (spotifyAlbumLastTrack.size > 200) spotifyAlbumLastTrack.clear()
+      spotifyAlbumLastTrack.set(id, items[total - 1].id)
+    } else await spotifyLastTrackOfAlbum({ id, total_tracks: total })
+    if (spotifyAlbumLastTrack.has(id)) spotifyLastFetchFailed.delete(id)
+  } catch (err) {
+    log.debug(`${now()}: [Spotify Control] heard: the album's last track not known (${err?.message ?? err})`)
+  }
+}
+
+function heardNearEnd() {
+  if (currentMeta.currentPlayer === 'mplayer') {
+    // (shuffled: its last track is any - only the end of the list counts, see heardPlaylistFinished)
+    if (currentMeta.shuffle || heardState.settle > 0) return false
+    const nr = Number(currentMeta.currentTracknr)
+    const total = Number(currentMeta.totalTracks)
+    const dur = Number(currentMeta.durationSeconds)
+    const pos = Number(currentMeta.positionSeconds)
+    return total > 0 && nr >= total && dur > 0 && pos > 0 && pos >= dur - HEARD_END_S
+  }
+  if (currentMeta.currentPlayer === 'spotify') {
+    const p = spotifyProgress
+    if (!p || p.paused || !(p.durMs > 0)) return false
+    const at = p.posMs + (Date.now() - p.at)
+    return at >= p.durMs - HEARD_END_S * 1000 && spotifyIsLast(p)
+  }
+  return false
+}
+
+// every second (combinedTick): a minute played - started; the last 30 s of the last track - finished
+function heardTickStep() {
+  const key = heardKeyNow()
+  if (key !== heardState.key) Object.assign(heardState, { key, played: 0, started: false, finished: false, track: 0, settle: 0 })
+  if (!key || heardState.finished) return
+  // (a track that just began: the times of the one before stand for a moment - the last one began, with the position of
+  // the end of the one before it, was taken for its end)
+  const nr = Number(currentMeta.currentTracknr) || 0
+  if (nr !== heardState.track) {
+    heardState.track = nr
+    heardState.settle = 3
+  } else if (heardState.settle > 0) heardState.settle--
+  if (!isActuallyPlaying()) return
+  heardState.played++
+  if (!heardState.started && heardState.played >= HEARD_STARTED_S) {
+    heardState.started = true
+    noteHeard(key, 'started')
+  }
+  if (heardNearEnd()) {
+    heardState.finished = true
+    noteHeard(key, 'finished')
+  }
+}
+
+// the box's player came to the end of its list (not a stop): what played is heard to its end
+function heardPlaylistFinished() {
+  if (currentMeta.currentPlayer !== 'mplayer') return
+  const key = heardKeyNow()
+  if (!key || (heardState.key === key && heardState.finished)) return
+  if (heardState.key !== key) Object.assign(heardState, { key, played: 0, started: true })
+  heardState.finished = true
+  noteHeard(key, 'finished')
 }
 
 // H1: amixer was forked once per second to mirror the system volume into
@@ -1813,6 +1952,7 @@ function combinedTick() {
   playtimeTickStep()
   quietHoursTickStep()
   tileTickStep()
+  heardTickStep()
   writeCombinedWorking()
 }
 
@@ -3932,6 +4072,28 @@ app.get('/display/spotify-silent/:on', (req, res) => {
   res.json({ ok: true })
 })
 
+// The display's Spotify player says where it is (at each change of its state: a track, a pause, a seek), for the ticks of
+// what was heard (see "Heard"): track, pos and dur (ms), paused, next (tracks after it), ctx (what plays), album (its id).
+// Only from the display's own device, as /display/spotify-silent.
+app.get('/display/spotify-progress', (req, res) => {
+  if (!displaySpotifyDevice || req.query.device !== displaySpotifyDevice) {
+    res.status(409).json({ error: 'not the display device' })
+    return
+  }
+  const q = req.query
+  const id = (v) => (typeof v === 'string' && /^[A-Za-z0-9]{1,64}$/.test(v) ? v : '')
+  const num = (v) => {
+    const n = Number(v)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+  const ctx = typeof q.ctx === 'string' && /^spotify:[a-z]+:[A-Za-z0-9]{1,64}$/.test(q.ctx) ? q.ctx : ''
+  spotifyProgress = { track: id(q.track), posMs: num(q.pos), durMs: num(q.dur), paused: q.paused === '1', next: num(q.next), ctx, at: Date.now() }
+  // (an album's last track: asked once, when an album plays)
+  const album = id(q.album)
+  if (album && ctx === `spotify:album:${album}`) learnSpotifyAlbumEnd(album)
+  res.json({ ok: true })
+})
+
 // Called by the backend on the box (the parents' web app's "reload the display now").
 app.post('/display/reload-theme', (_req, res) => {
   currentMeta.themeReloadAt = Date.now()
@@ -4486,11 +4648,15 @@ app.use((req, res) => {
   let triggerCover = ''
   // the tile of the start page what starts belongs to (5.1, see "Tile time")
   let triggerTile = null
+  // what of the library starts, for the ticks of what was heard (5.1, see "Heard")
+  let triggerHeard = null
   try {
     const u = new URL(req.url, 'http://localhost')
     pathname = u.pathname
     const tile = u.searchParams.get('tile')
     if (tile && TILE_KEY.test(tile)) triggerTile = tile
+    const heard = u.searchParams.get('heard')
+    if (heard && HEARD_KEY.test(heard)) triggerHeard = heard
     const src = u.searchParams.get('src')
     if (src && /^[a-z0-9_-]{1,20}$/i.test(src)) triggerSource = src
     // (an announcement pauses the music and goes on afterwards: no start - the display jumped to the big player after
@@ -4574,6 +4740,7 @@ app.use((req, res) => {
   if (newMedia) {
     resetLocalShuffle()
     playbackRequest++
+    startHeard(triggerHeard)
     currentMeta.pause = false
     if (['library', 'nas', 'tidal'].some((segment) => hasDirSegment(command, segment))) currentMeta.cover = triggerCover
   }

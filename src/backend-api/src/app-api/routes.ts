@@ -88,7 +88,8 @@ import { withVolumeLock } from '../volume-lock'
 import { spotifyLoginAge } from './spotify-auth-age'
 import { btBattery, headphonesPlaying } from '../audio-output'
 import { playbackSnapshot } from '../playback-snapshot'
-import { tileKeyOfRow, tileParam } from './tile-key'
+import { type HeardStore, heardKeyOf, heardSettings, registerHeardAppRoutes } from '../heard'
+import { heardParam, tileKeyOfRow, tileParam } from './tile-key'
 import { applyTileTimeAction, setTileLimit, tileLimitsOf } from './tile-limits'
 import { CACHE_DIR, LOGS_DIR, SERVER_CONFIG_DIR, WWW_DIR } from '../paths'
 import {
@@ -126,6 +127,8 @@ export interface ElternRouterDeps {
   photoNas?: PhotoNasAccess
   /** How the box keeps a secret in the config (the Immich key - see photos/immich.ts). */
   photoSecret?: { encrypt(plain: string): string; decrypt(stored: string): string | undefined }
+  /** What of the library was started or heard to its end (see ../heard.ts). */
+  heard?: HeardStore
 }
 
 /** Build a Set-Cookie header value. HttpOnly + SameSite=Strict; no Secure
@@ -428,6 +431,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
   // (and back: a track, an album or a folder of the card as a download - local-download.ts)
   if (deps.localLibrary) registerLocalDownloadRoutes(router, deps.localLibrary)
   registerDisplayRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
+  // what of the library was started or heard to its end (../heard.ts)
+  if (deps.heard) registerHeardAppRoutes(router, deps.heard, () => heardSettings(deps.getMupiboxConfig()?.mupibox as Record<string, unknown> | undefined).enabled)
   // (extensions: the catalog, install, switch on and off, remove, the settings of an extension)
   registerExtensionRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig, updateMupiboxConfig: deps.updateMupiboxConfig })
   registerDisplayProfileRoutes(router, { getMupiboxConfig: deps.getMupiboxConfig })
@@ -1972,6 +1977,8 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     let cover = ''
     // the tile of the start page it belongs to (5.1, Kachel-Limit: the player counts and limits by it)
     let tile = tileKeyOfRow(item)
+    // what of it is heard (5.1, ticks at the covers - ../heard.ts): the entry, or the one album of an artist's entry
+    let heard = heardKeyOf(item)
     const ownCover = (v: unknown) => (typeof v === 'string' && /^(\/|https?:\/\/)/.test(v) ? v : '')
     // One album of an entry that subscribes a whole Spotify artist (only artistid): the app lists the artist's albums
     // and plays the one tapped - only for an artist that is in the library.
@@ -1983,6 +1990,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         return
       }
       url = `musicsearch/tidal/album:${albumId}`
+      heard = `tidal:album:${albumId}`
       // (the album's own picture, as the app shows it - only one of TIDAL's; else the artist's)
       const albumCover = (body as { cover?: unknown }).cover
       cover = typeof albumCover === 'string' && albumCover.startsWith('https://resources.tidal.com/') && albumCover.length < 300 ? albumCover : ownCover(item.cover)
@@ -1992,6 +2000,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         return
       }
       url = `spotify/now/spotify:album:${enc(albumId)}:0:0`
+      heard = `spotify:album:${albumId}`
     } else switch (type) {
       case 'library': {
         const cat = String(item.category ?? '')
@@ -2061,7 +2070,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
         return
     }
     try {
-      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern${cover ? `&cover=${encodeURIComponent(cover)}` : ''}${tileParam(tile)}`, { signal: AbortSignal.timeout(5000) })
+      const r = await fetch(`http://127.0.0.1:5005/current/${url}?src=eltern${cover ? `&cover=${encodeURIComponent(cover)}` : ''}${tileParam(tile)}${heardParam(heard)}`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
         res.status(r.status).json(errBody)
@@ -2108,7 +2117,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
     }
     try {
       const param = parts.map(encodeURIComponent).join(':')
-      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/library/album/${param}?src=eltern${tileParam(`lib:${parts.join('/')}`)}`, { signal: AbortSignal.timeout(5000) })
+      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/library/album/${param}?src=eltern${tileParam(`lib:${parts.join('/')}`)}${heardParam(`lib:${parts.join('/')}`)}`, { signal: AbortSignal.timeout(5000) })
       if (!r.ok) {
         const errBody = await r.json().catch(() => ({ error: `player rejected play (HTTP ${r.status})` }))
         res.status(r.status).json(errBody)
@@ -2127,7 +2136,7 @@ export function createElternApiRouter(deps: ElternRouterDeps): Router {
       return
     }
     try {
-      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/nas/${encodeURIComponent(nasPath)}?src=eltern${tileParam(`nas:${nasPath}`)}`, {
+      const r = await fetch(`http://127.0.0.1:5005/current/musicsearch/nas/${encodeURIComponent(nasPath)}?src=eltern${tileParam(`nas:${nasPath}`)}${heardParam(`nas:${nasPath}`)}`, {
         signal: AbortSignal.timeout(5000),
       })
       if (!r.ok) {

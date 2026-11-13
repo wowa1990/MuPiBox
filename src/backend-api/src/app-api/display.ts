@@ -13,6 +13,7 @@ import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { imageSize } from './covers'
 import { requireCsrf, requireSession } from './middleware'
 import { episodeStateSettings } from '../episode-state'
+import { heardSettings } from '../heard'
 import { applyNightDim, nightDimmed, nightDimOf, parseNightDim } from './night-dim'
 import { CUSTOM_THEME_CSS, customThemeCss, customThemeOf } from './custom-theme'
 import { bootConfigPath } from './boot-paths'
@@ -126,6 +127,8 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
       episodeResumeDays: num(mb.episodeResumeDays, 0, 3650) ?? 180,
       // new episodes marked (for so many days) and how far an episode was heard shown on the display (episode-state.ts)
       ...episodeStateSettings(mb),
+      // ticks at the albums of a list: started (yellow), heard to the end (green) - heard.ts
+      heardMarks: heardSettings(mb).enabled,
       resX: num(chromium.resX, 200, 7680) ?? 800,
       resY: num(chromium.resY, 200, 4320) ?? 480,
       // (the normal brightness, not the one of the evening: that is lower while "Abends dunkler" dims)
@@ -147,7 +150,7 @@ export function registerDisplayRoutes(router: Router, deps: DisplayDeps): void {
     const mb: Record<string, unknown> = {}
     const chromium: Record<string, unknown> = {}
     const bad = (what: string) => res.status(400).json({ error: `invalid ${what}` })
-    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker']) {
+    for (const key of ['coverflowShowNames', 'hideScrollbar', 'episodeResume', 'newEpisodes', 'episodeProgress', 'outputPicker', 'heardMarks']) {
       if (body[key] === undefined) continue
       if (typeof body[key] !== 'boolean') return bad(key)
       mb[key] = body[key]

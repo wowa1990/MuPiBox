@@ -42,3 +42,8 @@ export function tileKeyOfRow(item: Record<string, unknown>, nameFromSource?: str
 export function tileParam(key: string | null): string {
   return key ? `&tile=${encodeURIComponent(key)}` : ''
 }
+
+/** "&heard=…" - what of the library starts, for the ticks of what was heard (../heard.ts; '' for nothing) */
+export function heardParam(key: string | null): string {
+  return key && key.length <= 400 && !key.includes('\n') ? `&heard=${encodeURIComponent(key)}` : ''
+}
