@@ -13,7 +13,7 @@ import type { MupiboxConfig } from '../models/mupibox-config.model'
 import { DATA_LOCK, withLock } from '../file-lock'
 import { requireCsrf, requireSession } from './middleware'
 import { bootConfigPath } from './boot-paths'
-import { LIBRARY_DIR, SERVER_CONFIG_DIR } from '../paths'
+import { EXTENSIONS_DIR, LIBRARY_DIR, SERVER_CONFIG_DIR } from '../paths'
 import { freezeLibrary, thawLibrary } from './photos/store'
 
 export interface AdminDeps {
@@ -103,6 +103,12 @@ const PHOTO_DIR = /^home\/dietpi\/\.mupibox\/data\/photos\/upload\/[a-f0-9]{10}\
 const USERS_DATA = 'home/dietpi/.mupibox/data/extensions/data/users'
 const USERS_FILE = /^home\/dietpi\/\.mupibox\/data\/extensions\/data\/users\/(users\.json|profiles\/[a-z0-9]{2,12}\/(config\.json|(library|data|settings)\/[A-Za-z0-9_.-]{1,80}\.json|logs\/play_log\.jsonl))$/
 const USERS_DIR = /^home\/dietpi\/\.mupibox\/data\/extensions\/(data\/(users\/(profiles\/([a-z0-9]{2,12}\/((library|data|settings|logs)\/)?)?)?)?)?$/
+// the settings of the extensions (5.1): the pins of "Buttons & GPIO Input", the place of the weather ... - not the
+// extensions themselves nor their list (restored, it named extensions whose files are not there): installed again in
+// the app, an extension finds its settings in place
+const EXT_SETTINGS = 'home/dietpi/.mupibox/data/extensions/settings'
+const EXT_SETTINGS_FILE = /^home\/dietpi\/\.mupibox\/data\/extensions\/settings\/([a-z][a-z0-9-]{1,30})\.json$/
+const EXT_SETTINGS_DIR = /^home\/dietpi\/\.mupibox\/data\/(extensions\/(settings\/)?)?$/
 // file types the web server runs or a browser runs as a page: never restored below media/ (see admin.php)
 const FORBIDDEN_MEDIA = /(\.(php\d?|phtml|phar|pht|pl|py|cgi|fcgi|sh|shtml|s?html?|xhtml|xht|svgz?|js|mjs|xml|xsl)|\/\.htaccess|\/\.user\.ini)$/i
 
@@ -436,7 +442,13 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     const photos = full ? (await Promise.all([`/${PHOTO_LIBRARY}`, `/${PHOTO_UPLOAD}`].map(async (f) => ((await present(f)) ? f : '')))).filter(Boolean) : []
     // (the users' profiles: with every backup - they hold libraries, as the backup holds the one of the box)
     const users = (await present(`/${USERS_DATA}`)) ? [`/${USERS_DATA}`] : []
-    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras, ...photos, ...users]
+    // (the extensions' settings: with every backup - a few KB, and after a broken card every pin chosen anew otherwise.
+    // Only those of the extensions installed: one removed left its file, and the app asked to install it again)
+    const installedExt = Object.keys(
+      await fsp.readFile(path.join(EXTENSIONS_DIR, 'state.json'), 'utf8').then((t) => JSON.parse(t) as Record<string, unknown>, () => ({})),
+    ).filter((id) => /^[a-z][a-z0-9-]{1,30}$/.test(id))
+    const extSettings = (await Promise.all(installedExt.map(async (id) => ((await present(`/${EXT_SETTINGS}/${id}.json`)) ? `/${EXT_SETTINGS}/${id}.json` : '')))).filter(Boolean)
+    const sources = [full ? '/home/dietpi/MuPiBox/media' : '/home/dietpi/MuPiBox/media/cover', ...BACKUP_FILES, ...extras, ...photos, ...users, ...extSettings]
     // the library under its name of before (LIBRARY_ENTRY_BEFORE): copied into a folder of its own, the zip made from
     // there (the other sources by their full path, stored without the leading /)
     const stage = `/var/tmp/mupibox-backup-${process.pid}-${Date.now()}.d`
@@ -520,6 +532,8 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     let count = 0
     let photosRestored = false
     let usersRestored = false
+    // the extensions whose settings come back (their ids)
+    const extSettingsRestored: string[] = []
     const files: { name: string; size: number }[] = []
     // entries left out (see below): not unpacked
     const skipped: string[] = []
@@ -540,10 +554,13 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       if (photo) photosRestored = true
       const user = isDir ? USERS_DIR.test(name) : USERS_FILE.test(name)
       if (user) usersRestored = true
+      const extSetting = isDir ? EXT_SETTINGS_DIR.test(name) : EXT_SETTINGS_FILE.test(name)
+      const extId = isDir ? null : EXT_SETTINGS_FILE.exec(name)?.[1]
+      if (extId) extSettingsRestored.push(extId)
       const allowed =
         !name.includes('..') &&
         !name.includes('\\') &&
-        (photo || user || RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
+        (photo || user || extSetting || RESTORE_FILES.includes(name) || (isDir && (RESTORE_DIRS.includes(name) || inMedia)) || (!isDir && inMedia && !FORBIDDEN_MEDIA.test(name)))
       if (!allowed) {
         // (a file or folder of the users' data this box does not know - another version of the extension, a name with
         // a blank: left out, the rest restored; it made the whole backup refused before)
@@ -633,6 +650,16 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
       // (on a fresh box unzip made the folders above it as root: installing an extension then failed - EACCES)
       await run('sudo', ['chown', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/extensions', '/home/dietpi/.mupibox/data/extensions/data'], 30000)
     }
+    // (the extensions' settings: the server writes them when they are changed in the app)
+    if (extSettingsRestored.length > 0) {
+      await run('sudo', ['chown', '-R', 'dietpi:dietpi', `/${EXT_SETTINGS}`], 60000)
+      // (on a fresh box unzip made the folder above it as root: installing an extension then failed - EACCES)
+      await run('sudo', ['chown', 'dietpi:dietpi', '/home/dietpi/.mupibox/data/extensions'], 30000)
+    }
+    // the extensions whose settings came back but which are not installed here: the app asks for them to be installed
+    const toInstall = (
+      await Promise.all([...new Set(extSettingsRestored)].map(async (id) => ((await fsp.access(path.join(EXTENSIONS_DIR, id, 'manifest.json')).then(() => true, () => false)) ? null : id)))
+    ).filter((id): id is string => !!id)
     // the restored config brought up to the installed version (as the admin interface), its version kept
     await run('sudo', ['/usr/local/bin/mupibox/conf_update.sh'], 300000)
     await deps.updateMupiboxConfig((cfg) => {
@@ -645,6 +672,6 @@ export function registerAdminRoutes(router: Router, deps: AdminDeps): void {
     if (HOSTNAME.test(host)) await run('sudo', ['/boot/dietpi/func/change_hostname', host], 60000)
     await run('sudo', ['su', 'dietpi', '-c', '/usr/local/bin/mupibox/set_hostname.sh'], 30000)
     rebootSoon()
-    res.json({ ok: true, reboot: true })
+    res.json({ ok: true, reboot: true, extensionsToInstall: toInstall })
   })
 }

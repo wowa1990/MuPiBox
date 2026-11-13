@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Coches sur les épisodes commencés et écoutés",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Jaune : commencé, vert : écouté jusqu’au bout – dans la liste des épisodes de l’écran et dans la bibliothèque. À modifier dans la bibliothèque, sur l’album.",
  "Haken an": "Coches activées",
- "Haken aus": "Coches désactivées"
+ "Haken aus": "Coches désactivées",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Restauré – la box redémarre dans un instant. Réinstallez ensuite ces extensions (Réglages › Système › Extensions), leurs réglages sont déjà là : {}"
 }

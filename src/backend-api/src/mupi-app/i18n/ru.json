@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Галочки у начатых и прослушанных выпусков",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Жёлтая: начато, зелёная: прослушано до конца – в списке выпусков на дисплее и в библиотеке. Изменить можно в библиотеке у альбома.",
  "Haken an": "Галочки включены",
- "Haken aus": "Галочки выключены"
+ "Haken aus": "Галочки выключены",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Восстановлено – бокс сейчас перезапустится. Затем установите заново эти расширения (Настройки › Система › Расширения), их настройки уже на месте: {}"
 }

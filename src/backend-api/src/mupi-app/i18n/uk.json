@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Позначки біля розпочатих і прослуханих випусків",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Жовта: розпочато, зелена: прослухано до кінця – у списку випусків на дисплеї та в бібліотеці. Змінити можна в бібліотеці біля альбому.",
  "Haken an": "Позначки увімкнено",
- "Haken aus": "Позначки вимкнено"
+ "Haken aus": "Позначки вимкнено",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Відновлено – бокс зараз перезапуститься. Потім встановіть ці розширення знову (Налаштування › Система › Розширення), їхні налаштування вже на місці: {}"
 }

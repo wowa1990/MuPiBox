@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Visto nos episódios começados e ouvidos",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Amarelo: começado, verde: ouvido até ao fim – na lista de episódios do ecrã e na biblioteca. Altera-se na biblioteca, no álbum.",
  "Haken an": "Visto ativado",
- "Haken aus": "Visto desativado"
+ "Haken aus": "Visto desativado",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Restaurado – a caixa reinicia daqui a pouco. Depois instale de novo estas extensões (Definições › Sistema › Extensões), as definições delas já lá estão: {}"
 }

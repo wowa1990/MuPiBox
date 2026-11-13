@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Başlanan ve dinlenen bölümlerde işaret",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Sarı: başlandı, yeşil: sonuna kadar dinlendi – ekrandaki bölüm listesinde ve kitaplıkta. Kitaplıkta albümden değiştirilir.",
  "Haken an": "İşaretler açık",
- "Haken aus": "İşaretler kapalı"
+ "Haken aus": "İşaretler kapalı",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Geri yüklendi – kutu birazdan yeniden başlayacak. Ardından bu eklentileri yeniden kurun (Ayarlar › Sistem › Eklentiler), ayarları zaten yerinde: {}"
 }

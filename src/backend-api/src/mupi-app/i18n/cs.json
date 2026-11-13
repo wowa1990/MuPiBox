@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Zaškrtnutí u rozehraných a dohraných dílů",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Žlutá: rozehráno, zelená: dohráno do konce – v seznamu dílů na displeji a v knihovně. Změnit lze v knihovně u alba.",
  "Haken an": "Zaškrtnutí zapnuto",
- "Haken aus": "Zaškrtnutí vypnuto"
+ "Haken aus": "Zaškrtnutí vypnuto",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Obnoveno – box se za chvíli restartuje. Potom znovu nainstalujte tato rozšíření (Nastavení › Systém › Rozšíření), jejich nastavení už tam je: {}"
 }

@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Spunte sugli episodi iniziati e ascoltati",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Giallo: iniziato, verde: ascoltato fino alla fine – nell’elenco degli episodi del display e nella libreria. Si cambia nella libreria, sull’album.",
  "Haken an": "Spunte attive",
- "Haken aus": "Spunte disattivate"
+ "Haken aus": "Spunte disattivate",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Ripristinato – il box si riavvia tra poco. Poi reinstalla queste estensioni (Impostazioni › Sistema › Estensioni), le loro impostazioni ci sono già: {}"
 }

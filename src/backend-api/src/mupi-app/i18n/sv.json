@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Bockar vid påbörjade och lyssnade avsnitt",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Gul: påbörjad, grön: lyssnad till slutet – i displayens avsnittslista och i biblioteket. Ändras i biblioteket vid albumet.",
  "Haken an": "Bockar på",
- "Haken aus": "Bockar av"
+ "Haken aus": "Bockar av",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Återställd – boxen startar om strax. Installera sedan dessa tillägg igen (Inställningar › System › Tillägg), deras inställningar finns redan: {}"
 }

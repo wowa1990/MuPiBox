@@ -3927,5 +3927,6 @@
  "Haken an angefangenen und gehörten Folgen": "Ticks on started and finished episodes",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Yellow: started, green: listened to the end – in the display’s list of episodes and in the library. Change it in the library at the album.",
  "Haken an": "Ticks on",
- "Haken aus": "Ticks off"
+ "Haken aus": "Ticks off",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Restored – the box restarts in a moment. Then install these extensions again (Settings › System › Extensions), their settings are already there: {}"
 }

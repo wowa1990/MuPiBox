@@ -11640,7 +11640,11 @@ function mountBackup(root) {
         // no JSON
       }
       if (xhr.status === 200) {
-        $('#bk-text', root).textContent = 'Eingespielt – die Box startet gleich neu.'
+        // (the settings of extensions not installed here came back: installed again, they find them in place)
+        const ext = Array.isArray(b.extensionsToInstall) ? b.extensionsToInstall.filter((x) => typeof x === 'string') : []
+        $('#bk-text', root).textContent = ext.length
+          ? tr(`Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: ${ext.join(', ')}`)
+          : 'Eingespielt – die Box startet gleich neu.'
         return toast('Backup eingespielt – die Box startet neu')
       }
       $('#bk-bar', root).hidden = true

@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Marcas en episodios empezados y escuchados",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Amarillo: empezado, verde: escuchado hasta el final – en la lista de episodios de la pantalla y en la biblioteca. Se cambia en la biblioteca, en el álbum.",
  "Haken an": "Marcas activadas",
- "Haken aus": "Marcas desactivadas"
+ "Haken aus": "Marcas desactivadas",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Restaurado – la caja se reinicia enseguida. Después vuelve a instalar estas extensiones (Ajustes › Sistema › Extensiones), sus ajustes ya están ahí: {}"
 }

@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Znaczniki przy rozpoczętych i wysłuchanych odcinkach",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Żółty: rozpoczęte, zielony: wysłuchane do końca – na liście odcinków na wyświetlaczu i w bibliotece. Zmiana w bibliotece przy albumie.",
  "Haken an": "Znaczniki włączone",
- "Haken aus": "Znaczniki wyłączone"
+ "Haken aus": "Znaczniki wyłączone",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Przywrócono – urządzenie zaraz uruchomi się ponownie. Potem zainstaluj ponownie te rozszerzenia (Ustawienia › System › Rozszerzenia), ich ustawienia już są: {}"
 }

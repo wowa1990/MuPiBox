@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Merkit aloitetuissa ja kuunnelluissa jaksoissa",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Keltainen: aloitettu, vihreä: kuunneltu loppuun – näytön jaksoluettelossa ja kirjastossa. Muutetaan kirjastossa albumin kohdalla.",
  "Haken an": "Merkit päällä",
- "Haken aus": "Merkit pois"
+ "Haken aus": "Merkit pois",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Palautettu – laite käynnistyy kohta uudelleen. Asenna sen jälkeen nämä laajennukset uudelleen (Asetukset › Järjestelmä › Laajennukset), niiden asetukset ovat jo tallessa: {}"
 }

@@ -3911,5 +3911,6 @@
  "Haken an angefangenen und gehörten Folgen": "Flueben ved påbegyndte og hørte afsnit",
  "Gelb: angefangen, grün: zu Ende gehört – in der Folgenliste des Displays und in der Bibliothek. Ändern in der Bibliothek beim Album.": "Gul: påbegyndt, grøn: hørt til ende – i displayets liste over afsnit og i biblioteket. Ændres i biblioteket ved albummet.",
  "Haken an": "Flueben til",
- "Haken aus": "Flueben fra"
+ "Haken aus": "Flueben fra",
+ "Eingespielt – die Box startet gleich neu. Danach diese Erweiterungen neu installieren (Einstellungen › System › Erweiterungen), ihre Einstellungen sind schon da: {}": "Indlæst – boksen genstarter om lidt. Installer derefter disse udvidelser igen (Indstillinger › System › Udvidelser), deres indstillinger er der allerede: {}"
 }
