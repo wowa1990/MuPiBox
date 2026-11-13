@@ -53,7 +53,7 @@ import { startSpeech } from './speech'
 import { startBucketCleanup, parseCookie, requireCsrf, requireSession } from './app-api/middleware'
 import { registerHaAppRoutes, registerHaDisplayRoute, startHaApi } from './ha/ha-api'
 import { isLoginRequired, SESSION_COOKIE, validateSession } from './app-api/auth'
-import { type IncomingMessage, request as httpRequest } from 'node:http'
+import http, { type IncomingMessage, request as httpRequest } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { SUDO_BACKUP_SNIPPET, backupBeforeWrite } from './file-backup'
 import { readEmbeddedPicture } from './embedded-cover'
@@ -638,7 +638,8 @@ const guardedLookupFor = (lanAllowed: boolean): net.LookupFunction => (hostname,
 // checks every hop). No Accept-Encoding: the body comes as it is.
 function fetchPinned(url: URL, signal: AbortSignal, lanAllowed = false): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const request = url.protocol === 'https:' ? https.request : httpRequest
+    // (taken from the module when called, as https.request: the tests' stand-in for a feed server (nock) is seen)
+    const request = url.protocol === 'https:' ? https.request : http.request
     const req = request(url, { method: 'GET', lookup: guardedLookupFor(lanAllowed), signal, headers: { 'user-agent': 'MuPiBox', accept: '*/*' } }, (res) => {
       const headers = new Headers()
       for (const [name, value] of Object.entries(res.headers)) {
