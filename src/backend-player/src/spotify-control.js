@@ -643,9 +643,8 @@ function startHeard(given) {
   spotifyProgress = null
 }
 
-function heardKeyNow() {
-  // (the key the start named - only for the playback it started: a list of tracks the app plays starts without one)
-  if (heardState.given && heardState.gen === playbackRequest) return heardState.given
+// What plays now, as its key (the same as the display's: the folder, the NAS path, TIDAL's kind:id, Spotify's uri)
+function heardKeyPlaying() {
   const p = currentMeta.path
   if (currentMeta.currentPlayer === 'mplayer') {
     if (!p) return null
@@ -659,6 +658,15 @@ function heardKeyNow() {
     return m ? `spotify:${m[1]}:${m[2]}` : null
   }
   return null
+}
+
+function heardKeyNow() {
+  // What plays first: a start that failed (the NAS away, TIDAL not signed in, Spotify blocking) left the album before
+  // playing - counted under the key the failed start named - and another episode chosen in the player's list came with
+  // the key of the one opened. The key the start named only when what plays has none of its own (the same playback).
+  const playing = heardKeyPlaying()
+  if (playing) return playing
+  return heardState.given && heardState.gen === playbackRequest ? heardState.given : null
 }
 
 function noteHeard(key, state) {
@@ -684,7 +692,9 @@ function spotifyIsLast(p) {
   if (m[1] === 'episode') return true
   // (Spotify went on with something else - its autoplay: not what was started)
   if (p.ctx && p.ctx !== `spotify:${m[1]}:${m[2]}`) return false
-  // (nothing after it in what was started; or an album's last track - Spotify's autoplay may line up others after it)
+  // (nothing after it in what was started; or an album's last track - Spotify's autoplay may line up others after it.
+  // Shuffled: the album's last track comes at any place - only nothing after it counts, as for the box's own player)
+  if (p.shuffle) return p.next === 0
   return p.next === 0 || (m[1] === 'album' && !!p.track && spotifyAlbumLastTrack.get(m[2]) === p.track)
 }
 
@@ -754,6 +764,14 @@ function heardTickStep() {
 // the box's player came to the end of its list (not a stop): what played is heard to its end
 function heardPlaylistFinished() {
   if (currentMeta.currentPlayer !== 'mplayer') return
+  // (only when the last track really played to its end: the list also runs out when every track after one fails - the
+  // NAS gone, the WiFi moving to another access point, TIDAL's sign-in expired - an audio play broken off after its
+  // third episode was green. Shuffled: any track is the last one, its end counts)
+  const nr = Number(currentMeta.currentTracknr)
+  const total = Number(currentMeta.totalTracks)
+  const dur = Number(currentMeta.durationSeconds)
+  const pos = Number(currentMeta.positionSeconds)
+  if (!(dur > 0 && pos >= dur - HEARD_END_S) || (!currentMeta.shuffle && !(total > 0 && nr >= total))) return
   const key = heardKeyNow()
   if (!key || (heardState.key === key && heardState.finished)) return
   if (heardState.key !== key) Object.assign(heardState, { key, played: 0, started: true })
@@ -4087,7 +4105,7 @@ app.get('/display/spotify-progress', (req, res) => {
     return Number.isFinite(n) && n >= 0 ? n : 0
   }
   const ctx = typeof q.ctx === 'string' && /^spotify:[a-z]+:[A-Za-z0-9]{1,64}$/.test(q.ctx) ? q.ctx : ''
-  spotifyProgress = { track: id(q.track), posMs: num(q.pos), durMs: num(q.dur), paused: q.paused === '1', next: num(q.next), ctx, at: Date.now() }
+  spotifyProgress = { track: id(q.track), posMs: num(q.pos), durMs: num(q.dur), paused: q.paused === '1', next: num(q.next), ctx, shuffle: q.shuffle === '1', at: Date.now() }
   // (an album's last track: asked once, when an album plays)
   const album = id(q.album)
   if (album && ctx === `spotify:album:${album}`) learnSpotifyAlbumEnd(album)

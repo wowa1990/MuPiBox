@@ -116,7 +116,7 @@ export class SpotifyPlayerService {
     const trackId = track.id ?? idOf(track.uri)
     const pos = Math.max(0, Math.round(state.position || 0))
     const next = state.track_window.next_tracks?.length ?? 0
-    const what = `${trackId}|${next}|${state.context?.uri ?? ''}`
+    const what = `${trackId}|${next}|${state.context?.uri ?? ''}|${state.shuffle ? 1 : 0}`
     const last = this.progressReported
     const now = Date.now()
     if (last && last.what === what && last.paused === state.paused && Math.abs((last.paused ? last.pos : last.pos + now - last.at) - pos) < 2000) return
@@ -130,6 +130,8 @@ export class SpotifyPlayerService {
       next: String(next),
       ctx: state.context?.uri ?? '',
       album: idOf(track.album?.uri),
+      // (shuffled: an album's last track can come at any place - only the end of what is lined up counts)
+      shuffle: state.shuffle ? '1' : '0',
     })
     this.http.get(`${environment.backend.playerUrl}/display/spotify-progress?${q}`).subscribe({ error: () => {} })
   }
