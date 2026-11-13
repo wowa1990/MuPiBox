@@ -36,6 +36,16 @@ function run(cmd: string, args: string[], timeoutMs = 30000): Promise<{ ok: bool
   })
 }
 
+// Each update its own unit (mupibox-update-<time>, its name in STATE_DIR/unit): what a failed one started again - the
+// display (kiosk), the picture "Update abgebrochen" - stays in its unit (KillMode=process), and a unit with processes
+// in it stays loaded - under one name for all, the next update from the app could not start until the box restarted
+async function updateRunning(): Promise<boolean> {
+  const own = (await fsp.readFile(path.join(STATE_DIR, 'unit'), 'utf8').catch(() => '')).trim()
+  const units = [UNIT, ...(/^mupibox-update-\d{1,16}$/.test(own) ? [own] : [])]
+  const states = (await run('systemctl', ['is-active', ...units], 5000)).stdout.split('\n').map((s) => s.trim())
+  return states.some((s) => s === 'active' || s === 'activating')
+}
+
 // $1 = stable | beta | dev | os. Its state for the app in state (key=value), progress (percent, tab, step) and
 // output.txt; they stay after the restart, so the app can tell how the last update went.
 export const RUN_SH = `#!/bin/bash
@@ -238,10 +248,9 @@ async function jobState() {
   )
   const [percent, step] = progressText.trim().split('\t')
   // the unit may have ended without a word (a crash, the box switched off): then it is not running any more
-  const active = (await run('systemctl', ['is-active', UNIT], 5000)).stdout.trim()
+  const alive = await updateRunning()
   // (and "rebooting" is done once the box is up again)
   let phase = state.phase
-  const alive = active === 'active' || active === 'activating'
   if (phase === 'running' && !alive) phase = 'failed'
   if (phase === 'rebooting' && !alive) phase = 'ok'
   const finished = Number(state.finished) * 1000 || null
@@ -297,11 +306,11 @@ export function registerUpdateRoutes(router: Router, deps: UpdatesDeps): void {
       res.status(400).json({ error: 'invalid kind' })
       return
     }
-    const active = (await run('systemctl', ['is-active', UNIT], 5000)).stdout.trim()
-    if (active === 'active' || active === 'activating') {
+    if (await updateRunning()) {
       res.status(409).json({ error: 'an update is running' })
       return
     }
+    const unit = `${UNIT}-${Date.now()}`
     const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'mupibox-update-'))
     try {
       await fsp.writeFile(path.join(tmp, 'run.sh'), RUN_SH)
@@ -309,7 +318,7 @@ export function registerUpdateRoutes(router: Router, deps: UpdatesDeps): void {
       const install = await run('sudo', [
         'sh',
         '-c',
-        `install -d -m 755 ${STATE_DIR} ${STATE_DIR}/bin && install -m 755 '${tmp}/run.sh' ${STATE_DIR}/run.sh && install -m 755 '${tmp}/whiptail' ${STATE_DIR}/bin/whiptail && rm -f ${STATE_DIR}/state ${STATE_DIR}/progress ${STATE_DIR}/output.txt`,
+        `install -d -m 755 ${STATE_DIR} ${STATE_DIR}/bin && install -m 755 '${tmp}/run.sh' ${STATE_DIR}/run.sh && install -m 755 '${tmp}/whiptail' ${STATE_DIR}/bin/whiptail && rm -f ${STATE_DIR}/state ${STATE_DIR}/progress ${STATE_DIR}/output.txt && echo '${unit}' > ${STATE_DIR}/unit`,
       ])
       if (!install.ok) {
         res.status(500).json({ error: 'could not prepare the update' })
@@ -320,10 +329,10 @@ export function registerUpdateRoutes(router: Router, deps: UpdatesDeps): void {
     }
     // (KillMode=process: at the end of run.sh systemd ends only it, not what it started - the display (kiosk) started
     // again after an update that failed, and the picture "Update abgebrochen" still being drawn, were ended with the
-    // unit otherwise: the display stayed dark or on the last step)
+    // unit otherwise: the display stayed dark or on the last step. A unit of its own: see updateRunning)
     const r = await run(
       'sudo',
-      ['systemd-run', `--unit=${UNIT}`, '--collect', '--quiet', '--property=KillMode=process', '--working-directory=/home/dietpi', '/bin/bash', `${STATE_DIR}/run.sh`, kind],
+      ['systemd-run', `--unit=${unit}`, '--collect', '--quiet', '--property=KillMode=process', '--working-directory=/home/dietpi', '/bin/bash', `${STATE_DIR}/run.sh`, kind],
       15000,
     )
     if (!r.ok) {

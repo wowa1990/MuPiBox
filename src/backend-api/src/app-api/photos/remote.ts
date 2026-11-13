@@ -180,6 +180,14 @@ export class RemotePhotoSync {
     }
   }
 
+  /** The service refused the login (a live picture, the check): as the sync - asked again at most every 15 minutes */
+  refused(): void {
+    if (!this.state.unauthorized) {
+      this.state.unauthorized = true
+      void this.save()
+    }
+  }
+
   client(cfg = this.getConfig()): RemoteClient | null {
     return this.spec.client(cfg)
   }
@@ -464,6 +472,14 @@ export class RemotePhotoSync {
             break
           }
           if (!(err instanceof NotAPicture)) this.log(`${x.ref}: ${(err as Error).message}`)
+          // (a picture the box cannot read - a RAW file Nextcloud makes no preview of: up to 30 MB fetched and written at
+          // every sync, never shown - remembered as a clip that cannot be made, until it changes at the service)
+          else {
+            const key = `${source}:${x.ref}|${x.ver}`
+            await update((lib) => {
+              if (!(lib.rejected ?? []).includes(key)) lib.rejected = [...(lib.rejected ?? []), key].slice(-1000)
+            }).catch(() => undefined)
+          }
         } finally {
           await fsp.rm(part, { force: true }).catch(() => undefined)
           this.state.done++
@@ -539,8 +555,10 @@ export class RemoteLive {
       await client.check(AbortSignal.timeout(5000))
       this.failedAt = 0
       this.sync.reachable()
-    } catch {
-      // still away
+    } catch (err) {
+      // still away (the login refused: kept as the sync keeps it - the 15 minutes above)
+      if (remoteRefusedKey(err)) this.sync.refused()
+      else this.failedAt = Date.now()
     }
   }
 
@@ -553,8 +571,11 @@ export class RemoteLive {
     const client = this.sync.client()
     if (!REMOTE_REF.test(item.ref) || !REMOTE_REF.test(albumRef)) return void res.status(404).end()
     // a clip: passed on as it comes, a part of it when the player asks for one (not kept - too big for the live cache)
+    // (the login refused: the service is not asked for every picture - each a failed login, and a server that counts them
+    // locked the box out; checkNow asks again)
+    const refused = () => this.sync.status().unauthorized
     if (size === 'v') {
-      if (!client?.liveClips) return void res.status(404).end()
+      if (!client?.liveClips || refused()) return void res.status(404).end()
       const stop = new AbortController()
       // (what came first: the display closing - its own abort - or the service's stream failing, which closes the answer too)
       let displayGone = false
@@ -582,6 +603,7 @@ export class RemoteLive {
       } catch (err) {
         // (the display went away - its own abort, not the service; the service's stream failed - it is away for now)
         if (!displayGone && (sourceFailed || remoteDown(err) || remoteRefusedKey(err))) this.failedAt = Date.now()
+        if (remoteRefusedKey(err)) this.sync.refused()
         if (!res.headersSent) res.status(404).end()
         else res.destroy()
       }
@@ -604,7 +626,7 @@ export class RemoteLive {
     } catch {
       // not kept yet
     }
-    if (!client) return void res.status(404).end()
+    if (!client || refused()) return void res.status(404).end()
     try {
       const r = await client.picture(albumRef, item, kind)
       const buf = Buffer.from(await r.arrayBuffer())
@@ -619,6 +641,7 @@ export class RemoteLive {
     } catch (err) {
       // (the service away or the login refused - not a single picture it does not have)
       if (remoteDown(err) || remoteRefusedKey(err)) this.failedAt = Date.now()
+      if (remoteRefusedKey(err)) this.sync.refused()
       if (!res.headersSent) res.status(404).end()
     }
   }

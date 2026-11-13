@@ -4690,8 +4690,12 @@ app.use((req, res) => {
     /* malformed — bleibt 'box', pathname bleibt req.url */
   }
   if (triggerSource !== null) {
-    currentMeta.triggerSource = triggerSource
-    currentMeta.triggerAt = Date.now()
+    // (louder, quieter, a jump within the track, shuffle, repeat, pause, stop: nothing new plays - a button or the rotary
+    // encoder pressed while the child browsed the library took the display to the player at every press)
+    if (!/\/(?:[+-]\d{1,2}|=\d{1,3}|seek[+-]\d+|seekpos:[^/]*|shuffle(?:on|off)|repeat(?:on|off)|pause|stop|shutoff)$/.test(pathname)) {
+      currentMeta.triggerSource = triggerSource
+      currentMeta.triggerAt = Date.now()
+    }
     // (a command of the display, the app, Telegram …: the pause for names read out is not the backend's any more)
     speechPauseToken = 0
   }

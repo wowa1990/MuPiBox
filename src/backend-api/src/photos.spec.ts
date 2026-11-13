@@ -481,3 +481,25 @@ test('photo Synology: a question DSM does not know - a smart album gone only whi
   await assert.rejects(client.album('12', signal, false), { status: 502 })
   await assert.rejects(client.album('f5', signal, false), { status: 502 })
 })
+
+test('iCloud: only "not there" is an album gone - a throttled or failed answer inside a "200" keeps the pictures on the box', async () => {
+  const { IcloudClient } = await import('./app-api/photos/icloud')
+  const { RemoteAway } = await import('./app-api/photos/remote')
+  const real = globalThis.fetch
+  let answer: { status: number; body: unknown } = { status: 200, body: {} }
+  globalThis.fetch = (async () => new Response(JSON.stringify(answer.body), { status: answer.status })) as typeof fetch
+  try {
+    const client = new IcloudClient([])
+    const signal = new AbortController().signal
+    answer = { status: 200, body: { results: [{ serverErrorCode: 'THROTTLED' }] } }
+    await assert.rejects(client.access('k1', signal), (e) => e instanceof RemoteAway)
+    answer = { status: 200, body: { results: [{ serverErrorCode: 'NOT_FOUND' }] } }
+    await assert.rejects(client.access('k2', signal), { status: 404 })
+    answer = { status: 400, body: {} }
+    await assert.rejects(client.access('k3', signal), (e) => e instanceof RemoteAway)
+    answer = { status: 404, body: {} }
+    await assert.rejects(client.access('k4', signal), { status: 404 })
+  } finally {
+    globalThis.fetch = real
+  }
+})

@@ -161,8 +161,9 @@ export class IcloudClient implements RemoteClient {
     if (!r.ok) {
       await r.body?.cancel().catch(() => undefined)
       if (r.status === 429 || r.status >= 500) throw new RemoteRefused(r.status, LABEL)
-      // (a link no longer public, an album deleted: Apple says no when it is resolved - the album is gone)
-      if (resolve || r.status === 404) throw new RemoteRefused(404, LABEL)
+      // (an album deleted: Apple says "not found" when it is resolved - the album is gone. Any other no - a change at
+      // Apple, a refused request - is not taken for "gone": that deleted the albums kept on the box)
+      if (r.status === 404 || (resolve && r.status === 410)) throw new RemoteRefused(404, LABEL)
       // (reading a resolved album, any other no - its key refused before its time, a change at Apple: not taken for
       // "gone" - that deleted the albums kept on the box; tried again at the next sync)
       throw r.status === 401 || r.status === 403 ? new KeyRefused(`${LABEL}: ${r.status}`) : new RemoteAway(`${LABEL}: ${r.status}`)
@@ -181,6 +182,12 @@ export class IcloudClient implements RemoteClient {
     const q = `remapEnums=true&getCurrentSyncToken=true&sharing_url_key=${encodeURIComponent(key)}`
     const j = await this.post(`${CLOUDKIT}/public/records/resolve?${q}`, { shortGUIDs: [{ value: key }] }, signal, true)
     const r = obj((Array.isArray(j.results) ? j.results : [])[0])
+    // (Apple answers many a no inside a "200": only "not there" or "not allowed" is an album gone; throttled, try again
+    // later, an error of its own - the album is away for now, the pictures on the box stay)
+    if (typeof r.serverErrorCode === 'string') {
+      if (/^(NOT_FOUND|ACCESS_DENIED|ZONE_NOT_FOUND|SHARE_NOT_FOUND)$/.test(r.serverErrorCode)) throw new RemoteRefused(404, LABEL)
+      throw new RemoteAway(`${LABEL}: ${r.serverErrorCode}`)
+    }
     const anon = obj(r.anonymousPublicAccess)
     const share = obj(r.share)
     if (!r.zoneID || typeof anon.token !== 'string' || typeof anon.databasePartition !== 'string' || !/^https:\/\/[a-z0-9-]+\.icloud\.com(:443)?$/i.test(anon.databasePartition)) {
@@ -209,6 +216,11 @@ export class IcloudClient implements RemoteClient {
         throw err
       }
       const z = obj((Array.isArray(j.zones) ? j.zones : [])[0])
+      // (an error of the zone inside a "200": not an empty album - an empty one dropped all its pictures kept on the box)
+      if (typeof z.serverErrorCode === 'string' || !Array.isArray(z.records)) {
+        if (z.serverErrorCode === 'ACCESS_DENIED' && !fresh) return this.read(key, signal, videos, true)
+        throw new RemoteAway(`${LABEL}: ${typeof z.serverErrorCode === 'string' ? z.serverErrorCode : 'no records'}`)
+      }
       if (Array.isArray(z.records)) all.push(...(z.records as CkRecord[]))
       syncToken = typeof z.syncToken === 'string' ? z.syncToken : undefined
       if (z.moreComing !== true || !syncToken) break

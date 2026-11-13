@@ -548,7 +548,9 @@ function restartServices(): void {
 async function lockLibrary(id: string): Promise<(() => void) | null> {
   const context = `extension ${id}`
   const got: string[] = []
+  let limit: ReturnType<typeof setTimeout> | undefined
   const release = () => {
+    if (limit) clearTimeout(limit)
     for (const lock of got.splice(0)) releaseLock(lock, context)
   }
   for (const lock of [DATA_LOCK, RESUME_LOCK]) {
@@ -563,6 +565,14 @@ async function lockLibrary(id: string): Promise<(() => void) | null> {
     }
     got.push(lock)
   }
+  // (at most 5 minutes - an exchange of the library's files takes seconds: an extension that never gave them back, by an
+  // error of its own, kept the app's changes of the library, the Smart Sync and "Weiterhören" failing until a restart)
+  limit = setTimeout(() => {
+    if (got.length === 0) return
+    console.warn(`${new Date().toLocaleString()}: [extensions] ${id} held the library's locks for 5 minutes - given back`)
+    release()
+  }, 5 * 60_000)
+  limit.unref?.()
   return release
 }
 
@@ -859,6 +869,16 @@ async function removeExtension(id: string): Promise<void> {
     for (const rule of manifest?.system?.udev ?? []) await run('sudo', ['rm', '-f', `/etc/udev/rules.d/${rule.name}`], 20000)
     if ((manifest?.system?.udev ?? []).length > 0) await run('sudo', ['udevadm', 'control', '--reload'], 20000)
     await fsp.rm(path.join(EXT_DIR, id), { recursive: true, force: true })
+    // (its pins given free: the core counts them free once it is gone - the fan put on one, the extension installed again
+    // was refused with no page to choose another; its other settings stay for a new install)
+    const gpioKeys = Object.entries(manifest?.settings ?? {}).filter(([, s]) => s?.type === GPIO_SETTING).map(([k]) => k)
+    if (gpioKeys.length > 0) {
+      const have = await readJson<Record<string, unknown>>(settingsFile(id), {})
+      if (gpioKeys.some((k) => typeof have[k] === 'number' && have[k] !== 0)) {
+        for (const k of gpioKeys) if (k in have) have[k] = 0
+        await fsp.writeFile(settingsFile(id), JSON.stringify(have)).catch(() => undefined)
+      }
+    }
     const state = await readState()
     delete state[id]
     await writeState(state)
