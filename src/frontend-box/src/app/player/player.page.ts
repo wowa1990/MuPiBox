@@ -27,6 +27,7 @@ import {
 import { addIcons } from 'ionicons'
 import {
   arrowBackOutline,
+  arrowDownOutline,
   chevronDown,
   chevronUp,
   close,
@@ -454,6 +455,7 @@ export class PlayerPage implements OnInit, AfterViewInit {
     }
     addIcons({
       arrowBackOutline,
+      arrowDownOutline,
       chevronDown,
       chevronUp,
       volumeLowOutline,

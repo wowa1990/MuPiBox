@@ -382,7 +382,11 @@ export class SynologyClient implements RemoteClient {
   /** A smart album: recently added, videos (personal space), a person, a place, a tag, a subject (of either space) */
   private async smart(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
     if (ref === 'rec') return { name: 'Zuletzt hinzugefügt', items: await this.listed({ api: 'SYNO.Foto.Browse.RecentlyAdded', method: 'list' }, signal, videos, RECENT_MAX, true) }
-    if (ref === 'vid') return { name: 'Videos', items: videos ? await this.listed({ api: 'SYNO.Foto.Browse.Item', method: 'list', type: 'video' }, signal, videos, VIDEOS_MAX, true) : [] }
+    if (ref === 'vid') {
+      // (only the clips of the answer: a DSM that does not take the filter gives the whole library, photos too)
+      const items = videos ? await this.listed({ api: 'SYNO.Foto.Browse.Item', method: 'list', type: 'video' }, signal, videos, VIDEOS_MAX, true) : []
+      return { name: 'Videos', items: items.filter((x) => x.kind === 'video') }
+    }
     const space = ref[0] === ref[0].toUpperCase() ? 'shared' : 'personal'
     const api = SynologyClient.api(space)
     const kind = { p: 'person', l: 'place', g: 'tag', c: 'subject' }[ref[0].toLowerCase() as 'p' | 'l' | 'g' | 'c'] as 'person' | 'place' | 'tag' | 'subject'
@@ -401,7 +405,17 @@ export class SynologyClient implements RemoteClient {
   async album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
     const what = SynologyClient.kindOf(ref)
     if (!what) throw new RemoteRefused(404, 'Synology')
-    if (what.kind === 'smart') return this.smart(what.id, signal, videos)
+    if (what.kind === 'smart') {
+      try {
+        return await this.smart(what.id, signal, videos)
+      } catch (err) {
+        if (!(err instanceof SynoNoSuchQuestion) || signal.aborted) throw err
+        // (a question every Synology Photos knows: answered, this one has no such smart album - it is not there; not
+        // answered either, Synology Photos is not running now and its error goes on as the service being away)
+        await this.call({ api: 'SYNO.Foto.Browse.Album', method: 'list', version: '2', offset: '0', limit: '1' }, signal)
+        throw new RemoteRefused(404, 'Synology (no such smart album)')
+      }
+    }
     if (what.kind !== 'album') return this.folder(what.kind, what.id, signal, videos)
     const where = await this.albumParams(ref, signal)
     const name = String((await this.albums(signal)).get(ref)?.name ?? '')
@@ -468,13 +482,19 @@ export class SynologyClient implements RemoteClient {
   }
 }
 
+/** DSM's answer to a question it does not know (or to every one, while Synology Photos is not running) */
+class SynoNoSuchQuestion extends RemoteRefused {}
+
 /** What DSM's error code of a question means for the box */
 function synoError(code: number): Error {
   // (no right: 105 the session may not, 402 not for this account)
   if (code === 105 || code === 402) return new RemoteRefused(403, `Synology (${code})`)
-  // (not there: 608/609/620/641 - an album or a picture gone, unshared; 102-104 and 120: this DSM has no such question,
-  // as a smart album its version of Synology Photos does not know)
-  if ([102, 103, 104, 120, 608, 609, 620, 641, 642].includes(code)) return new RemoteRefused(404, `Synology (${code})`)
+  // (not there: 608/609/620/641 - an album or a picture gone, unshared)
+  if ([608, 609, 620, 641, 642].includes(code)) return new RemoteRefused(404, `Synology (${code})`)
+  // (102-104 and 120: no such question - a smart album this version of Synology Photos does not know, but the same answer
+  // comes for every question while Synology Photos is not running, as while its package is updated at night: the service
+  // away, the pictures on the box stay. Only a smart album tells the two apart, see `album`)
+  if ([102, 103, 104, 120].includes(code)) return new SynoNoSuchQuestion(502, `Synology (${code})`)
   return new RemoteRefused(502, `Synology (${code})`)
 }
 
@@ -670,10 +690,12 @@ export function registerPhotoSynologyRoutes(router: Router, deps: PhotoSynologyD
     res.setHeader('Cache-Control', 'no-store')
     const client = tryClient()
     if (!client) return void res.status(409).json({ error: 'not_connected' })
-    const collections = [
-      { ref: 'rec', kind: 'recent' },
-      { ref: 'vid', kind: 'videos' },
-    ]
+    // (videos only where the display shows them: "Videos anzeigen" and the pictures kept on the box - live albums show no
+    // clips; one chosen before stays in the list, to be taken out)
+    const cfg = deps.getMupiboxConfig()
+    const s = synologySettings(cfg)
+    const videosShown = photoSettings(cfg).showVideos && s.keepCopy
+    const collections = [{ ref: 'rec', kind: 'recent' }, ...(videosShown || s.albumIds.includes('vid') ? [{ ref: 'vid', kind: 'videos' }] : [])]
     const kinds = [
       ['people', 'person', 'p'],
       ['places', 'place', 'l'],

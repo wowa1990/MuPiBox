@@ -450,3 +450,34 @@ test('photo Synology smart albums: recently added, videos, people, places, tags 
   await new Pic({ url: 'https://nas:5001', account: 'box', password: 'pw' }).picture('p7', { ref: '4', ver: '4_k' }, 'full')
   assert.equal(asked[0].api, 'SYNO.Foto.Thumbnail')
 })
+
+test('photo Synology: a question DSM does not know - a smart album gone only while Synology Photos answers', async () => {
+  const { SynologyClient } = await import('./app-api/photos/synology')
+  const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { 'content-type': 'application/json' } })
+  const no = (code: number) => new Response(JSON.stringify({ success: false, error: { code } }), { headers: { 'content-type': 'application/json' } })
+  const photo = (id: number, type = 'photo') => ({ id, type, time: id, additional: { thumbnail: { cache_key: `${id}_k`, xl: 'ready' } } })
+  let running = true
+  class Fake extends SynologyClient {
+    protected override async raw(params: Record<string, string>): Promise<globalThis.Response> {
+      // (Synology Photos stopped - its package updated: every question of it gets 102)
+      if (!running) return no(102)
+      if (params.api === 'SYNO.Foto.Browse.RecentlyAdded') return no(102)
+      if (params.api === 'SYNO.Foto.Browse.Album') return ok({ list: [{ id: 12, name: 'Sommer', item_count: 1 }] })
+      // a DSM that does not take the filter for videos: the whole library
+      if (params.api === 'SYNO.Foto.Browse.Item' && params.type === 'video') return ok({ list: [photo(1), photo(2, 'video'), photo(3)] })
+      if (params.api === 'SYNO.Foto.Browse.Item' && params.album_id === '12') return ok({ list: [photo(4)] })
+      throw new Error(`not expected: ${JSON.stringify(params)}`)
+    }
+  }
+  const client = new Fake({ url: 'https://nas:5001', account: 'box2', password: 'pw' })
+  const signal = new AbortController().signal
+  // Synology Photos answers, only this smart album is not known: not there
+  await assert.rejects(client.album('rec', signal, false), { status: 404 })
+  // the videos: only the clips of the answer
+  assert.deepEqual((await client.album('vid', signal, true)).items.map((x) => x.ref), ['2'])
+  // Synology Photos not running: the service away - an album and a smart album stay on the box
+  running = false
+  await assert.rejects(client.album('rec', signal, false), { status: 502 })
+  await assert.rejects(client.album('12', signal, false), { status: 502 })
+  await assert.rejects(client.album('f5', signal, false), { status: 502 })
+})
