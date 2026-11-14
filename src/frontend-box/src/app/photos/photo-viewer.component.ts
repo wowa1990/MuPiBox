@@ -22,18 +22,23 @@ import { type PhotoAsset, PhotosService } from './photos.service'
 const SPEEDS = [8, 5, 3] as const
 // a clip in the slideshow: up to this long it plays (silent) to its end, a longer one shows its picture
 const CLIP_IN_SLIDESHOW = 30
+// a picture zoomed in at most so far (its display size has 1280 px on the long side), and by a double tap
+const MAX_ZOOM = 4
+const DOUBLE_TAP_ZOOM = 2.5
 type Speed = (typeof SPEEDS)[number]
 
 /**
  * A picture over the whole display, and the slideshow (handoff §6). The background is the same picture in its 32 px
  * size scaled up and darkened - never blurred live on the Pi. Only opacity and transform are animated.
- * Tap: buttons on/off · swipe: next / previous, round and round · double tap: whole ↔ filling.
+ * Tap: buttons on/off · swipe: next / previous, round and round · double tap: zoom in there ↔ the whole picture again ·
+ * two fingers: zoom (up to 4×) · zoomed in: one finger moves the picture (no swipe to the next one). Whole ↔ filling: its
+ * button. A clip is not zoomed.
  */
 @Component({
   selector: 'mupi-photo-viewer',
   imports: [StatusComponent],
   template: `
-    <div class="pv" (pointerdown)="down($event)" (pointerup)="up($event)" (pointercancel)="tracking = false">
+    <div class="pv" (pointerdown)="down($event)" (pointermove)="move($event)" (pointerup)="up($event)" (pointercancel)="cancel($event)">
       @for (s of slides(); track s.key) {
         <div class="pv-slide" [class.pv-in]="s.fresh" [class.pv-zoom]="playing()" [class.pv-alt]="s.key % 2 === 1" [style.--pv-hold]="speed() + 1.2 + 's'">
           <img class="pv-bg" [src]="photos.fileUrl(albumId(), s.asset.id, 'b')" alt="" draggable="false" />
@@ -53,7 +58,15 @@ type Speed = (typeof SPEEDS)[number]
               (error)="clipEnded()"
             ></video>
           } @else {
-            <img class="pv-fg" [class.pv-fill]="fill()" [src]="photos.fileUrl(albumId(), s.asset.id, 'f')" [attr.alt]="pictureLabel(s.index)" draggable="false" />
+            <img
+              class="pv-fg"
+              [class.pv-fill]="fill()"
+              [class.pv-glide]="s.key === slideKey() && zoomGlide()"
+              [style.transform]="s.key === slideKey() ? zoomCss() : null"
+              [src]="photos.fileUrl(albumId(), s.asset.id, 'f')"
+              [attr.alt]="pictureLabel(s.index)"
+              draggable="false"
+            />
           }
         </div>
       }
@@ -213,6 +226,10 @@ type Speed = (typeof SPEEDS)[number]
     }
     .pv-fg.pv-fill {
       object-fit: cover;
+    }
+    /* zoomed in or out by a double tap: it glides there (two fingers: it follows them at once) */
+    .pv-fg.pv-glide {
+      transition: transform 220ms ease-out;
     }
     .pv-progress {
       position: absolute;
@@ -637,7 +654,8 @@ export class PhotoViewerComponent implements OnDestroy {
   }
 
   private show(i: number): void {
-    // (another picture: a clip on it starts by itself again - unless the box is locked)
+    // (another picture: a clip on it starts by itself again - unless the box is locked; it comes whole, not zoomed)
+    this.resetZoom()
     this.clipHold = false
     this.clipPaused.set(false)
     this.previous.set({ key: this.slideKey(), index: this.index() })
@@ -664,19 +682,130 @@ export class PhotoViewerComponent implements OnDestroy {
     this.hideTimer = window.setTimeout(() => this.controls.set(false), 4000)
   }
 
-  // ---------- gestures: tap, double tap, swipe ----------
+  // ---------- zoom: two fingers, a double tap; zoomed in, one finger moves the picture ----------
+  /** the zoom of the picture shown: its scale and its offset from the middle (px) */
+  protected readonly zoom = signal({ z: 1, x: 0, y: 0 })
+  /** a double tap: it glides there; two fingers: it follows them at once */
+  protected readonly zoomGlide = signal(false)
+  protected readonly zoomCss = computed(() => {
+    const { z, x, y } = this.zoom()
+    return z === 1 ? null : `translate(${x}px, ${y}px) scale(${z})`
+  })
+  private readonly zoomed = computed(() => this.zoom().z > 1)
+
+  private box(): { cx: number; cy: number; w: number; h: number } {
+    const r = this.host.nativeElement.getBoundingClientRect()
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: r.width, h: r.height }
+  }
+
+  // (the offset at most as far as the zoom adds on each side: no black beyond the picture's frame; zoomed in, the slideshow
+  // pauses - it would take the picture away under the fingers)
+  private setZoom(z: number, x: number, y: number, glide = false): void {
+    const b = this.box()
+    const s = Math.min(MAX_ZOOM, Math.max(1, z))
+    const mx = ((s - 1) * b.w) / 2
+    const my = ((s - 1) * b.h) / 2
+    this.zoomGlide.set(glide)
+    this.zoom.set(s <= 1.02 ? { z: 1, x: 0, y: 0 } : { z: s, x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) })
+    if (this.zoomed() && this.playing()) this.pause()
+  }
+
+  private resetZoom(glide = false): void {
+    this.pinch = null
+    this.pan = null
+    this.zoomGlide.set(glide)
+    this.zoom.set({ z: 1, x: 0, y: 0 })
+  }
+
+  // ---------- gestures: tap, double tap, swipe, two fingers ----------
   protected tracking = false
   private startX = 0
   private startY = 0
+  // the fingers on the screen (pointer → where) - two zoom
+  private readonly fingers = new Map<number, { x: number; y: number }>()
+  // zoomed or moved since the first finger came: no tap and no swipe when they go
+  private gestured = false
+  // two fingers: the zoom when they came, their distance and their middle (from the screen's middle)
+  private pinch: { z: number; x: number; y: number; d: number; mx: number; my: number } | null = null
+  // one finger moving the picture zoomed in: the offset when it began, and where the finger was
+  private pan: { x: number; y: number; px: number; py: number } | null = null
 
   protected down(e: PointerEvent): void {
-    this.tracking = true
-    this.startX = e.clientX
-    this.startY = e.clientY
+    this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (this.fingers.size === 1) {
+      this.tracking = true
+      this.gestured = false
+      this.startX = e.clientX
+      this.startY = e.clientY
+      return
+    }
+    // a second finger on the picture (not on a button, not on a clip): zoom
+    if (this.fingers.size === 2 && !this.clipShown() && !(e.target as HTMLElement).closest('[data-ui]')) {
+      this.gestured = true
+      window.clearTimeout(this.tapTimer)
+      this.startPinch()
+    }
+  }
+
+  private startPinch(): void {
+    const [a, b] = [...this.fingers.values()]
+    const m = this.box()
+    const { z, x, y } = this.zoom()
+    this.pan = null
+    this.pinch = { z, x, y, d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2 - m.cx, my: (a.y + b.y) / 2 - m.cy }
+  }
+
+  protected move(e: PointerEvent): void {
+    const f = this.fingers.get(e.pointerId)
+    if (!f) return
+    f.x = e.clientX
+    f.y = e.clientY
+    const p = this.pinch
+    if (p && this.fingers.size >= 2) {
+      // (the point of the picture between the fingers stays between them)
+      const [a, b] = [...this.fingers.values()]
+      const m = this.box()
+      const z = Math.min(MAX_ZOOM, Math.max(1, (p.z * Math.hypot(a.x - b.x, a.y - b.y)) / p.d))
+      const mx = (a.x + b.x) / 2 - m.cx
+      const my = (a.y + b.y) / 2 - m.cy
+      this.setZoom(z, mx - (z * (p.mx - p.x)) / p.z, my - (z * (p.my - p.y)) / p.z)
+      return
+    }
+    if (this.fingers.size !== 1 || !this.tracking || !this.zoomed()) return
+    if (!this.pan) {
+      // (a tap's small wobble is no move)
+      if (Math.hypot(e.clientX - this.startX, e.clientY - this.startY) < 12) return
+      const { x, y } = this.zoom()
+      this.pan = { x, y, px: e.clientX, py: e.clientY }
+      this.gestured = true
+      window.clearTimeout(this.tapTimer)
+    }
+    this.setZoom(this.zoom().z, this.pan.x + e.clientX - this.pan.px, this.pan.y + e.clientY - this.pan.py)
+  }
+
+  protected cancel(e: PointerEvent): void {
+    this.fingers.delete(e.pointerId)
+    if (this.fingers.size) return
+    this.tracking = false
+    this.pinch = null
+    this.pan = null
   }
 
   protected up(e: PointerEvent): void {
-    if (!this.tracking) return
+    this.fingers.delete(e.pointerId)
+    if (this.gestured) {
+      // (one of two fingers lifted: the other one moves the picture on; all gone: the zoom stays as it is)
+      this.pinch = null
+      const [f] = [...this.fingers.values()]
+      const { x, y } = this.zoom()
+      this.pan = f ? { x, y, px: f.x, py: f.y } : null
+      if (!f) {
+        this.tracking = false
+        this.touched()
+      }
+      return
+    }
+    if (!this.tracking || this.fingers.size) return
     this.tracking = false
     // (a button's own tap)
     if ((e.target as HTMLElement).closest('[data-ui]')) {
@@ -685,17 +814,25 @@ export class PhotoViewerComponent implements OnDestroy {
     }
     const dx = e.clientX - this.startX
     const dy = e.clientY - this.startY
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+    // (zoomed in: no swipe - the finger moved the picture)
+    if (!this.zoomed() && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
       this.step(dx < 0 ? 1 : -1)
       return
     }
     if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return
     const now = Date.now()
     if (now - this.lastTap < 300) {
-      // double tap: whole ↔ filling (the single tap waiting is dropped)
+      // double tap: zoomed in at that point - the tapped spot stays under the finger -, zoomed in already: the whole
+      // picture again (the single tap waiting is dropped)
       window.clearTimeout(this.tapTimer)
       this.lastTap = 0
-      this.fill.set(!this.fill())
+      if (this.zoomed()) this.resetZoom(true)
+      else if (!this.clipShown()) {
+        const m = this.box()
+        const px = e.clientX - m.cx
+        const py = e.clientY - m.cy
+        this.setZoom(DOUBLE_TAP_ZOOM, px * (1 - DOUBLE_TAP_ZOOM), py * (1 - DOUBLE_TAP_ZOOM), true)
+      }
       return
     }
     this.lastTap = now
