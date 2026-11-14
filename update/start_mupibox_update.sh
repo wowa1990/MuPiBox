@@ -699,6 +699,24 @@ weigh_progress() {
 	done
 }
 
+# The progress where whiptail has no terminal (started with systemd-run, as in the instructions for testing a branch):
+# whiptail quits at once, and every step after it was "printf: write error: broken pipe" in the journal. What whiptail
+# left unread is written here as lines ("33% Unzip"), so the journal shows how far the update is. After a whiptail that
+# ran to the end there is nothing left to read.
+progress_lines() {
+	local line pct text l
+	while IFS= read -r line; do
+		if [ "${line}" != "XXX" ]; then
+			printf '%s\n' "${line}"
+			continue
+		fi
+		IFS= read -r pct
+		text=""
+		while IFS= read -r l && [ "${l}" != "XXX" ]; do text="${text:+${text} }${l}"; done
+		printf '%s%% %s\n' "${pct}" "${text}"
+	done
+}
+
 rm -f /tmp/mupibox-update-failed
 {
 	###############################################################################################
@@ -1867,7 +1885,7 @@ rm -f /tmp/mupibox-update-failed
 	sleep 5
 
 
-} | weigh_progress | whiptail --title "MuPiBox Update ${VERSION_LONG}" --gauge "Please wait while installing" 6 60 0
+} | weigh_progress | { whiptail --title "MuPiBox Update ${VERSION_LONG}" --gauge "Please wait while installing" 6 60 0; progress_lines; }
 
 if [ -f /tmp/mupibox-update-failed ]; then
 	# (the reason, as fail_update wrote it - this said "the archive could not be downloaded" for every abort before)
