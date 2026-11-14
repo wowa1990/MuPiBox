@@ -52,8 +52,13 @@ export class PlaytimeChipComponent {
     { initialValue: '' },
   )
 
+  // (on the photos' screens - the tab "Fotos", an album, its full view - the listening time is no matter: hidden there,
+  // also when the photos have no time of their own. Only when they count on the listening time ("Bildzeit" shared) it
+  // is the time they use, and it stays.)
+  private readonly photosOwnTime = computed(() => this.photoTime.shown() && this.photoTime.status()?.mode !== 'shared')
+
   protected readonly visible: Signal<boolean> = computed(
-    () => (this.playtimeSeconds() !== null || this.tile() !== null) && !this.photoTime.chipShown(),
+    () => (this.playtimeSeconds() !== null || this.tile() !== null) && !this.photoTime.chipShown() && !this.photosOwnTime(),
   )
 
   protected readonly remainingMinutes: Signal<number> = computed(() => {
