@@ -9,7 +9,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import tls from 'node:tls'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import cors from 'cors'
@@ -45,6 +44,9 @@ import { startWeeklySummary } from './app-api/weekly-summary'
 import { startInstallationStatistics } from './app-api/telemetry'
 import { registerPhotoDisplayRoutes } from './app-api/photos/albums'
 import type { PhotoNasAccess } from './app-api/photos/nas'
+import { NasAccess, type NasConnectResult } from './nas/access'
+import { NasApiError, type NasFileEntry, type NasProvider, NasSessionExpiredError } from './nas/provider'
+import { nasResolveBase, webdavLogin } from './nas/webdav'
 import { applyPhotoTimeAction } from './app-api/photos/settings'
 import { applyTileTimeAction } from './app-api/tile-limits'
 import { startNightDim } from './app-api/night-dim'
@@ -154,7 +156,7 @@ const ONLINE_COVER_FILE_NAME = 'cover.jpg'
 const ONLINE_COVER_NEXT_TO_SCAN = 'cover-online.jpg'
 
 // Stores a found online cover as cover.jpg in its album folder - only when the folder has no picture of its own, never
-// over an existing file (WebDAV "Overwrite: F", local "wx"). Then the album has its cover on the NAS / on disk for
+// over an existing file (NAS: overwrite off, local "wx"). Then the album has its cover on the NAS / on disk for
 // every player, not just in this box's cache. A NAS account without write permission is noted ('denied').
 async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promise<void> {
   if (!onlineCoversSaveEnabled()) return
@@ -173,26 +175,20 @@ async function saveOnlineCoverToFolder(key: string, evenIfDenied = false): Promi
 
   if (type === 'nas') {
     if (!(await nasPathSelected(folder))) return
-    const session = await getActiveNasSession()
+    const session = await nasAccess.active()
     if (!session) return
-    const files = await withNasSession((s) => nasListFilesLive(s, folder))
+    const files = await nasAccess.withSession((s) => s.list(folder))
     if (!files || !mayWrite(files)) return // not readable now, or it has a picture meanwhile
-    const response = await nasFetch(session, `${nasUrl(session, folder)}/${name}`, {
-      method: 'PUT',
-      headers: { Authorization: session.auth, 'Content-Type': 'image/jpeg', Overwrite: 'F' },
-      body: data,
-      signal: AbortSignal.timeout(20000),
-    })
-    await response.arrayBuffer().catch(() => undefined)
-    if (response.ok) {
+    const written = await session.write(`${normalizeNasPath(folder)}/${name}`, data, { contentType: 'image/jpeg', overwrite: false })
+    if (written === 'ok') {
       onlineCovers.update(key, { savedTo: 'nas', savedName: name })
       nasListCache.delete(normalizeNasPath(folder))
       console.log(`${new Date().toLocaleString()}: [OnlineCovers] saved ${folder}/${name} on the NAS`)
-    } else if (response.status === 401 || response.status === 403 || response.status === 405) {
+    } else if (written === 'denied') {
       onlineCovers.update(key, { savedTo: 'denied' })
-      console.log(`${new Date().toLocaleString()}: [OnlineCovers] no write permission on the NAS for ${folder} (${response.status})`)
+      console.log(`${new Date().toLocaleString()}: [OnlineCovers] no write permission on the NAS for ${folder}`)
     } else {
-      console.warn(`${new Date().toLocaleString()}: [OnlineCovers] saving ${folder}/${ONLINE_COVER_FILE_NAME} failed: HTTP ${response.status}`)
+      console.warn(`${new Date().toLocaleString()}: [OnlineCovers] saving ${folder}/${ONLINE_COVER_FILE_NAME} failed: ${written}`)
     }
     return
   }
@@ -221,17 +217,12 @@ async function removeSavedOnlineCover(key: string): Promise<void> {
   if (size === undefined) return
   const folder = key.slice(key.indexOf(':') + 1)
   if (entry.savedTo === 'nas') {
-    const session = await getActiveNasSession()
+    const session = await nasAccess.active()
     if (!session) return
-    const files = await withNasSession((s) => nasListFilesLive(s, folder))
+    const files = await nasAccess.withSession((s) => s.list(folder))
     const ours = files?.find((f) => f.name === (entry.savedName ?? ONLINE_COVER_FILE_NAME) && f.additional?.size === size)
     if (!ours) return
-    const response = await nasFetch(session, nasUrl(session, ours.path), {
-      method: 'DELETE',
-      headers: { Authorization: session.auth },
-      signal: AbortSignal.timeout(15000),
-    })
-    await response.arrayBuffer().catch(() => undefined)
+    await session.remove(ours.path, AbortSignal.timeout(15000))
     nasListCache.delete(normalizeNasPath(folder))
     return
   }
@@ -1882,7 +1873,7 @@ async function listForWalk(
         console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] library walk: cannot read ${folder}: ${error}`)
         return undefined
       }
-      await new Promise((resolve) => setTimeout(resolve, Math.max(0, nasOfflineUntil - Date.now()) + 5000))
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0, nasAccess.awayUntilMs - Date.now()) + 5000))
     }
   }
   return undefined
@@ -1934,7 +1925,7 @@ async function scanAlbumsForOnlineCovers(): Promise<void> {
   try {
     const nas = nasSettings(await getMupiboxConfig())
     const hidden = (nas?.hiddenFolders ?? []).map(normalizeNasPath)
-    if ((nas?.artistFolders ?? []).length > 0 && (await getActiveNasSession())) {
+    if ((nas?.artistFolders ?? []).length > 0 && (await nasAccess.active())) {
       for (const folder of nas?.artistFolders ?? []) {
         await nasIndexWalk(normalizeNasPath(folder), undefined, 0, hidden)
       }
@@ -5109,10 +5100,11 @@ app.post('/api/bluetooth/remove', async (req, res) => {
 // --------------------------------------------
 // NAS integration
 // --------------------------------------------
-// Browses and streams media from a NAS live over WebDAV (works with Synology,
-// QNAP, TrueNAS, ...) - no SMB/CIFS mount, no data.json caching. Every read hits
+// Browses and streams media from a NAS live - no data.json caching. Every read hits
 // the NAS directly, so changes made on the NAS show up the next time a
 // category/page is opened, with no manual "update media" step required.
+// The NAS itself is reached through the provider layer in nas/ (provider.ts: what a
+// NAS can do, webdav.ts: WebDAV, access.ts: the shared login and "away").
 
 // Runs fn over items with at most `limit` calls in flight at once. An artist folder with two
 // dozen albums used to fire one WebDAV request per album (plus one more for each album's cover)
@@ -5140,168 +5132,6 @@ function nasSettings(config: MupiboxConfig | undefined): NasConfig | undefined {
   return config?.synology ?? config?.nas
 }
 
-interface NasSession {
-  base: string // WebDAV base URL without trailing slash, may contain a path prefix
-  auth: string // Authorization header value (HTTP Basic)
-  // SHA-256 fingerprint of the NAS's own (self-signed) certificate the parents confirmed: https then trusts exactly
-  // this certificate (see nasFetch)
-  fingerprint?: string
-}
-
-// The certificate of an https NAS is not trusted (self-signed, as Synology's own), or not the one confirmed.
-class NasCertificateError extends Error {
-  constructor(readonly certificate: NasCertificateInfo | undefined) {
-    super('NAS certificate not trusted')
-  }
-}
-
-interface NasCertificateInfo {
-  fingerprint: string
-  subject: string
-  issuer: string
-  validTo: string
-}
-
-// What the NAS presents on https, without trusting it: shown in the admin interface to be confirmed.
-function nasPeekCertificate(base: string, timeoutMs = 8000): Promise<NasCertificateInfo | undefined> {
-  const url = new URL(base)
-  if (url.protocol !== 'https:') return Promise.resolve(undefined)
-  return new Promise((resolve) => {
-    const socket = tls.connect({
-      host: url.hostname,
-      port: Number(url.port || 443),
-      servername: net.isIP(url.hostname) ? undefined : url.hostname,
-      rejectUnauthorized: false,
-      timeout: timeoutMs,
-    })
-    const done = (info: NasCertificateInfo | undefined) => {
-      socket.destroy()
-      resolve(info)
-    }
-    socket.once('secureConnect', () => {
-      const cert = socket.getPeerCertificate()
-      done(
-        cert?.fingerprint256
-          ? {
-              fingerprint: cert.fingerprint256,
-              subject: String(cert.subject?.CN ?? cert.subject?.O ?? ''),
-              issuer: String(cert.issuer?.CN ?? cert.issuer?.O ?? ''),
-              validTo: String(cert.valid_to ?? ''),
-            }
-          : undefined,
-      )
-    })
-    socket.once('timeout', () => done(undefined))
-    socket.once('error', () => done(undefined))
-  })
-}
-
-// Every request to the NAS goes through here. With a confirmed certificate (https with Synology's own, self-signed
-// one - fetch() refuses it) the TLS connection is made first, its certificate compared with the confirmed
-// fingerprint, and only then is the request - with the login - sent over it. Anything else goes through fetch().
-async function nasFetch(
-  session: NasSession,
-  url: string,
-  init: { method?: string; headers?: Record<string, string>; body?: string | Buffer; signal?: AbortSignal } = {},
-): Promise<Response> {
-  const target = new URL(url)
-  if (!session.fingerprint || target.protocol !== 'https:') {
-    return await fetch(url, { ...init, body: init.body as RequestInit['body'] })
-  }
-  const fingerprint = session.fingerprint
-  const socket = await new Promise<tls.TLSSocket>((resolve, reject) => {
-    const s = tls.connect({
-      host: target.hostname,
-      port: Number(target.port || 443),
-      servername: net.isIP(target.hostname) ? undefined : target.hostname,
-      rejectUnauthorized: false, // checked by the fingerprint below
-    })
-    const onAbort = () => {
-      s.destroy()
-      reject(init.signal?.reason ?? new Error('aborted'))
-    }
-    if (init.signal?.aborted) return onAbort()
-    init.signal?.addEventListener('abort', onAbort, { once: true })
-    s.once('secureConnect', () => {
-      init.signal?.removeEventListener('abort', onAbort)
-      const cert = s.getPeerCertificate()
-      if (!cert?.fingerprint256 || cert.fingerprint256.toUpperCase() !== fingerprint.toUpperCase()) {
-        s.destroy()
-        reject(
-          new NasCertificateError(
-            cert?.fingerprint256
-              ? {
-                  fingerprint: cert.fingerprint256,
-                  subject: String(cert.subject?.CN ?? ''),
-                  issuer: String(cert.issuer?.CN ?? ''),
-                  validTo: String(cert.valid_to ?? ''),
-                }
-              : undefined,
-          ),
-        )
-        return
-      }
-      resolve(s)
-    })
-    s.once('error', (error) => {
-      init.signal?.removeEventListener('abort', onAbort)
-      reject(error)
-    })
-  })
-  return await new Promise<Response>((resolve, reject) => {
-    const req = https.request(
-      {
-        method: init.method ?? 'GET',
-        hostname: target.hostname,
-        port: Number(target.port || 443),
-        path: `${target.pathname}${target.search}`,
-        headers: init.headers,
-        createConnection: () => socket,
-        signal: init.signal,
-      },
-      (res) => {
-        const headers = new Headers()
-        for (const [name, value] of Object.entries(res.headers)) {
-          if (Array.isArray(value)) value.forEach((v) => headers.append(name, v))
-          else if (value !== undefined) headers.set(name, String(value))
-        }
-        const status = res.statusCode ?? 502
-        // (no body allowed with 204, 205 and 304, and a status outside 200-599 is refused: the Response constructor
-        // threw here, in a callback nothing caught - the whole server ended. As fetchPinned: a failed fetch instead.)
-        const noBody = status === 204 || status === 205 || status === 304 || init.method === 'HEAD'
-        try {
-          if (status < 200 || status > 599) throw new Error(`unexpected status ${status}`)
-          if (noBody) res.resume()
-          resolve(
-            new Response(noBody ? null : (Readable.toWeb(res) as unknown as ReadableStream), {
-              status,
-              statusText: res.statusMessage,
-              headers,
-            }),
-          )
-        } catch (err) {
-          res.destroy()
-          reject(err)
-        }
-      },
-    )
-    req.once('error', (error) => {
-      socket.destroy()
-      reject(error)
-    })
-    if (init.body !== undefined) req.write(init.body)
-    req.end()
-  })
-}
-
-let nasSessionCache: NasSession | undefined
-
-class NasSessionExpiredError extends Error {}
-
-// The NAS answered, but with an API-level error (e.g. folder no longer exists) -
-// unlike a network failure this does not mean the NAS is offline.
-class NasApiError extends Error {}
-
 // Local copies of NAS folders ("Download local") live here, mirroring the NAS
 // path (e.g. /music/Artist/Album -> <root>/music/Artist/Album), so they stay
 // playable when the NAS or the network is not available.
@@ -5310,259 +5140,34 @@ const nasDownloadMarker = '.mupibox-nas-download'
 
 const nasAudioExtensions = ['.mp3', '.flac', '.wav', '.wma', '.ogg', '.m4a']
 
-// Resolves the address field into a WebDAV base URL. Accepts "host", "host:port",
-// "host:port/path" or a complete http(s):// URL. The HTTPS checkbox picks the
-// scheme when the address itself has none.
-function nasResolveBase(address: string, useHttps: boolean): string {
-  const trimmed = address.trim().replace(/\/+$/, '')
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed
-  }
-  return `${useHttps ? 'https' : 'http'}://${trimmed}`
-}
-
-function nasBasicAuth(account: string, password: string): string {
-  return `Basic ${Buffer.from(`${account}:${password}`, 'utf8').toString('base64')}`
-}
-
-function nasUrl(session: NasSession, nasPath: string): string {
-  const encoded = nasPath
-    .split('/')
-    .filter(Boolean)
-    .map((part) => encodeURIComponent(part))
-    .join('/')
-  return `${session.base}/${encoded}`
-}
-
-async function nasLogin(
-  base: string,
-  account: string,
-  password: string,
-  timeoutMs = 10000,
-  fingerprint?: string,
-): Promise<{ success: boolean; session?: NasSession; error?: string; certificate?: NasCertificateInfo }> {
-  const session: NasSession = { base, auth: nasBasicAuth(account, password), fingerprint: fingerprint || undefined }
-  try {
-    const response = await nasFetch(session, nasUrl(session, '/'), {
-      method: 'PROPFIND',
-      headers: { Authorization: session.auth, Depth: '1' },
-      signal: AbortSignal.timeout(timeoutMs),
-    })
-    const body = await response.text().catch(() => '')
-    if (response.status === 401 || response.status === 403) {
-      return { success: false, error: 'Wrong account name or password (or no WebDAV permission for this account).' }
-    }
-    if (response.status === 207 || response.status === 200) {
-      // A NAS always shows at least one folder. An empty answer means this is not the WebDAV
-      // service (e.g. the DSM web page on port 443 answers, but lists nothing), or the account
-      // may not use WebDAV.
-      if (parsePropfind(body, session, '/').length === 0) {
-        return {
-          success: false,
-          error: 'The NAS answered but lists no folders - check the WebDAV port in the address (Synology: 5006 for https, 5005 for http) and that the account may use WebDAV.',
-        }
-      }
-      return { success: true, session }
-    }
-    if (response.status === 404) {
-      return { success: false, error: 'WebDAV service not found at this address/port - check the address and that WebDAV is enabled on the NAS.' }
-    }
-    return { success: false, error: `The NAS answered with HTTP ${response.status}. Is this the WebDAV address/port?` }
-  } catch (error) {
-    if (error instanceof NasCertificateError) {
-      // A confirmed certificate, but the NAS now shows another one (renewed on the NAS - or not the NAS).
-      return {
-        success: false,
-        error: 'The certificate of the NAS is not the one confirmed before. If it was renewed on the NAS, compare the new fingerprint below and confirm it.',
-        certificate: error.certificate,
-      }
-    }
-    const cause = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}` : ''
-    if (/certificate|SELF_SIGNED|UNABLE_TO_VERIFY|CERT_/i.test(cause)) {
-      // Synology's own certificate is self-signed: show it, so it can be confirmed once (then trusted by its
-      // fingerprint, see nasFetch).
-      return {
-        success: false,
-        error:
-          "The NAS uses a certificate that is not signed by a known authority (e.g. Synology's own). Check its fingerprint below and confirm it - or use HTTP.",
-        certificate: await nasPeekCertificate(base),
-      }
-    }
-    return { success: false, error: 'Could not reach the NAS. Check the address (with WebDAV port) and network connection.' }
-  }
-}
-
-let nasSessionPromise: Promise<NasSession | undefined> | undefined
-let nasOfflineUntil = 0
-// The last session that worked. A stream keeps using it while the NAS is marked offline: one slow folder listing
-// (another request) must not cut off the album that is playing - the stream has its own retries.
-let nasLastSession: NasSession | undefined
-
-// After a network failure, skip the NAS for a short while so the kids' UI can fall
-// back to the local downloads immediately instead of waiting on timeouts every time.
-function nasMarkOffline(): void {
-  nasOfflineUntil = Date.now() + 30000
-  nasSessionCache = undefined
-}
-
-async function nasLoginWithRememberedCredentials(): Promise<NasSession | undefined> {
+// Signs in with the login remembered in the config. Shared by all requests and marked away after a failure, see
+// nas/access.ts.
+async function nasConnectRemembered(): Promise<NasConnectResult> {
   const config = await getMupiboxConfig()
   const syn = nasSettings(config)
   if (!syn?.rememberMe || !syn.address || !syn.account || !syn.password) {
-    return undefined
+    return {}
   }
   const password = nasDecrypt(syn.password)
   if (password === undefined) {
     console.error(`${new Date().toLocaleString()}: [MuPiBox-Server] The stored NAS password can not be decrypted on this box - please sign in to the NAS again.`)
-    return undefined
+    return {}
   }
   const base = nasResolveBase(syn.address, Boolean(syn.https))
   // A NAS that is switched off answers at once (no route / refused); one whose disks sleep needs 10-20 s to wake
   // up. 4 s marked such a NAS offline for 30 s, and every tap in that time failed.
-  const result = await nasLogin(base, syn.account, password, 15000, syn.certFingerprint)
-  if (!result.success || !result.session) {
-    if (/reach/i.test(result.error ?? '')) {
-      nasMarkOffline()
-    }
-    return undefined
+  const result = await webdavLogin(base, syn.account, password, 15000, syn.certFingerprint)
+  if (!result.success || !result.provider) {
+    return { unreachable: result.unreachable }
   }
-  nasSessionCache = result.session
-  nasLastSession = result.session
   if (!syn.password.startsWith(nasSecretPrefix)) {
     // A clear-text password from an older config: store it encrypted from now on.
     updateNasConfig({ password: nasEncrypt(password) }).catch(() => undefined)
   }
-  return nasSessionCache
+  return { provider: result.provider }
 }
 
-// Returns a cached session, or transparently logs back in using the
-// remembered credentials (if any) - existing installs won't have a
-// "nas" config section at all, so every field is read defensively.
-async function getActiveNasSession(): Promise<NasSession | undefined> {
-  if (nasSessionCache) {
-    return nasSessionCache
-  }
-  if (Date.now() < nasOfflineUntil) {
-    return undefined
-  }
-  // Several requests often arrive at once (e.g. one per artist): share one login.
-  if (!nasSessionPromise) {
-    nasSessionPromise = nasLoginWithRememberedCredentials().finally(() => {
-      nasSessionPromise = undefined
-    })
-  }
-  return await nasSessionPromise
-}
-
-// Runs `fn` with an active session, retrying exactly once (with a fresh
-// login) if the session turned out to be expired.
-async function withNasSession<T>(fn: (session: NasSession) => Promise<T>): Promise<T | undefined> {
-  let session = await getActiveNasSession()
-  if (!session) {
-    return undefined
-  }
-  try {
-    return await fn(session)
-  } catch (error) {
-    if (error instanceof NasSessionExpiredError) {
-      nasSessionCache = undefined
-      session = await getActiveNasSession()
-      if (!session) {
-        return undefined
-      }
-      return await fn(session)
-    }
-    throw error
-  }
-}
-
-interface NasFileEntry {
-  name: string
-  path: string
-  isdir: boolean
-  additional?: { size?: number }
-  // ETag or last-modified date from the NAS: changes when the file changes (thumbnail cache key)
-  version?: string
-}
-
-// Not shown and not played: hidden files (macOS "._01.mp3" companions, ".DS_Store"), DSM's "@eaDir" thumbnail
-// folders, recycle bin and snapshots.
-function nasIsSystemEntry(name: string): boolean {
-  return name.startsWith('.') || name.startsWith('@') || name === '#recycle' || name === '#snapshot'
-}
-
-const xmlEntities: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&apos;': "'" }
-
-function decodeXml(text: string): string {
-  return text.replace(/&(lt|gt|amp|quot|apos);/g, (m) => xmlEntities[m] ?? m)
-}
-
-// Parses a WebDAV PROPFIND (Depth: 1) answer into the children of `folderPath`.
-function parsePropfind(xml: string, session: NasSession, folderPath: string): NasFileEntry[] {
-  const basePrefix = decodeURIComponent(new URL(session.base).pathname).replace(/\/+$/, '')
-  const folder = `/${folderPath.split('/').filter(Boolean).join('/')}`
-  const entries: NasFileEntry[] = []
-  const responses = xml.match(/<(?:\w+:)?response[\s>][\s\S]*?<\/(?:\w+:)?response>/gi) ?? []
-  for (const block of responses) {
-    const hrefMatch = block.match(/<(?:\w+:)?href[^>]*>([\s\S]*?)<\/(?:\w+:)?href>/i)
-    if (!hrefMatch) {
-      continue
-    }
-    let hrefPath = decodeXml(hrefMatch[1].trim())
-    if (/^https?:\/\//i.test(hrefPath)) {
-      hrefPath = new URL(hrefPath).pathname
-    }
-    try {
-      hrefPath = decodeURIComponent(hrefPath)
-    } catch {
-      // keep as is
-    }
-    if (basePrefix && hrefPath.startsWith(basePrefix)) {
-      hrefPath = hrefPath.slice(basePrefix.length)
-    }
-    hrefPath = `/${hrefPath.split('/').filter(Boolean).join('/')}`
-    if (hrefPath === folder) {
-      continue // the folder itself
-    }
-    const name = hrefPath.split('/').pop() ?? hrefPath
-    if (nasIsSystemEntry(name)) {
-      continue
-    }
-    const isdir = /<(?:\w+:)?collection\s*\/?>/i.test(block)
-    const sizeMatch = block.match(/<(?:\w+:)?getcontentlength[^>]*>(\d+)</i)
-    const versionMatch =
-      block.match(/<(?:\w+:)?getetag[^>]*>([^<]+)</i) ?? block.match(/<(?:\w+:)?getlastmodified[^>]*>([^<]+)</i)
-    entries.push({
-      name,
-      path: hrefPath,
-      isdir,
-      additional: sizeMatch ? { size: Number(sizeMatch[1]) } : undefined,
-      version: versionMatch ? decodeXml(versionMatch[1].trim()) : undefined,
-    })
-  }
-  return entries
-}
-
-async function nasListFilesLive(session: NasSession, folderPath: string, _withSize = false): Promise<NasFileEntry[]> {
-  const response = await nasFetch(session, `${nasUrl(session, folderPath)}/`, {
-    method: 'PROPFIND',
-    headers: { Authorization: session.auth, Depth: '1', 'Content-Type': 'application/xml' },
-    body: '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getetag/><getlastmodified/></prop></propfind>',
-    // 20 s: a NAS waking its disks answers after 10-20 s (8 s marked it offline for 30 s)
-    signal: AbortSignal.timeout(20000),
-  })
-  const text = await response.text()
-  if (response.status === 401) {
-    // The login is no longer accepted (password changed, session on the NAS side gone): withNasSession()
-    // signs in again once.
-    throw new NasSessionExpiredError('WebDAV 401')
-  }
-  if (response.status !== 207 && response.status !== 200) {
-    // Folder gone / no permission: the NAS answered, so it is not offline.
-    throw new NasApiError(`WebDAV error ${response.status}`)
-  }
-  return parsePropfind(text, session, folderPath)
-}
+const nasAccess = new NasAccess(nasConnectRemembered)
 
 // --- Local copies ("Download local") --------------------------------------
 
@@ -5599,7 +5204,7 @@ const photoNas: PhotoNasAccess = {
   async list(folder) {
     let files: NasFileEntry[] | undefined
     try {
-      files = await withNasSession((s) => nasListFilesLive(s, folder))
+      files = await nasAccess.withSession((s) => s.list(folder))
     } catch (err) {
       // (the NAS answered with an error for this folder: thrown on; no answer at all - it is away)
       if (err instanceof NasApiError) throw err
@@ -5608,11 +5213,11 @@ const photoNas: PhotoNasAccess = {
     return files?.map((f) => ({ name: f.name, path: f.path, isdir: f.isdir, size: f.additional?.size, version: f.version }))
   },
   async download(file, dest, maxBytes, signal) {
-    const session = await getActiveNasSession()
+    const session = await nasAccess.active()
     if (!session) return false
     let response: Response
     try {
-      response = await nasFetch(session, nasUrl(session, file), { headers: { Authorization: session.auth }, signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) })
+      response = await session.read(file, { signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) })
     } catch {
       return false
     }
@@ -5645,39 +5250,33 @@ const photoNas: PhotoNasAccess = {
 
 async function writeNasCover(folder: string, bytes: Buffer, ext: '.jpg' | '.png'): Promise<'ok' | 'not_selected' | 'offline' | 'denied' | 'failed'> {
   if (!(await nasPathSelected(folder))) return 'not_selected'
-  const session = await getActiveNasSession()
+  const session = await nasAccess.active()
   if (!session) return 'offline'
-  const files = await withNasSession((s) => nasListFilesLive(s, folder))
+  const files = await nasAccess.withSession((s) => s.list(folder))
   if (!files) return 'offline'
-  const dir = nasUrl(session, folder)
-  const denied = (status: number) => status === 401 || status === 403 || status === 405
-  const call = async (url: string, method: string, headers: Record<string, string> = {}, body?: Buffer) => {
-    const r = await nasFetch(session, url, { method, headers: { Authorization: session.auth, ...headers }, body, signal: AbortSignal.timeout(20000) })
-    await r.arrayBuffer().catch(() => undefined)
-    return r.status
-  }
+  const dir = normalizeNasPath(folder)
   const moved: Array<{ from: string; to: string }> = []
   try {
     for (const f of files) {
       if (f.isdir) continue
       const e = path.extname(f.name).toLowerCase()
       if (!['.jpg', '.jpeg', '.jfif', '.png', '.webp'].includes(e)) continue
-      const from = `${dir}/${encodeURIComponent(f.name)}`
+      const from = `${dir}/${f.name}`
       if (f.name.slice(0, -e.length).toLowerCase() === 'cover') {
         const to = `${dir}/cover-previous${e}`
-        const status = await call(from, 'MOVE', { Destination: to, Overwrite: 'T' })
-        if (denied(status)) return 'denied'
-        if (status >= 300) return 'failed'
+        const result = await session.move(from, to, { overwrite: true })
+        if (result === 'denied') return 'denied'
+        if (result !== 'ok') return 'failed'
         moved.push({ from, to })
       } else if (f.name.toLowerCase() === 'cover-online.jpg') {
-        await call(from, 'DELETE')
+        await session.remove(from)
       }
     }
-    const status = await call(`${dir}/cover${ext}`, 'PUT', { 'Content-Type': ext === '.png' ? 'image/png' : 'image/jpeg', Overwrite: 'T' }, bytes)
-    if (status >= 300) {
+    const result = await session.write(`${dir}/cover${ext}`, bytes, { contentType: ext === '.png' ? 'image/png' : 'image/jpeg', overwrite: true })
+    if (result !== 'ok') {
       // (the cover before back in its place)
-      for (const m of moved) await call(m.to, 'MOVE', { Destination: m.from, Overwrite: 'T' }).catch(() => undefined)
-      return denied(status) ? 'denied' : 'failed'
+      for (const m of moved) await session.move(m.to, m.from, { overwrite: true }).catch(() => undefined)
+      return result === 'denied' ? 'denied' : 'failed'
     }
   } catch (error) {
     console.warn(`${new Date().toLocaleString()}: [MuPiBox-Server] NAS cover ${folder}: ${(error as Error).message}`)
@@ -5750,7 +5349,7 @@ function nasListFilesLiveCached(folderPath: string): Promise<NasFileEntry[] | un
   if (hit && Date.now() - hit.at < NAS_LIST_CACHE_MS) {
     return hit.files
   }
-  const entry = { at: Date.now(), files: withNasSession((session) => nasListFilesLive(session, folderPath)) }
+  const entry = { at: Date.now(), files: nasAccess.withSession((session) => session.list(folderPath)) }
   nasListCache.delete(key) // re-insert: the map's order is the age order for the eviction below
   nasListCache.set(key, entry)
   const forget = () => {
@@ -5770,7 +5369,7 @@ function nasListFilesLiveCached(folderPath: string): Promise<NasFileEntry[] | un
 // /api/nas/stream). Without an active session it is listed from the copy straight away - no waiting on a NAS that
 // is off.
 async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
-  if (nasIsDownloaded(folderPath) && (!nasSessionCache || Date.now() < nasOfflineUntil)) {
+  if (nasIsDownloaded(folderPath) && (!nasAccess.signedIn || nasAccess.isAway())) {
     const local = await nasLocalListFiles(folderPath)
     if (local) {
       return local
@@ -5783,7 +5382,7 @@ async function nasListFiles(folderPath: string): Promise<NasFileEntry[]> {
     }
   } catch (error) {
     if (!(error instanceof NasApiError || error instanceof NasSessionExpiredError)) {
-      nasMarkOffline()
+      nasAccess.markAway()
     }
   }
   const local = await nasLocalListFiles(folderPath)
@@ -6236,24 +5835,6 @@ function nasTrackActiveProfile(settings: NasConfig | undefined, changes: Record<
   }
 }
 
-async function nasFolderExists(session: NasSession, folderPath: string): Promise<boolean> {
-  const response = await nasFetch(session, `${nasUrl(session, folderPath)}/`, {
-    method: 'PROPFIND',
-    headers: { Authorization: session.auth, Depth: '0' },
-    signal: AbortSignal.timeout(8000),
-  })
-  await response.text().catch(() => '')
-  // A folder that is gone is a 404; a share (top level) that does not exist is answered with 405 by Synology.
-  const topLevel = folderPath.split('/').filter(Boolean).length <= 1
-  if (response.status === 404 || response.status === 410 || (response.status === 405 && topLevel)) {
-    return false
-  }
-  if (response.status === 207 || response.status === 200) {
-    return true
-  }
-  throw new NasApiError(`WebDAV error ${response.status}`)
-}
-
 app.get('/api/nas/profiles', localOrElternSession, async (_req, res) => {
   try {
     // Store the profile list once, so "standard" exists in the config (and thus in the backup).
@@ -6291,7 +5872,7 @@ app.post('/api/nas/profiles/create', localOrElternSession, async (req, res) => {
     res.status(400).json({ success: false, error: 'invalid_name' })
     return
   }
-  if (!(await getActiveNasSession())) {
+  if (!(await nasAccess.active())) {
     res.status(401).json({ success: false, error: 'not_logged_in' })
     return
   }
@@ -6317,7 +5898,7 @@ app.post('/api/nas/profiles/create', localOrElternSession, async (req, res) => {
 // profile was made with. Folders that no longer exist on the NAS are reported (`missing`), not removed.
 app.post('/api/nas/profiles/load', localOrElternSession, async (req, res) => {
   const name = typeof req.body?.name === 'string' ? req.body.name : ''
-  const session = await getActiveNasSession()
+  const session = await nasAccess.active()
   if (!session) {
     res.status(401).json({ success: false, error: 'not_logged_in' })
     return
@@ -6351,7 +5932,7 @@ app.post('/api/nas/profiles/load', localOrElternSession, async (req, res) => {
     let unverified = 0
     const exists = await mapWithConcurrency(paths, 4, async (folderPath) => {
       try {
-        return await nasFolderExists(session, folderPath)
+        return await session.folderExists(folderPath)
       } catch {
         unverified++ // could not be checked (network) - not reported as missing
         return true
@@ -6463,15 +6044,13 @@ app.post('/api/nas/login', localOrElternSession, async (req, res) => {
       ? certFingerprint.toUpperCase()
       : undefined
   // A wrong password may be answered slowly by some NAS models: be generous here.
-  const result = await nasLogin(base, account, password, 25000, fingerprint)
-  if (!result.success || !result.session) {
+  const result = await webdavLogin(base, account, password, 25000, fingerprint)
+  if (!result.success || !result.provider) {
     res.json({ success: false, error: result.error, certificate: result.certificate })
     return
   }
 
-  nasSessionCache = result.session
-  nasLastSession = result.session
-  nasOfflineUntil = 0
+  nasAccess.use(result.provider)
   nasListCacheClear() // another NAS or account: its folders
 
   if (rememberMe === true) {
@@ -6551,7 +6130,7 @@ async function buildNasIndex(): Promise<void> {
     for (let depth = 0; level.length > 0 && depth < nasIndexMaxDepth && found.length < nasIndexMaxFolders; depth++) {
       const listings = await mapWithConcurrency(level, 4, async (folder) => {
         try {
-          const files = await withNasSession((session) => nasListFilesLive(session, folder))
+          const files = await nasAccess.withSession((session) => session.list(folder))
           if (files === undefined) {
             throw new Error('Not logged in to the NAS')
           }
@@ -6596,7 +6175,7 @@ async function buildNasIndex(): Promise<void> {
 // for the NAS page of the app. A remembered login is tried here if there is no session yet (at most 8 s).
 app.get('/api/nas/state', localOrElternSession, async (_req, res) => {
   const syn = nasSettings(await getMupiboxConfig())
-  const session = nasSessionCache ?? (await Promise.race([getActiveNasSession(), new Promise<undefined>((r) => setTimeout(() => r(undefined), 8000))]))
+  const session = nasAccess.signedIn ?? (await Promise.race([nasAccess.active(), new Promise<undefined>((r) => setTimeout(() => r(undefined), 8000))]))
   res.json({
     success: true,
     address: syn?.address ?? '',
@@ -6605,7 +6184,7 @@ app.get('/api/nas/state', localOrElternSession, async (_req, res) => {
     rememberMe: syn?.rememberMe === true,
     hasPassword: Boolean(syn?.password),
     loggedIn: Boolean(session),
-    offline: Date.now() < nasOfflineUntil,
+    offline: nasAccess.isAway(),
     artistFolders: syn?.artistFolders ?? [],
     hiddenFolders: syn?.hiddenFolders ?? [],
     downloadFolders: syn?.downloadFolders ?? [],
@@ -6618,8 +6197,7 @@ app.get('/api/nas/state', localOrElternSession, async (_req, res) => {
 // request would just sign in again). Address and account stay for the next login; the NAS tab of the box is empty
 // until then, the downloaded folders stay playable.
 app.post('/api/nas/logout', localOrElternSession, async (_req, res) => {
-  nasSessionCache = undefined
-  nasLastSession = undefined
+  nasAccess.clear()
   nasListCacheClear()
   try {
     await updateNasConfig({ password: '', rememberMe: false })
@@ -6635,7 +6213,7 @@ app.post('/api/nas/logout', localOrElternSession, async (_req, res) => {
 app.get('/api/nas/index/status', localOrElternSession, async (_req, res) => {
   const index = await loadNasIndex()
   const stale = !index || Date.now() - index.updated > nasIndexMaxAgeMs
-  if (stale && !nasIndexJob.running && Date.now() - nasIndexLastAttempt > nasIndexRetryMs && (await getActiveNasSession())) {
+  if (stale && !nasIndexJob.running && Date.now() - nasIndexLastAttempt > nasIndexRetryMs && (await nasAccess.active())) {
     void buildNasIndex()
   }
   res.json({
@@ -6650,7 +6228,7 @@ app.get('/api/nas/index/status', localOrElternSession, async (_req, res) => {
 })
 
 app.post('/api/nas/index/refresh', localOrElternSession, async (_req, res) => {
-  if (!(await getActiveNasSession())) {
+  if (!(await nasAccess.active())) {
     res.status(401).json({ success: false, error: 'not_logged_in' })
     return
   }
@@ -6724,13 +6302,13 @@ app.get('/api/nas/browse', localOrElternSession, async (req, res) => {
   const folderPath = typeof req.query.path === 'string' ? req.query.path : ''
 
   try {
-    const result = await withNasSession(async (session) => {
+    const result = await nasAccess.withSession(async (session) => {
       const config = await getMupiboxConfig()
       const markedFolders = new Set(nasSettings(config)?.artistFolders ?? [])
       const downloadFolders = new Set(nasSettings(config)?.downloadFolders ?? [])
       const hiddenFolders = new Set(nasSettings(config)?.hiddenFolders ?? [])
 
-      const files = await nasListFilesLive(session, folderPath || '/')
+      const files = await session.list(folderPath || '/')
       // alphabetically, as people look for a folder ("Folge 2" before "Folge 10", upper and lower case alike) - the NAS
       // hands them out in its own order (reported by Andreas)
       const entries = files
@@ -6895,7 +6473,7 @@ async function nasFolderEntries(folderPath: string, asTiles = false): Promise<{ 
       return undefined
     }
   })
-  const offline = entries.some((entry) => entry === undefined) && Date.now() < nasOfflineUntil
+  const offline = entries.some((entry) => entry === undefined) && nasAccess.isAway()
   // Audio files next to subfolders with albums: first comes an entry that plays them.
   if (nasHasAudio(files) && subfolders.some((sub) => factsOf.get(sub.path)?.audio || factsOf.get(sub.path)?.container)) {
     const own = pickCoverImage(files)
@@ -7049,10 +6627,10 @@ async function nasReadTextFile(nasPath: string): Promise<string | undefined> {
   if (local && localSize !== undefined) {
     return localSize > NAS_TEXT_MAX_BYTES ? undefined : nasDecodeText(await readFile(local))
   }
-  const buffer = await withNasSession(async (session) => {
-    const response = await nasFetch(session, nasUrl(session, nasPath), { headers: { Authorization: session.auth }, signal: AbortSignal.timeout(8000) })
+  const buffer = await nasAccess.withSession(async (session) => {
+    const response = await session.read(nasPath, { signal: AbortSignal.timeout(8000) })
     if (!response.ok) {
-      throw new NasApiError(`WebDAV error ${response.status}`)
+      throw new NasApiError(`NAS error ${response.status}`)
     }
     if (Number(response.headers.get('content-length') ?? 0) > NAS_TEXT_MAX_BYTES) {
       await response.body?.cancel().catch(() => {})
@@ -7233,7 +6811,7 @@ async function nasPrefetchNext(filePath: string): Promise<void> {
   const nextLocal = nextPath ? nasLocalPath(nextPath) : undefined
   if (!nextPath || nasPrefetched.some((entry) => entry.path === nextPath) || (nextLocal && fs.existsSync(nextLocal))) return
 
-  const session = (await getActiveNasSession()) ?? nasLastSession
+  const session = (await nasAccess.active()) ?? nasAccess.last
   if (!session) return
   const entry: NasPrefetch = { path: nextPath, loading: new AbortController() }
   nasPrefetched.push(entry)
@@ -7245,7 +6823,7 @@ async function nasPrefetchNext(filePath: string): Promise<void> {
   }
   try {
     armStall()
-    const response = await nasFetch(session, nasUrl(session, nextPath), { headers: { Authorization: session.auth }, signal: abort.signal })
+    const response = await session.read(nextPath, { signal: abort.signal })
     const size = Number(response.headers.get('content-length'))
     if (response.status !== 200 || !response.body || !Number.isFinite(size) || size <= 0 || size > NAS_PREFETCH_MAX_BYTES || availableMemoryBytes() - size < NAS_PREFETCH_KEEP_FREE_BYTES) {
       abort.abort()
@@ -7286,7 +6864,7 @@ async function nasPrefetchNext(filePath: string): Promise<void> {
 const NAS_STALL_MS = 15000
 const NAS_OUTAGE_GIVE_UP_MS = 5 * 60 * 1000
 
-async function nasStreamWithResume(req: express.Request, res: express.Response, firstSession: NasSession, filePath: string): Promise<void> {
+async function nasStreamWithResume(req: express.Request, res: express.Response, firstSession: NasProvider, filePath: string): Promise<void> {
   let session = firstSession
   let clientGone = false
   let controller: AbortController | undefined
@@ -7312,11 +6890,7 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
     }
     try {
       armStall()
-      const headers: Record<string, string> = { Authorization: session.auth }
-      if (range) {
-        headers.Range = range
-      }
-      const upstream = await nasFetch(session, nasUrl(session, filePath), { headers, signal: abort.signal })
+      const upstream = await session.read(filePath, { range, signal: abort.signal })
 
       if (!started) {
         if (upstream.status === 404 || upstream.status === 401 || upstream.status === 403) {
@@ -7395,7 +6969,7 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
           return
         }
         await new Promise((resolve) => setTimeout(resolve, 1500))
-        session = (await getActiveNasSession()) ?? session
+        session = (await nasAccess.active()) ?? session
         continue
       }
       if (last === undefined) {
@@ -7415,7 +6989,7 @@ async function nasStreamWithResume(req: express.Request, res: express.Response, 
         console.log(`${new Date().toLocaleString()}: [MuPiBox-Server] Lost the NAS connection at byte ${next} of ${last + 1} (${filePath}): ${error}. Resuming ...`)
       }
       await new Promise((resolve) => setTimeout(resolve, Math.min(5000, 1000 * attempt)))
-      session = (await getActiveNasSession()) ?? session
+      session = (await nasAccess.active()) ?? session
       range = `bytes=${next}-${last}`
     }
   }
@@ -7470,7 +7044,7 @@ app.get('/api/nas/stream', nasPathWithinSelection, async (req, res) => {
 
   // While the NAS is marked offline (after another request failed), a stream still tries with the last session
   // that worked: the album that is playing must not skip every track for 30 s.
-  const session = (await getActiveNasSession()) ?? nasLastSession
+  const session = (await nasAccess.active()) ?? nasAccess.last
   if (!session) {
     res.status(401).send('Not logged in to the NAS, or the NAS is not reachable.')
     return
@@ -7512,16 +7086,13 @@ async function nasCoverThumbnail(
   filePath: string,
   size: number,
   version: string | undefined,
-  session?: NasSession,
+  session?: NasProvider,
 ): Promise<string | undefined> {
   const seed = `nas|${filePath}|${version ?? Math.floor(Date.now() / 86400000)}`
   return await getThumbnail(`nas:${filePath}`, size, seed, async () => {
-    const active = session ?? (await getActiveNasSession()) ?? nasLastSession
+    const active = session ?? (await nasAccess.active()) ?? nasAccess.last
     if (!active) return undefined
-    const full = await nasFetch(active, nasUrl(active, filePath), {
-      headers: { Authorization: active.auth },
-      signal: AbortSignal.timeout(20000),
-    })
+    const full = await active.read(filePath, { signal: AbortSignal.timeout(20000) })
     if (!full.ok) {
       return undefined
     }
@@ -7610,12 +7181,12 @@ interface NasFileToDownload {
 // A subfolder that cannot be read is noted in `failed` (its folder then gets no marker and nothing is removed
 // locally) instead of ending the whole download.
 async function nasCollectFiles(
-  session: NasSession,
+  session: NasProvider,
   folderPath: string,
   out: NasFileToDownload[],
   failed: string[],
 ): Promise<void> {
-  const files = await nasListFilesLive(session, folderPath, true)
+  const files = await session.list(folderPath)
   for (const file of files) {
     if (file.isdir) {
       try {
@@ -7650,7 +7221,7 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
   }
   await mkdir(path.dirname(target), { recursive: true })
 
-  const done = await withNasSession(async (session) => {
+  const done = await nasAccess.withSession(async (session) => {
     // No data for NAS_STALL_MS = a dead connection (WiFi gone without a reset): without this the download hung for
     // ever, "running" stayed set, and every later download was refused.
     const stall = new AbortController()
@@ -7661,16 +7232,13 @@ async function nasDownloadFile(nasPath: string, size: number, force = false, sig
     }
     const outer = signal ?? nasDownloadAbort?.signal
     armStall()
-    const response = await nasFetch(session, nasUrl(session, nasPath), {
-      headers: { Authorization: session.auth },
-      signal: outer ? AbortSignal.any([outer, stall.signal]) : stall.signal,
-    }).catch((error) => {
+    const response = await session.read(nasPath, { signal: outer ? AbortSignal.any([outer, stall.signal]) : stall.signal }).catch((error) => {
       clearTimeout(stallTimer)
       throw error
     })
     if (!response.ok || !response.body) {
       clearTimeout(stallTimer)
-      throw new NasApiError(`WebDAV download error ${response.status}`)
+      throw new NasApiError(`NAS download error ${response.status}`)
     }
     // Write to a temp name first so a half-finished file is never mistaken for a
     // complete one (and never gets played).
@@ -7758,7 +7326,7 @@ async function nasDownloadParentCovers(folder: string, checked: Set<string>): Pr
     if (dir && (await nasLocalHasImage(dir))) {
       continue
     }
-    const files = await withNasSession((session) => nasListFilesLive(session, ancestor, true))
+    const files = await nasAccess.withSession((session) => session.list(ancestor))
     const cover = files ? pickCoverImage(files) : undefined
     if (cover) {
       await nasDownloadFile(cover.path, cover.additional?.size ?? -1)
@@ -7828,7 +7396,7 @@ async function runNasSync(): Promise<void> {
     // The (small) covers of the parent folders are fetched after the space check below, so a
     // download that does not fit really leaves nothing behind.
     const downloadParentCovers = async (): Promise<void> => {
-      if (desired.length === 0 || !(await getActiveNasSession())) {
+      if (desired.length === 0 || !(await nasAccess.active())) {
         return
       }
       status.message = 'Downloading covers of parent folders...'
@@ -7847,7 +7415,7 @@ async function runNasSync(): Promise<void> {
       return
     }
 
-    if (!(await getActiveNasSession())) {
+    if (!(await nasAccess.active())) {
       throw new Error('The NAS is not reachable - nothing was downloaded.')
     }
 
@@ -7864,7 +7432,7 @@ async function runNasSync(): Promise<void> {
       const failedFolders: string[] = []
       let collected: boolean | undefined
       try {
-        collected = await withNasSession(async (session) => {
+        collected = await nasAccess.withSession(async (session) => {
           files.length = 0
           failedFolders.length = 0
           await nasCollectFiles(session, folder, files, failedFolders)
@@ -8005,7 +7573,7 @@ async function clearThumbnails(): Promise<number> {
 }
 
 async function nasRefreshLocalCovers(): Promise<{ updated: number; reachable: boolean }> {
-  if (!(await getActiveNasSession())) {
+  if (!(await nasAccess.active())) {
     return { updated: 0, reachable: false }
   }
   let updated = 0
@@ -8017,7 +7585,7 @@ async function nasRefreshLocalCovers(): Promise<{ updated: number; reachable: bo
       return
     }
     // Only folders that exist on the NAS and here; a listing that fails (folder gone) is skipped.
-    const files = await withNasSession((session) => nasListFilesLive(session, nasDir === '' ? '/' : nasDir, true)).catch(() => undefined)
+    const files = await nasAccess.withSession((session) => session.list(nasDir === '' ? '/' : nasDir)).catch(() => undefined)
     for (const file of files ?? []) {
       if (!file.isdir && /\.(jpe?g|jfif|png|webp)$/i.test(file.name)) {
         // only pictures that are here already: the walk also lists folders above downloaded ones (and the NAS root),
@@ -8323,12 +7891,9 @@ async function trackCover(file: string): Promise<string | undefined> {
     const localCopy = local && fs.existsSync(local) ? local : undefined
     read = async (start, end) => {
       if (localCopy) return await readFileRange(localCopy, start, end)
-      const session = (await getActiveNasSession()) ?? nasLastSession
+      const session = (await nasAccess.active()) ?? nasAccess.last
       if (!session) throw new Error('NAS not reachable')
-      const response = await nasFetch(session, nasUrl(session, normalized), {
-        headers: { Authorization: session.auth, Range: `bytes=${start}-${end}` },
-        signal: AbortSignal.timeout(15000),
-      })
+      const response = await session.read(normalized, { range: `bytes=${start}-${end}`, signal: AbortSignal.timeout(15000) })
       if (response.status !== 206 && response.status !== 200) throw new Error(`HTTP ${response.status}`)
       const data = Buffer.from(await response.arrayBuffer())
       // a server that ignores the range sends the whole file from the start
