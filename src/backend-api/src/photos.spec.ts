@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ordered } from './app-api/photos/albums'
 import { applyPhotoSettings, applyPhotoTimeAction, logicalDate, PHOTO_DEFAULTS, photoSettings } from './app-api/photos/settings'
+import { PhotoAborted, processPhoto, setPhotoInstallWait } from './app-api/photos/process'
 import type { PhotoAsset } from './app-api/photos/store'
 
 test('photo settings: off with its defaults on a box from before, broken values give the default', () => {
@@ -501,5 +502,21 @@ test('iCloud: only "not there" is an album gone - a throttled or failed answer i
     await assert.rejects(client.access('k4', signal), { status: 404 })
   } finally {
     globalThis.fetch = real
+  }
+})
+test('photo processing waits while a program of the photos is installed - and a stopped upload ends the wait', async () => {
+  let release: () => void = () => {}
+  setPhotoInstallWait(() => new Promise<void>((resolve) => (release = resolve)))
+  try {
+    const stop = new AbortController()
+    let settled = false
+    const run = processPhoto('/nowhere/picture.jpg', '/nowhere/out', '.jpg', stop.signal).finally(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(settled, false)
+    stop.abort()
+    await assert.rejects(run, PhotoAborted)
+  } finally {
+    release()
+    setPhotoInstallWait(() => Promise.resolve())
   }
 })

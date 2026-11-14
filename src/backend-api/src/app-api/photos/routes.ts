@@ -14,6 +14,7 @@ import { registerPhotoIcloudRoutes } from './icloud'
 import { registerPhotoNextcloudRoutes } from './nextcloud'
 import { registerPhotoPhotoprismRoutes } from './photoprism'
 import { registerPhotoSynologyRoutes } from './synology'
+import { setPhotoInstallWait } from './process'
 import { videoQueue } from './video'
 import { applyPhotoSettings, applyPhotoTimeAction, photoSettings } from './settings'
 
@@ -33,6 +34,16 @@ const TOOL_FILE: Record<Tool, string> = { heif: '/usr/bin/heif-convert', video: 
 // a program being installed (apt: a minute or more); one at a time, the script itself waits for the apt lock too
 const job: { running: Tool | null; failed: Tool[] } = { running: null, failed: [] }
 const queue: Tool[] = []
+
+// the pictures wait while a program is being installed (see process.ts): told when the last one is done
+let idleWaiters: (() => void)[] = []
+setPhotoInstallWait(() => (job.running || queue.length ? new Promise<void>((resolve) => idleWaiters.push(resolve)) : Promise.resolve()))
+function wakeIdleWaiters(): void {
+  if (job.running || queue.length) return
+  const waiting = idleWaiters
+  idleWaiters = []
+  for (const resolve of waiting) resolve()
+}
 
 function installed(tool: Tool): boolean {
   return existsSync(TOOL_FILE[tool])
@@ -57,6 +68,7 @@ function next(): void {
     else if (tool === 'video') void videoQueue.kick()
     job.running = null
     next()
+    wakeIdleWaiters()
   }
   child.on('error', () => done(false))
   child.on('exit', (code) => done(code === 0))

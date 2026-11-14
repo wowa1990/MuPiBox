@@ -31,9 +31,15 @@ from PIL import Image, ImageOps
 src, out = sys.argv[1], sys.argv[2]
 try:
     im = Image.open(src)
+    ow, oh = im.size
+    # (a JPEG read already smaller - by 2, 4 or 8, as long as its long side keeps 1280: a photo of a phone took 137 MB
+    # read whole, 55 MB so - a Pi with 1 GB froze at the first upload, together with the display and apt; the same
+    # picture comes out. No effect on other kinds.)
+    im.draft(None, (1280, 1) if ow >= oh else (1, 1280))
     im.load()
 except Exception:
     sys.exit(2)
+dw, dh = im.size
 taken = None
 try:
     exif = im.getexif()
@@ -55,7 +61,8 @@ if im.mode in ('RGBA', 'LA', 'P'):
     im = bg
 else:
     im = im.convert('RGB')
-w, h = im.size
+# (the size of the picture itself, turned as shown - not of the smaller one read)
+w, h = (oh, ow) if (im.size != (dw, dh) and im.size == (dh, dw)) else (ow, oh)
 for size, suffix, quality in ((1280, '.jpg', 84), (400, '.s.jpg', 80), (32, '.b.jpg', 70)):
     copy = im.copy()
     copy.thumbnail((size, size), Image.LANCZOS)
@@ -75,6 +82,35 @@ export class NotAPicture extends Error {}
 /** The one who sent the picture is gone (the app's upload was stopped): nothing more is done for it */
 export class PhotoAborted extends Error {}
 
+// Not while a program of the photos is being installed (apt, right after the display was switched on - routes.ts sets
+// this): apt, the display and the pictures together were too much for a Pi with 1 GB, it froze at the first upload.
+// At most 3 minutes, then the picture goes on anyway (an upload of the app waits for it, and gives up after 5).
+const INSTALL_WAIT_MS = 3 * 60_000
+let installing: () => Promise<void> = () => Promise.resolve()
+export function setPhotoInstallWait(wait: () => Promise<void>): void {
+  installing = wait
+}
+async function afterInstalling(signal?: AbortSignal): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  let onAbort: (() => void) | undefined
+  try {
+    await Promise.race([
+      installing(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, INSTALL_WAIT_MS)
+        timer.unref?.()
+      }),
+      new Promise<void>((resolve) => {
+        onAbort = resolve
+        signal?.addEventListener('abort', onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+    if (onAbort) signal?.removeEventListener('abort', onAbort)
+  }
+}
+
 /**
  * The three sizes of `src` as `<out>.jpg`, `<out>.s.jpg`, `<out>.b.jpg` (written next to each other and renamed at the
  * end: never half of them). `ext`: the source's kind (HEIC goes through heif-convert). Throws NotAPicture for a file
@@ -82,6 +118,8 @@ export class PhotoAborted extends Error {}
  */
 export function processPhoto(src: string, out: string, ext: string, signal?: AbortSignal): Promise<ProcessedPhoto> {
   return oneAtATime(async () => {
+    if (signal?.aborted) throw new PhotoAborted()
+    await afterInstalling(signal)
     if (signal?.aborted) throw new PhotoAborted()
     let input = src
     let converted: string | undefined
