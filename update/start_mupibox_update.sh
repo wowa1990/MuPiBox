@@ -492,6 +492,14 @@ fi
 LOG="/boot/mupibox_update.log"
 exec 3>${LOG}
 
+# The display back after an abort before anything was replaced (the download or the archive): the maintenance screen
+# ended Chromium at the start, and only the app brought it back afterwards - in a terminal or with systemd-run it stayed
+# on the maintenance screen until the box was restarted. Only when it is not running (the app's unit checks the same).
+display_back() {
+	pgrep -x chromium > /dev/null || pgrep -x chromium-browse > /dev/null \
+		|| sudo -i -u dietpi bash -c "setsid nohup /usr/local/bin/mupibox/restart_kiosk.sh >/dev/null 2>&1 < /dev/null &" >&3 2>&3
+}
+
 # H5: previously the script ran the destructive `rm -R Sonos-Kids-
 # Controller-master/` BEFORE verifying that the downloaded archive was
 # usable. A flaky internet-dropout, a 404 response, or a corrupted
@@ -973,6 +981,7 @@ rm -f /tmp/mupibox-update-failed
 		chmod 755 /usr/bin/jq >&3 2>&3
 		rm -f /home/dietpi/mupibox.zip
 		systemctl start mupi_idle_shutdown.service >&3 2>&3
+		display_back
 		touch /tmp/mupibox-update-failed
 		exit 1
 	fi
@@ -1030,6 +1039,7 @@ rm -f /tmp/mupibox-update-failed
 		chmod 755 /usr/bin/jq >&3 2>&3
 		[ -n "${UNPACKED_DIR}" ] && rm -rf "/home/dietpi/${UNPACKED_DIR}"
 		systemctl start mupi_idle_shutdown.service >&3 2>&3
+		display_back
 		touch /tmp/mupibox-update-failed
 		exit 1
 	fi
@@ -1903,6 +1913,8 @@ fi
 # 5.0.15). And not in a terminal (curl | sudo bash): there the restart is the user's.
 own_unit_restart() {
 	[ -n "${INVOCATION_ID:-}" ] && [ -z "${MUPIBOX_UPDATE_LOCK_FOR:-}" ] && [ ! -t 1 ] || return 1
+	# (done: the log is moved away as the very last step - as the app checks it)
+	[ ! -e "${LOG}" ] || return 1
 	case "$(command -v whiptail)" in /usr/bin/* | /bin/* | /usr/local/bin/* | "") return 0 ;; esac
 	return 1
 }
