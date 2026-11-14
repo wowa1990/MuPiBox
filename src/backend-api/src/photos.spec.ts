@@ -327,6 +327,13 @@ test('photo Immich: trouble of the server (or a proxy in front of it) counts as 
 
 test('photo Immich: a clip length from its duration', async () => {
   const { clipSeconds } = await import('./app-api/photos/immich')
+  // (Immich 3: milliseconds as a number)
+  assert.equal(clipSeconds(24_400), 24)
+  assert.equal(clipSeconds(833), 1)
+  // (a clip of less than half a second is no "0:00")
+  assert.equal(clipSeconds(300), 1)
+  assert.equal(clipSeconds(0), 0)
+  assert.equal(clipSeconds(Number.NaN), 0)
   assert.equal(clipSeconds('0:00:24.533000'), 25)
   assert.equal(clipSeconds('1:02:03.000000'), 3723)
   assert.equal(clipSeconds(null), 0)

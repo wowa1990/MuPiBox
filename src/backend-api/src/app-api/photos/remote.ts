@@ -348,8 +348,9 @@ export class RemotePhotoSync {
             const before = new Map(a.assets.map((x) => [x.ref, x]))
             a.assets = shown.slice(0, PICTURES_MAX).map((x) => {
               const old = before.get(x.ref)
-              // (a clip waiting to be made when the album was kept: live it is ready at once)
-              if (old && old.ver === x.ver) return old.kind === 'video' ? { ...old, ready: true } : old
+              // (a clip waiting to be made when the album was kept: live it is ready at once; its length as the service
+              // says now - Immich 3 gives it in another form, the clips of before had none)
+              if (old && old.ver === x.ver) return old.kind === 'video' ? { ...old, ready: true, duration: x.duration || old.duration } : old
               const base = { id: newId(), w: x.w, h: x.h, taken: x.taken, added: new Date().toISOString(), ref: x.ref, ver: x.ver }
               return x.kind === 'video' ? { ...base, kind: 'video' as const, ready: true, duration: x.duration } : { ...base, kind: 'photo' as const }
             })
@@ -373,12 +374,16 @@ export class RemotePhotoSync {
         const wanted = new Map(items.map((x) => [x.ref, x]))
         const drop: PhotoAsset[] = []
         const replace = new Map<string, PhotoAsset>()
+        // (a clip kept without its length, which the service tells now - Immich 3: the clips of before had none; one
+        // with a length is left as it is - the box's own, once made, may differ by a second)
+        const lengths = new Map<string, number>()
         for (const x of album.assets) {
           const f = x.ref ? wanted.get(x.ref) : undefined
           if (!f) {
             drop.push(x)
             continue
           }
+          if (x.kind === 'video' && f.duration && !x.duration) lengths.set(x.id, f.duration)
           // (a clip still waiting to be made: its file as it came is there)
           const file = x.kind === 'video' && x.ready === false ? `${assetBase(album, x.id)}.pending` : `${assetBase(album, x.id)}.jpg`
           const there = x.ver === f.ver && (await fsp.access(file).then(() => true, () => false))
@@ -394,6 +399,12 @@ export class RemotePhotoSync {
             if (a.cover && ids.has(a.cover)) delete a.cover
           })
           for (const x of drop) for (const f of photoFiles(assetBase(album, x.id))) await fsp.rm(f, { force: true }).catch(() => undefined)
+        }
+        if (lengths.size) {
+          await update((lib) => {
+            const a = lib.albums.find((y) => y.id === album.id)
+            for (const x of a?.assets ?? []) if (lengths.has(x.id)) x.duration = lengths.get(x.id)
+          })
         }
         // (a clip the service says is too long, or one not taken before while unchanged: not fetched)
         const takes = (x: RemoteItem) => !rejected.has(`${source}:${x.ref}|${x.ver}`) && !(x.kind === 'video' && x.duration > VIDEO_MAX_SECONDS + 1)

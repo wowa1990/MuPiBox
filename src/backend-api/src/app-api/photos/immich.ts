@@ -224,8 +224,8 @@ interface ImmichAlbum {
 export interface ImmichAsset {
   id: string
   type: string
-  /** a clip's length, "0:00:24.000000" */
-  duration?: string | null
+  /** a clip's length, "0:00:24.000000" (Immich 3: 24000, milliseconds) */
+  duration?: string | number | null
   isTrashed?: boolean
   /** "timeline", "archive", "hidden" (a live photo's movie, a picture of a stack) or "locked" (Immich 1.133 on) */
   visibility?: string
@@ -494,8 +494,10 @@ function dims(x: ImmichAsset): { w: number; h: number } {
   return o >= 5 && o <= 8 ? { w: h, h: w } : { w, h }
 }
 const versionOf = (x: ImmichAsset) => String(x.checksum ?? x.updatedAt ?? '')
-// a clip's length in seconds from Immich's "H:MM:SS.ffffff"
-export const clipSeconds = (d: string | null | undefined): number => {
+// a clip's length in seconds: Immich up to 2.x "H:MM:SS.ffffff", 3.x milliseconds as a number (every clip was "0:00",
+// and a clip too long for the box was fetched before it was found out)
+export const clipSeconds = (d: string | number | null | undefined): number => {
+  if (typeof d === 'number') return Number.isFinite(d) && d > 0 ? Math.max(1, Math.round(d / 1000)) : 0
   const m = /^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(String(d ?? ''))
   return m ? Math.round(Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])) : 0
 }
