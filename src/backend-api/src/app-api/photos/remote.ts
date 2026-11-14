@@ -27,6 +27,11 @@ export const FILE_MAX_BYTES = 30 * 1024 * 1024
 const RESERVE_BYTES = 300 * 1024 * 1024
 // a picture's or an album's id at a service, as the box keeps it (a UUID, a number)
 export const REMOTE_REF = /^[A-Za-z0-9_-]{1,64}$/
+// an album's: also one of Immich's albums of people (up to three ids - immich.ts peopleRef)
+const REMOTE_ALBUM_REF = /^[A-Za-z0-9_-]{1,128}$/
+// a face kept: asked for again after a week (a better one chosen in Immich)
+const FACE_DAYS = 7
+const FACE_MAX_BYTES = 2 * 1024 * 1024
 
 /* ---------- what goes wrong ---------- */
 
@@ -77,8 +82,11 @@ export interface RemoteItem {
 }
 
 export interface RemoteClient {
-  /** an album with its pictures (clips only with "Videos anzeigen"); RemoteRefused 404: there is no such album any more */
-  album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }>
+  /** an album with its pictures (clips only with "Videos anzeigen"); RemoteRefused 404: there is no such album any more.
+   *  faces: an album of people - their ids, whose faces (face()) the display shows on its stack */
+  album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[]; faces?: string[] }>
+  /** a person's face (an album of people) */
+  face?(id: string, signal?: AbortSignal): Promise<globalThis.Response>
   /** a picture: "full" a display size (kept on the box, the full view), "grid" a small one */
   picture(albumRef: string, item: { ref: string; ver: string }, size: 'full' | 'grid', signal?: AbortSignal): Promise<globalThis.Response>
   /** a clip, as it is kept and made on the box (or passed on live: liveClips); range a part of it */
@@ -106,6 +114,8 @@ export interface RemoteSpec {
   /** where the pictures kept on the box lie, and the live ones */
   photoDir: string
   liveDir: string
+  /** where the faces of albums of people lie ("<id>.jpg") - a service with such albums */
+  faceDir?: string
   settings(cfg: MupiboxConfig | undefined): RemoteSettings
   /** the client with the login as kept; null: none, or the login cannot be used on this box */
   client(cfg: MupiboxConfig | undefined): RemoteClient | null
@@ -260,7 +270,7 @@ export class RemotePhotoSync {
     try {
       const videos = photoSettings(cfg).showVideos
       // the albums chosen as the service has them now; the service away: nothing changes on the box
-      const found = new Map<string, { name: string; items: RemoteItem[] }>()
+      const found = new Map<string, { name: string; items: RemoteItem[]; faces?: string[] }>()
       let missing = 0
       {
         for (const id of s.albumIds) {
@@ -288,6 +298,9 @@ export class RemotePhotoSync {
         }
       }
       Object.assign(this.state, { offlineSince: null, unauthorized: false, missing, certificate: false })
+      // (the faces of the albums of people, for the display - before the pictures: they are few and shown first)
+      await this.keepFaces(client, [...found.values()].flatMap((f) => f.faces ?? []), stop.signal)
+      if (stop.signal.aborted) return
 
       // the albums: new ones go into the list with their first picture (live: at once); gone or no longer chosen out
       const live = !s.keepCopy
@@ -305,8 +318,16 @@ export class RemotePhotoSync {
             const was = a.live === true
             a.title = title
             a.live = live
+            if (f.faces?.length) a.faces = f.faces
+            else delete a.faces
             out.push({ album: { ...a, assets: [...a.assets] }, items: f.items, fresh: false, was })
-          } else out.push({ album: { id: newId(), title, source, display: true, position: 0, created: now, assets: [], ref, live }, items: f.items, fresh: true, was: live })
+          } else
+            out.push({
+              album: { id: newId(), title, source, display: true, position: 0, created: now, assets: [], ref, live, ...(f.faces?.length ? { faces: f.faces } : {}) },
+              items: f.items,
+              fresh: true,
+              was: live,
+            })
         }
         return out
       })
@@ -499,6 +520,40 @@ export class RemotePhotoSync {
     }
   }
 
+  /** The face of a person whose album is on the box (null: none kept) */
+  faceFile(id: string): string | null {
+    return this.spec.faceDir && REMOTE_REF.test(id) ? path.join(this.spec.faceDir, `${id}.jpg`) : null
+  }
+
+  // the faces of the albums of people: fetched when not there or older than a week (one that does not come: the one
+  // kept stays, the display shows a picture instead when there is none); those of no album any more go
+  private async keepFaces(client: RemoteClient, ids: string[], signal: AbortSignal): Promise<void> {
+    const dir = this.spec.faceDir
+    if (!dir) return
+    const wanted = new Set(ids.filter((id) => REMOTE_REF.test(id)))
+    if (wanted.size && client.face) {
+      await fsp.mkdir(dir, { recursive: true }).catch(() => undefined)
+      for (const id of wanted) {
+        if (signal.aborted) return
+        const file = path.join(dir, `${id}.jpg`)
+        const st = await fsp.stat(file).catch(() => null)
+        if (st && Date.now() - st.mtimeMs < FACE_DAYS * 86_400_000) continue
+        try {
+          const r = await client.face(id, signal)
+          const buf = Buffer.from(await r.arrayBuffer())
+          if (!buf.length || buf.length > FACE_MAX_BYTES) continue
+          await fsp.writeFile(`${file}.tmp`, buf)
+          await fsp.rename(`${file}.tmp`, file)
+        } catch {
+          await fsp.rm(`${file}.tmp`, { force: true }).catch(() => undefined)
+        }
+      }
+    }
+    for (const name of await fsp.readdir(dir).catch(() => [] as string[])) {
+      if (!wanted.has(name.replace(/\.jpg$/, ''))) await fsp.rm(path.join(dir, name), { force: true }).catch(() => undefined)
+    }
+  }
+
   /** "Verbindung trennen": every album of the service and its pictures off the box (at the service all stays) */
   async removeAll(): Promise<number> {
     this.cancel()
@@ -510,6 +565,7 @@ export class RemotePhotoSync {
     })
     await fsp.rm(this.spec.photoDir, { recursive: true, force: true }).catch(() => undefined)
     await fsp.rm(this.spec.liveDir, { recursive: true, force: true }).catch(() => undefined)
+    if (this.spec.faceDir) await fsp.rm(this.spec.faceDir, { recursive: true, force: true }).catch(() => undefined)
     Object.assign(this.state, { lastSync: null, offlineSince: null, cacheFull: false, unauthorized: false, missing: 0, retry: false })
     await this.save()
     return gone.length
@@ -569,7 +625,7 @@ export class RemoteLive {
    */
   async send(req: Request, res: Response, albumRef: string, item: { ref: string; ver: string }, size: string): Promise<void> {
     const client = this.sync.client()
-    if (!REMOTE_REF.test(item.ref) || !REMOTE_REF.test(albumRef)) return void res.status(404).end()
+    if (!REMOTE_REF.test(item.ref) || !REMOTE_ALBUM_REF.test(albumRef)) return void res.status(404).end()
     // a clip: passed on as it comes, a part of it when the player asks for one (not kept - too big for the live cache)
     // (the login refused: the service is not asked for every picture - each a failed login, and a server that counts them
     // locked the box out; checkNow asks again)

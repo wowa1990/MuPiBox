@@ -12,6 +12,8 @@ export interface PhotoAlbumSummary {
   pictures: string[]
   /** shown live from Immich, and Immich is away: "Gerade nicht da" */
   away?: boolean
+  /** an album of people (Immich): how many faces its stack shows (faceUrl) */
+  faces?: number
 }
 
 export interface PhotoAsset {
@@ -98,5 +100,10 @@ export class PhotosService {
 
   fileUrl(album: string, asset: string, size: PhotoSize): string {
     return `${this.base}/file/${encodeURIComponent(album)}/${encodeURIComponent(asset)}/${size}`
+  }
+
+  /** the n-th face of an album of people */
+  faceUrl(album: string, n: number): string {
+    return `${this.base}/face/${encodeURIComponent(album)}/${n}`
   }
 }

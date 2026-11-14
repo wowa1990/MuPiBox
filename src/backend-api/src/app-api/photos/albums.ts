@@ -85,7 +85,20 @@ const summary = (a: PhotoAlbum) => ({
   // (a NAS album: its folder; an album of a photo service: its id there, and whether it is shown live)
   ...(a.source === 'nas' || SERVICE_SOURCES.includes(a.source) ? { ref: a.ref ?? null } : {}),
   ...(SERVICE_SOURCES.includes(a.source) ? { live: a.live === true } : {}),
+  ...(a.faces?.length ? { faces: a.faces.length } : {}),
 })
+
+/** The face of a person of an album of people (Immich), as kept by its sync - none kept: 404 (a picture is shown instead) */
+async function sendFace(req: Request, res: Response, onlyShown: boolean): Promise<void> {
+  const { album: albumId, n } = req.params as Record<string, string>
+  const a = isId(albumId) ? await findAlbum(albumId) : undefined
+  const id = a?.faces?.[Number(n)]
+  const file = a && (!onlyShown || a.display) && /^\d$/.test(n) && id ? remoteOf(a.source)?.faceFile(id) : null
+  if (!file) return void res.status(404).end()
+  res.sendFile(file, { dotfiles: 'allow', headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=3600' } }, (err) => {
+    if (err && !res.headersSent) res.status(404).end()
+  })
+}
 
 /** Sends one size of a picture of an album (s: grid, f: full, b: background) - only one the list knows */
 async function sendPicture(req: Request, res: Response, onlyShown: boolean): Promise<void> {
@@ -401,6 +414,9 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
 
   /** GET /api/app/photos/file/:album/:asset/:size - a picture for the app (s grid, f full view, b background) */
   router.get('/photos/file/:album/:asset/:size', requireSession, (req, res) => void sendPicture(req, res, false))
+
+  /** GET /api/app/photos/face/:album/:n - the n-th face of an album of people (its tile in the app) */
+  router.get('/photos/face/:album/:n', requireSession, (req, res) => void sendFace(req, res, false))
 }
 
 /**
@@ -411,6 +427,7 @@ export function registerPhotoAlbumRoutes(router: Router, deps: PhotoAlbumDeps): 
  *   GET /api/photos/screensaver      whether the screensaver runs and how (?list=1: and its pictures)
  *   POST /api/photos/screensaver/check  which pictures of a running screensaver are still there
  *   GET /api/photos/file/:album/:asset/:size
+ *   GET /api/photos/face/:album/:n   a face of an album of people (Immich)
  */
 export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): void {
   const on = () => photoSettings(deps.getMupiboxConfig()).enabled
@@ -434,7 +451,8 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
         // (the stack: pictures - a clip's own picture too, when it is shown)
         const first = coverOf(a)
         const second = a.assets.find((x) => x.id !== first)?.id ?? null
-        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(away(a) ? { away: true } : {}) }
+        // (an album of people: their faces on the stack - the display asks for each, one not kept falls back to the picture)
+        return { id: a.id, title: a.title, count: a.assets.length, pictures: [first, second].filter(Boolean), ...(a.faces?.length ? { faces: a.faces.length } : {}), ...(away(a) ? { away: true } : {}) }
       }),
     })
   })
@@ -484,5 +502,9 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
   app.get('/api/photos/file/:album/:asset/:size', (req, res) => {
     if (!on()) return void res.status(404).end()
     void sendPicture(req, res, true)
+  })
+  app.get('/api/photos/face/:album/:n', (req, res) => {
+    if (!on()) return void res.status(404).end()
+    void sendFace(req, res, true)
   })
 }

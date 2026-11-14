@@ -3,14 +3,20 @@
 // picture, made into the display's sizes, in cache/photos/immich) or live (its "thumbnail" for the grid, its "preview"
 // for the full view); the sync, the two ways and the live pictures are the same for every service (remote.ts). Albums of
 // Immich are only looked at in the app: changes happen in Immich. The key is kept encrypted and never shown again.
+//
+// Besides its albums (5.1): people Immich knows by their faces - one, or two or three together (the pictures they are
+// all on) - and the favourites, each an album on the box with the newest pictures; a person's album shows the face on
+// the display (kept with the album's pictures). See docs/immich-personen-5.1.md.
 
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { Request, Response, Router } from 'express'
 import type { MupiboxConfig } from '../../models/mupibox-config.model'
+import { boxLanguage } from '../../speech'
 import { requireCsrf, requireSession } from '../middleware'
 import { CACHE_LIMITS_MB, PICTURES_MAX, type RemoteClient, type RemoteItem, RemoteAway, RemotePhotoSync, RemoteRefused, registerRemote, remoteDown, SYNC_MINUTES, typeOf } from './remote'
 import { photoSettings } from './settings'
-import { albums, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, PHOTOS_DIR, photoBytes } from './store'
+import { albums, IMMICH_FACE_DIR, IMMICH_LIVE_DIR, IMMICH_PHOTO_DIR, PHOTOS_DIR, photoBytes } from './store'
 
 export interface PhotoImmichDeps {
   getMupiboxConfig: () => MupiboxConfig | undefined
@@ -27,6 +33,50 @@ const ALBUMS_MAX = 100
 const STATE_FILE = path.join(PHOTOS_DIR, 'immich-sync.json')
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** At most this many albums of people, each of one to three people (more together: hardly a picture has them all) */
+export const PEOPLE_ALBUMS_MAX = 20
+export const PEOPLE_TOGETHER_MAX = 3
+/**
+ * How many pictures a person's album and the favourites take at most (Fotos › Immich › Bilder je Album; 0: all, up to the
+ * 20,000 of every album). Not set: 1000 when the pictures are kept on the box (room on the card, the time to make them),
+ * all when they are shown live (only their list is kept). More found: a choice spread over all the years - the same
+ * pictures at every sync (by their id), a new one only now and then takes the place of another.
+ */
+export const SEARCH_LIMITS = [500, 1000, 2000, 5000, 0] as const
+export const SEARCH_LIMIT_KEPT = 1000
+export const searchLimitOf = (s: Pick<ImmichSettings, 'searchLimit' | 'keepCopy'>): number => s.searchLimit ?? (s.keepCopy ? SEARCH_LIMIT_KEPT : 0)
+/** The favourites' album, as the box knows it (its "ref") */
+export const FAVORITES_REF = 'favorites'
+const PEOPLE_PREFIX = 'people-'
+/** A people album's ref: "people-<id>[_<id>…]" (the order kept as chosen) */
+export const peopleRef = (ids: string[]): string => `${PEOPLE_PREFIX}${ids.join('_')}`
+/** The people of a ref; null: no people album */
+export function peopleOfRef(ref: string): string[] | null {
+  if (!ref.startsWith(PEOPLE_PREFIX)) return null
+  const ids = ref.slice(PEOPLE_PREFIX.length).split('_')
+  return ids.length >= 1 && ids.length <= PEOPLE_TOGETHER_MAX && ids.every((x) => UUID.test(x)) ? ids : null
+}
+// the favourites' name on the box, in its language (Einstellungen › Sprache) - the other albums' names come from Immich
+const FAVORITES_NAME: Record<string, string> = {
+  de: 'Favoriten',
+  en: 'Favourites',
+  cs: 'Oblíbené',
+  da: 'Favoritter',
+  el: 'Αγαπημένα',
+  es: 'Favoritos',
+  fi: 'Suosikit',
+  fr: 'Favoris',
+  it: 'Preferiti',
+  nb: 'Favoritter',
+  nl: 'Favorieten',
+  pl: 'Ulubione',
+  pt: 'Favoritos',
+  ru: 'Избранное',
+  sv: 'Favoriter',
+  tr: 'Favoriler',
+  uk: 'Улюблені',
+}
+
 export interface ImmichSettings {
   /** the server, http(s)://host:port, without /api */
   url: string
@@ -35,12 +85,34 @@ export interface ImmichSettings {
   /** the account the key belongs to (name or e-mail, from the test) */
   account: string | null
   albumIds: string[]
+  /** albums of people: each one to three people (their ids in Immich) - the pictures they are all on */
+  people: string[][]
+  /** the favourites (the heart in Immich) as an album */
+  favorites: boolean
+  /** pictures at most of an album of people and of the favourites (SEARCH_LIMITS; 0 all); null: as the way they are kept */
+  searchLimit: (typeof SEARCH_LIMITS)[number] | null
   keepCopy: boolean
   syncMinutes: (typeof SYNC_MINUTES)[number]
   cacheLimitMb: (typeof CACHE_LIMITS_MB)[number]
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+
+// the albums of people as kept: each one to three different ids, each set once (in any order)
+function peopleList(v: unknown): string[][] | null {
+  if (!Array.isArray(v) || v.length > PEOPLE_ALBUMS_MAX) return null
+  const out: string[][] = []
+  const seen = new Set<string>()
+  for (const g of v) {
+    if (!Array.isArray(g) || g.length < 1 || g.length > PEOPLE_TOGETHER_MAX || !g.every((x) => typeof x === 'string' && UUID.test(x))) return null
+    const ids = [...new Set(g as string[])]
+    const key = [...ids].sort().join()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(ids)
+  }
+  return out
+}
 
 /** The server's address as the box keeps it: http(s)://host[:port][/path], no "/api", no slash at the end */
 export function cleanImmichUrl(raw: unknown): string | null {
@@ -68,6 +140,9 @@ export function immichSettings(cfg: unknown): ImmichSettings {
     apiKey: typeof n.apiKey === 'string' ? n.apiKey : '',
     account: typeof n.account === 'string' && n.account ? n.account.slice(0, 100) : null,
     albumIds: Array.isArray(n.albumIds) ? [...new Set(n.albumIds.filter((x): x is string => typeof x === 'string' && UUID.test(x)))].slice(0, ALBUMS_MAX) : [],
+    people: peopleList(n.people) ?? [],
+    favorites: n.favorites === true,
+    searchLimit: (SEARCH_LIMITS as readonly number[]).includes(n.searchLimit as number) ? (n.searchLimit as ImmichSettings['searchLimit']) : null,
     keepCopy: n.keepCopy !== false,
     syncMinutes: (SYNC_MINUTES as readonly number[]).includes(Number(n.syncMinutes)) ? (Number(n.syncMinutes) as ImmichSettings['syncMinutes']) : 360,
     cacheLimitMb: (CACHE_LIMITS_MB as readonly number[]).includes(Number(n.cacheLimitMb)) ? (Number(n.cacheLimitMb) as ImmichSettings['cacheLimitMb']) : 2048,
@@ -96,6 +171,19 @@ export function applyImmichSettings(cfg: Record<string, unknown>, patch: unknown
   if (p.albumIds !== undefined) {
     if (!Array.isArray(p.albumIds) || p.albumIds.length > ALBUMS_MAX || !p.albumIds.every((x) => typeof x === 'string' && UUID.test(x))) return 'albumIds'
     next.albumIds = [...new Set(p.albumIds as string[])]
+  }
+  if (p.people !== undefined) {
+    const list = peopleList(p.people)
+    if (!list) return 'people'
+    next.people = list
+  }
+  if (p.favorites !== undefined) {
+    if (typeof p.favorites !== 'boolean') return 'favorites'
+    next.favorites = p.favorites
+  }
+  if (p.searchLimit !== undefined) {
+    if (!(SEARCH_LIMITS as readonly unknown[]).includes(p.searchLimit)) return 'searchLimit'
+    next.searchLimit = p.searchLimit
   }
   if (p.keepCopy !== undefined) {
     if (typeof p.keepCopy !== 'boolean') return 'keepCopy'
@@ -139,6 +227,8 @@ export interface ImmichAsset {
   /** a clip's length, "0:00:24.000000" */
   duration?: string | null
   isTrashed?: boolean
+  /** "timeline", "archive", "hidden" (a live photo's movie, a picture of a stack) or "locked" (Immich 1.133 on) */
+  visibility?: string
   fileCreatedAt?: string
   localDateTime?: string
   checksum?: string
@@ -153,6 +243,10 @@ export class ImmichClient implements RemoteClient {
   constructor(
     readonly url: string,
     readonly key: string,
+    /** the box's language (the favourites' name) */
+    readonly language = 'de',
+    /** pictures at most of an album of people and of the favourites (0: all - searchLimitOf) */
+    readonly limit = 0,
   ) {}
 
   private async call(
@@ -209,10 +303,71 @@ export class ImmichClient implements RemoteClient {
     return [...out.values()]
   }
 
-  /** An album with its pictures as the sync takes them */
-  async album(id: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[] }> {
-    const a = await this.assets(id, signal, videos)
+  /** An album with its pictures as the sync takes them - an album of Immich, of people (with their faces) or the favourites */
+  async album(ref: string, signal: AbortSignal, videos: boolean): Promise<{ name: string; items: RemoteItem[]; faces?: string[] }> {
+    if (ref === FAVORITES_REF) {
+      const items = await this.searchChosen({ isFavorite: true }, signal, videos)
+      return { name: FAVORITES_NAME[this.language] ?? FAVORITES_NAME.en, items: items.map(itemOf) }
+    }
+    const people = peopleOfRef(ref)
+    if (people) {
+      // (each person still there - one deleted or merged in Immich: the album is "no longer there", RemoteRefused 404)
+      const names: string[] = []
+      for (const id of people) names.push(String((await this.json<{ name?: string }>(`/api/people/${id}`, { signal })).name ?? '').trim())
+      const items = await this.searchChosen({ personIds: people }, signal, videos)
+      return { name: names.filter(Boolean).join(' & '), items: items.map(itemOf), faces: people }
+    }
+    const a = await this.assets(ref, signal, videos)
     return { name: a.name, items: a.assets.map(itemOf) }
+  }
+
+  /**
+   * The pictures of a search (people, favourites) the box shows: all of them (the newest 20,000 at most), more than the
+   * limit - a choice spread over all the years (spreadChoice), newest first
+   */
+  private async searchChosen(query: Record<string, unknown>, signal: AbortSignal, videos: boolean): Promise<ImmichAsset[]> {
+    const out: ImmichAsset[] = []
+    // (newest first - an Immich that does not know the order is asked without it)
+    let order = true
+    for (let page = 1; page && out.length < PICTURES_MAX; ) {
+      let r: { assets?: { items?: ImmichAsset[]; nextPage?: string | null } }
+      try {
+        r = await this.json('/api/search/metadata', { method: 'POST', body: { ...query, page, size: 1000, withExif: true, ...(order ? { order: 'desc' } : {}) }, signal })
+      } catch (err) {
+        if (order && page === 1 && err instanceof ImmichRefused && err.status === 400) {
+          order = false
+          continue
+        }
+        throw err
+      }
+      out.push(...shownAssets(r.assets?.items ?? [], videos))
+      page = r.assets?.nextPage ? Number(r.assets.nextPage) : 0
+    }
+    return spreadChoice(out.slice(0, PICTURES_MAX), this.limit)
+  }
+
+  /** The people Immich knows by name (not those hidden there), by name */
+  async people(signal?: AbortSignal): Promise<Array<{ id: string; name: string }>> {
+    const out: Array<{ id: string; name: string }> = []
+    for (let page = 1; page && page <= 20; ) {
+      const r = await this.json<{ people?: Array<{ id?: unknown; name?: unknown; isHidden?: unknown }>; hasNextPage?: boolean }>(`/api/people?withHidden=false&page=${page}&size=500`, { signal })
+      for (const p of r.people ?? []) {
+        const name = typeof p.name === 'string' ? p.name.trim() : ''
+        if (typeof p.id === 'string' && UUID.test(p.id) && name && p.isHidden !== true) out.push({ id: p.id, name: name.slice(0, 60) })
+      }
+      page = r.hasNextPage ? page + 1 : 0
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+  }
+
+  /** A person's face (JPEG) */
+  async face(personId: string, signal?: AbortSignal): Promise<globalThis.Response> {
+    const r = await this.call(`/api/people/${personId}/thumbnail`, { signal, headers: { Accept: 'image/*' } })
+    if (!r.ok || !r.body) {
+      await r.body?.cancel().catch(() => undefined)
+      throw new ImmichRefused(r.status)
+    }
+    return r
   }
 
   /** An album with its pictures (not trashed); newer Immich versions leave the assets out of the album: searched then */
@@ -231,8 +386,7 @@ export class ImmichClient implements RemoteClient {
         page = r.assets?.nextPage ? Number(r.assets.nextPage) : 0
       }
     }
-    // (clips only with "Videos anzeigen"; a live photo's movie is no asset of its own in the album - its still is)
-    return { name: String(a.albumName ?? ''), assets: assets.filter((x) => x && (x.type === 'IMAGE' || (videos && x.type === 'VIDEO')) && !x.isTrashed && UUID.test(x.id)) }
+    return { name: String(a.albumName ?? ''), assets: shownAssets(assets, videos) }
   }
 
   /** A clip as Immich plays it (made by Immich for browsers - H.264 most often); range: a part of it (the display seeking) */
@@ -271,7 +425,7 @@ export class ImmichClient implements RemoteClient {
 }
 
 export type ImmichTest =
-  | { ok: true; version: string; account: string | null; albums: number; assets: number }
+  | { ok: true; version: string; account: string | null; albums: number; assets: number; people: boolean }
   | { ok: false; error: 'unreachable' | 'unauthorized' | 'permissions' | 'unsupportedVersion' }
 
 /**
@@ -314,12 +468,18 @@ export async function testImmich(client: ImmichClient): Promise<ImmichTest> {
   }
   // (the account: only when the key may read it - a key with the album rights only has no name to show)
   const me = await client.json<{ name?: string; email?: string }>('/api/users/me').catch(() => null)
+  // (the people: only with person.read - without it the albums work all the same, the app says what is missing)
+  const people = await client.json('/api/people?withHidden=false&page=1&size=1').then(
+    () => true,
+    () => false,
+  )
   return {
     ok: true,
     version: `${v.major}.${v.minor}.${v.patch}`,
     account: me?.name || me?.email || null,
     albums: list.length,
     assets: list.reduce((n, a) => n + (Number(a.assetCount) || 0), 0),
+    people,
   }
 }
 
@@ -343,7 +503,38 @@ const takenOf = (x: ImmichAsset) => {
   const t = x.localDateTime ?? x.fileCreatedAt
   return typeof t === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(t) ? t.slice(0, 19) : null
 }
-const itemOf = (x: ImmichAsset): RemoteItem => ({ ref: x.id, kind: x.type === 'VIDEO' ? 'video' : 'photo', ver: versionOf(x), ...dims(x), taken: takenOf(x), duration: clipSeconds(x.duration) })
+/**
+ * At most `limit` of the pictures (0: all), spread over all the years: those whose id has the smallest fingerprint - by
+ * chance from every year, and the same ones at every sync (a picture kept on the box is not fetched again and again; a
+ * new one in Immich takes the place of another only as often as its fingerprint is among the smallest). In their order.
+ */
+export function spreadChoice<T extends { id: string }>(list: T[], limit: number): T[] {
+  if (!limit || list.length <= limit) return list
+  const rank = (x: T) => createHash('sha1').update(x.id).digest('hex')
+  const chosen = new Set(
+    list
+      .map((x) => ({ x, r: rank(x) }))
+      .sort((a, b) => (a.r < b.r ? -1 : a.r > b.r ? 1 : 0))
+      .slice(0, limit)
+      .map((y) => y.x),
+  )
+  return list.filter((x) => chosen.has(x))
+}
+
+/**
+ * The assets the box takes: pictures, clips only with "Videos anzeigen", nothing in the trash, nothing hidden or locked in
+ * Immich - a search for people or favourites also brings a live photo's movie ("hidden"; in an album it is no asset of
+ * its own, its still is)
+ */
+export function shownAssets(list: ImmichAsset[], videos: boolean): ImmichAsset[] {
+  return list.filter(
+    (x) => x && (x.type === 'IMAGE' || (videos && x.type === 'VIDEO')) && !x.isTrashed && x.visibility !== 'hidden' && x.visibility !== 'locked' && typeof x.id === 'string' && UUID.test(x.id),
+  )
+}
+const itemOf = (x: ImmichAsset): RemoteItem =>({ ref: x.id, kind: x.type === 'VIDEO' ? 'video' : 'photo', ver: versionOf(x), ...dims(x), taken: takenOf(x), duration: clipSeconds(x.duration) })
+
+/** What the sync takes from Immich: the albums, the albums of people, the favourites */
+export const immichRefs = (s: ImmichSettings): string[] => [...s.albumIds, ...s.people.map(peopleRef), ...(s.favorites ? [FAVORITES_REF] : [])]
 
 /** Immich for the sync of the albums (remote.ts) */
 function immichSpec(deps: PhotoImmichDeps) {
@@ -353,9 +544,10 @@ function immichSpec(deps: PhotoImmichDeps) {
     stateFile: STATE_FILE,
     photoDir: IMMICH_PHOTO_DIR,
     liveDir: IMMICH_LIVE_DIR,
+    faceDir: IMMICH_FACE_DIR,
     settings: (cfg: MupiboxConfig | undefined) => {
       const s = immichSettings(cfg)
-      return { set: !!s.url && !!s.apiKey, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb }
+      return { set: !!s.url && !!s.apiKey, albumIds: immichRefs(s), keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb }
     },
     client: (cfg: MupiboxConfig | undefined) => immichClient(deps, cfg),
     unreadable: 'the key cannot be read on this box, the pictures stay - enter it again in the app',
@@ -367,7 +559,7 @@ function immichClient(deps: PhotoImmichDeps, cfg: MupiboxConfig | undefined): Im
   const s = immichSettings(cfg)
   if (!s.url || !s.apiKey) return null
   const key = deps.secret ? deps.secret.decrypt(s.apiKey) : s.apiKey
-  return key ? new ImmichClient(s.url, key) : null
+  return key ? new ImmichClient(s.url, key, boxLanguage(cfg), searchLimitOf(s)) : null
 }
 
 
@@ -378,7 +570,9 @@ function immichClient(deps: PhotoImmichDeps, cfg: MupiboxConfig | undefined): Im
  *   POST /api/app/photos/immich/test        {url, apiKey?} - the assistant's test (without a key: the one kept)
  *   GET  /api/app/photos/immich/albums      the albums in Immich (to tick) with their numbers
  *   GET  /api/app/photos/immich/thumb/:id   an album's picture from Immich for that list (through the box)
- *   POST /api/app/photos/immich             {url?, apiKey?, account?, albumIds?, keepCopy?, syncMinutes?, cacheLimitMb?}
+ *   GET  /api/app/photos/immich/people      the people Immich knows by name (to tick)
+ *   GET  /api/app/photos/immich/face/:id    a person's face for that list (through the box)
+ *   POST /api/app/photos/immich             {url?, apiKey?, account?, albumIds?, people?, favorites?, searchLimit?, keepCopy?, syncMinutes?, cacheLimitMb?}
  *   POST /api/app/photos/immich/sync        a sync now
  *   POST /api/app/photos/immich/remove      "Verbindung trennen": address, key, albums and pictures off the box
  */
@@ -392,7 +586,24 @@ export function registerPhotoImmichRoutes(router: Router, deps: PhotoImmichDeps)
     const s = immichSettings(deps.getMupiboxConfig())
     const list = (await albums()).filter((a) => a.source === 'immich')
     return {
-      settings: { url: s.url, account: s.account, albumIds: s.albumIds, keepCopy: s.keepCopy, syncMinutes: s.syncMinutes, cacheLimitMb: s.cacheLimitMb, hasKey: !!s.apiKey },
+      settings: {
+        url: s.url,
+        account: s.account,
+        albumIds: s.albumIds,
+        people: s.people,
+        favorites: s.favorites,
+        searchLimit: s.searchLimit,
+        keepCopy: s.keepCopy,
+        syncMinutes: s.syncMinutes,
+        cacheLimitMb: s.cacheLimitMb,
+        hasKey: !!s.apiKey,
+      },
+      peopleMax: PEOPLE_ALBUMS_MAX,
+      togetherMax: PEOPLE_TOGETHER_MAX,
+      // (the pictures at most of an album of people now - 0 all - and the choices; "all" means up to this)
+      searchLimit: searchLimitOf(s),
+      searchLimits: SEARCH_LIMITS,
+      picturesMax: PICTURES_MAX,
       connected: !!(s.url && s.apiKey),
       minVersion: IMMICH_MIN_TEXT,
       sync: sync.status(),
@@ -437,6 +648,33 @@ export function registerPhotoImmichRoutes(router: Router, deps: PhotoImmichDeps)
     }
   })
 
+  // the people Immich knows by name, to tick (403: the key may not read them - person.read missing)
+  router.get('/photos/immich/people', requireSession, async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const client = kept()
+    if (!client) return void res.status(409).json({ error: 'not_connected' })
+    try {
+      res.json({ people: await client.people() })
+    } catch (err) {
+      const refused = err instanceof ImmichRefused
+      res.status(refused && err.status === 403 ? 403 : refused && err.status === 401 ? 401 : 502).json({ error: refused && err.status === 403 ? 'permissions' : refused ? 'unauthorized' : 'unreachable' })
+    }
+  })
+
+  // a person's face for that list (through the box)
+  router.get('/photos/immich/face/:id', requireSession, async (req: Request, res: Response) => {
+    const client = kept()
+    if (!client || !UUID.test(req.params.id)) return void res.status(404).end()
+    try {
+      const buf = Buffer.from(await (await client.face(req.params.id)).arrayBuffer())
+      res.setHeader('Content-Type', typeOf(buf))
+      res.setHeader('Cache-Control', 'private, max-age=3600')
+      res.end(buf)
+    } catch {
+      res.status(404).end()
+    }
+  })
+
   router.get('/photos/immich/thumb/:id', requireSession, async (req: Request, res: Response) => {
     const client = kept()
     if (!client || !UUID.test(req.params.id)) return void res.status(404).end()
@@ -466,7 +704,11 @@ export function registerPhotoImmichRoutes(router: Router, deps: PhotoImmichDeps)
     // (albums, the way they are kept, the server or its key changed: a sync takes it over at once)
     if (
       after.url &&
-      (before.url !== after.url || before.apiKey !== after.apiKey || before.keepCopy !== after.keepCopy || before.albumIds.join() !== after.albumIds.join())
+      (before.url !== after.url ||
+        before.apiKey !== after.apiKey ||
+        before.keepCopy !== after.keepCopy ||
+        searchLimitOf(before) !== searchLimitOf(after) ||
+        immichRefs(before).join() !== immichRefs(after).join())
     )
       void sync.run()
     res.json(await answer())

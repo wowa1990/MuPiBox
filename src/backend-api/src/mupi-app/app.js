@@ -11981,7 +11981,10 @@ function photoAlbumRow(a, { toggle = true, sub = '' } = {}) {
   const state = a.display ? `<small class="ph-state ok">Auf der Box</small>` : `<small class="ph-state">Am Display ausgeblendet</small>`
   return `<div class="entry ph-album${a.display ? '' : ' hidden-album'}" data-album="${esc(a.id)}">
     <button class="ph-album-open" data-open="${esc(a.id)}" aria-label="${esc(a.title)}">
-      <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="" loading="lazy">` : icon('image', 22)}<span class="ph-src" title="${esc(src)}">${icon(ic, 13)}</span></span>
+      <span class="ph-thumb">${a.cover ? `<img src="${esc(photoFile(a.id, a.cover, 's'))}" alt="" loading="lazy">` : icon('image', 22)}${
+        // (an album of people: the face over the picture - one not kept yet shows nothing, the picture stays)
+        a.faces ? `<img src="${esc(`${API}/photos/face/${a.id}/0`)}" alt="" loading="lazy">` : ''
+      }<span class="ph-src" title="${esc(src)}">${icon(ic, 13)}</span></span>
       <span class="lbl"><b translate="no">${esc(a.title)}</b><small>${esc(sub || counts)}</small>${state}</span></button>
     ${toggle ? `<label class="switch"><input type="checkbox" role="switch" data-show="${esc(a.id)}" ${a.display ? 'checked' : ''} aria-label="${esc(tr('Am Display zeigen'))}: ${esc(a.title)}"><span></span></label>` : ''}</div>`
 }
@@ -12720,7 +12723,9 @@ function mountPhotoNas(root, page) {
    (state, keep the pictures on the box or show them live, sync, cache, access, disconnect). The key goes to the box
    once and is never shown again. */
 
-const photoImmich = { data: null, step: 0, url: '', key: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0 }
+// (the last step: albums and people - tab; people: the list of Immich, groups: the albums of people chosen, each one
+// to three ids; fav: the favourites)
+const photoImmich = { data: null, step: 0, url: '', key: '', test: null, testing: false, albums: null, chosen: new Set(), timer: 0, tab: 'albums', people: null, groups: [], fav: false, q: '' }
 
 async function loadPhotoImmich() {
   const r = await api(`${API}/photos/immich`)
@@ -12747,8 +12752,103 @@ const IMMICH_STEPS = [
   ['url', 'Adresse'],
   ['key', 'Schlüssel'],
   ['test', 'Test'],
-  ['albums', 'Alben'],
+  ['albums', 'Auswahl'],
 ]
+
+// a limit of the pictures of an album of people (0: all - up to the limit of every album)
+const imLimitText = (n, max = 20000) => (n ? `${n} Bilder` : `Alle (bis ${max})`)
+const imLimitLabel = (n, max) => tr(imLimitText(n, max))
+
+const photoImmichTabs = () =>
+  `<div class="seg ph-tabs" id="im-tab">${[
+    ['albums', 'Alben'],
+    ['people', 'Personen'],
+  ]
+    .map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${photoImmich.tab === v}">${esc(tr(l))}</button>`)
+    .join('')}</div>`
+
+// a group of people as one key (the same people in another order: the same album)
+const imGroupKey = (g) => [...g].sort().join()
+const imPersonName = (id) => photoImmich.people?.people?.find((p) => p.id === id)?.name ?? '…'
+const imFace = (id, size = 40) => `<span class="ph-face" style="--s:${size}px"><img src="${esc(`${API}/photos/immich/face/${id}`)}" alt="" loading="lazy"></span>`
+
+// Schritt 4, "Personen": one album per person ticked, albums of two or three together, the favourites on the albums' tab
+function photoImmichPeopleTab() {
+  const list = photoImmich.people
+  const max = photoImmich.data?.peopleMax ?? 20
+  if (!list) return `<p class="help" style="margin:0">${esc(tr('Wird geladen …'))}</p>`
+  if (list.error === 'permissions')
+    return `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Dem Schlüssel fehlt das Recht person.read. Ergänze es in Immich unter Kontoeinstellungen › API-Schlüssel › Bearbeiten.'))}</span></div>`
+  if (list.error) return `<div class="note danger">${icon('info', 18)}<span>${esc(tr('Die Personen lassen sich gerade nicht laden.'))}</span></div>`
+  if (!list.people.length) return `<p class="help" style="margin:0">${esc(tr('In Immich hat noch keine Person einen Namen.'))}</p>`
+  const single = new Set(photoImmich.groups.filter((g) => g.length === 1).map((g) => g[0]))
+  const together = photoImmich.groups.filter((g) => g.length > 1)
+  const q = photoImmich.q.trim().toLowerCase()
+  const shown = q ? list.people.filter((p) => p.name.toLowerCase().includes(q)) : list.people
+  const groups = together.length
+    ? `<div class="rows">${together
+        .map(
+          (g) => `<div class="entry ph-im-album"><span class="ph-faces">${g.map((id) => imFace(id, 32)).join('')}</span>
+          <span class="lbl"><b translate="no">${esc(g.map(imPersonName).join(' & '))}</b><small>${esc(tr('Fotos, auf denen alle zusammen sind'))}</small></span>
+          <button class="icon-btn" data-imungroup="${esc(imGroupKey(g))}" aria-label="${esc(tr('Entfernen'))}">${icon('close', 18)}</button></div>`,
+        )
+        .join('')}</div>`
+    : ''
+  return `<p class="help" style="margin:0">${esc(tr('Jede gewählte Person wird ein eigenes Album mit ihren Fotos. Am Display zeigt es ihr Gesicht.'))}</p>
+    <div class="card-head"><h3>${esc(tr('Gemeinsame Alben'))}</h3><button class="btn sm" id="im-group" ${photoImmich.groups.length >= max ? 'disabled' : ''}>${icon('plus', 16)}${esc(tr('Gemeinsames Album'))}</button></div>
+    ${groups || `<p class="help" style="margin:0">${esc(tr('Zwei oder drei Personen zusammen, z. B. Oma und Opa.'))}</p>`}
+    <div class="search">${icon('search')}<input class="input" id="im-q" type="search" placeholder="${esc(tr('Person suchen'))}" autocomplete="off" value="${esc(photoImmich.q)}"></div>
+    <div id="im-people">${
+      shown.length
+        ? `<div class="rows">${shown
+            .map(
+              (p) => `<div class="entry ph-im-album">${imFace(p.id)}
+        <span class="lbl"><b translate="no">${esc(p.name)}</b></span>
+        <button class="ph-check-box" role="checkbox" aria-checked="${single.has(p.id)}" data-imp="${esc(p.id)}" aria-label="${esc(p.name)}">${single.has(p.id) ? icon('check', 16) : ''}</button></div>`,
+            )
+            .join('')}</div>`
+        : `<p class="help" style="margin:0">${esc(tr('Keine Person gefunden.'))}</p>`
+    }</div>`
+}
+
+// the sheet for an album of people together: two or three ticked, then "Anlegen"
+function photoImmichGroupSheet(redraw) {
+  const pick = new Set()
+  const togetherMax = photoImmich.data?.togetherMax ?? 3
+  let q = ''
+  openSheet(`<h2>${esc(tr('Gemeinsames Album'))}</h2><p class="help">${esc(tr('Wähle zwei oder drei Personen. Das Album zeigt die Fotos, auf denen alle zusammen sind.'))}</p>
+    <div class="search">${icon('search')}<input class="input" id="img-q" type="search" placeholder="${esc(tr('Person suchen'))}" autocomplete="off"></div>
+    <div class="rows" id="img-list"></div><div class="btns"><button class="btn primary" id="img-ok" disabled>${esc(tr('Anlegen'))}</button></div>`, (sheet, close) => {
+    const draw = () => {
+      const shown = (photoImmich.people?.people ?? []).filter((p) => !q || p.name.toLowerCase().includes(q)).slice(0, 200)
+      $('#img-list', sheet).innerHTML = shown
+        .map(
+          (p) => `<div class="entry ph-im-album">${imFace(p.id)}<span class="lbl"><b translate="no">${esc(p.name)}</b></span>
+          <button class="ph-check-box" role="checkbox" aria-checked="${pick.has(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)}" ${!pick.has(p.id) && pick.size >= togetherMax ? 'disabled' : ''}>${pick.has(p.id) ? icon('check', 16) : ''}</button></div>`,
+        )
+        .join('')
+      $('#img-ok', sheet).disabled = pick.size < 2
+      for (const b of sheet.querySelectorAll('[data-pick]')) {
+        b.onclick = () => {
+          if (pick.has(b.dataset.pick)) pick.delete(b.dataset.pick)
+          else if (pick.size < togetherMax) pick.add(b.dataset.pick)
+          draw()
+        }
+      }
+    }
+    $('#img-q', sheet).addEventListener('input', (e) => {
+      q = e.target.value.trim().toLowerCase()
+      draw()
+    })
+    $('#img-ok', sheet).onclick = () => {
+      const g = [...pick]
+      if (!photoImmich.groups.some((x) => imGroupKey(x) === imGroupKey(g))) photoImmich.groups.push(g)
+      close()
+      redraw()
+    }
+    draw()
+  })
+}
 
 function photoImmichSteps() {
   const s = photoImmichImmichStep()
@@ -12769,20 +12869,26 @@ function photoImmichSteps() {
     const kept = photoImmichKeyKept()
     body = `<h2>API-Schlüssel anlegen</h2><p class="help">Damit die Box deine Alben lesen darf.</p>
       <ol class="ph-howto"><li>Immich im Browser öffnen und anmelden.</li><li>Kontoeinstellungen › API-Schlüssel › „Neuer API-Schlüssel“.</li>
-      <li>Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
+      <li>Name „MuPiBox“ eingeben. Fragt Immich nach Rechten, nur diese anhaken: album.read, asset.read und asset.view (gern auch user.read, dann zeigt der Test deinen Kontonamen).</li><li>Für Alben von Personen zusätzlich person.read anhaken.</li><li>Schlüssel kopieren und hier einfügen.</li></ol>
       <div class="field"><label for="im-key">API-Schlüssel</label><div class="input-wrap"><input class="input mono has-eye" id="im-key" type="password" value="${esc(photoImmich.key)}" placeholder="${esc(kept ? tr('Gespeichert – leer lassen, um ihn zu behalten') : '')}" ${NO_PW_MANAGER} spellcheck="false"><button type="button" class="eye" data-eye aria-label="Anzeigen">${icon('eye', 18)}</button></div>
       <small>Wird nur auf der Box gespeichert und hier nie wieder angezeigt.</small></div>`
     next = `<button class="btn primary" id="im-test" ${photoImmich.testing ? 'disabled' : ''}>${esc(tr(photoImmich.testing ? 'Wird getestet …' : 'Verbindung testen'))}</button>`
   } else if (s === 3) {
     if (t?.ok) {
       body = `<h2>Verbindung steht</h2><p class="help">Die Box kann deine Alben lesen.</p>
-        <dl class="kv">${t.account ? `<div><dt>Konto</dt><dd translate="no">${esc(t.account)}</dd></div>` : ''}<div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.assets))}</dd></div><div><dt>Version</dt><dd>${esc(t.version)}</dd></div></dl>`
+        <dl class="kv">${t.account ? `<div><dt>Konto</dt><dd translate="no">${esc(t.account)}</dd></div>` : ''}<div><dt>Alben</dt><dd>${esc(String(t.albums))}</dd></div><div><dt>Fotos und Videos</dt><dd>${esc(String(t.assets))}</dd></div><div><dt>Version</dt><dd>${esc(t.version)}</dd></div></dl>
+        ${t.people === false ? `<div class="note warn">${icon('info', 18)}<span>${esc(tr('Alben von Personen brauchen zusätzlich das Recht person.read. Die Alben gehen auch ohne.'))}</span></div>` : ''}`
       next = `<button class="btn primary" id="im-next3">Weiter</button>`
     } else {
       const [head, text] = IMMICH_ERRORS[t?.error] ?? IMMICH_ERRORS.unreachable
       body = `<h2>${esc(tr(head))}</h2><div class="note danger">${icon('info', 18)}<span>${esc(tr(text.replace('{}', photoImmich.data?.minVersion ?? '1.106')))}</span></div>`
       next = t?.error === 'unauthorized' || t?.error === 'permissions' ? `<button class="btn primary" data-imstep="2">Schlüssel ändern</button>` : `<button class="btn primary" data-imstep="1">Adresse ändern</button>`
     }
+  } else if (photoImmich.tab === 'people') {
+    const n = photoImmich.groups.length
+    body = `<div class="ph-im-pick">${photoImmichTabs()}${photoImmichPeopleTab()}
+      <p class="help" style="margin:0">${esc(tr(`${n} ${n === 1 ? 'Personen-Album' : 'Personen-Alben'} gewählt`))}</p></div>`
+    next = `<button class="btn primary" id="im-done">Fertig</button>`
   } else {
     const list = photoImmich.albums
     const rows = !list
@@ -12798,8 +12904,12 @@ function photoImmichSteps() {
               )
               .join('')}</div>`
           : `<p class="help" style="margin:0">In Immich gibt es noch keine Alben.</p>`
-    body = `<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
-      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p>`
+    // (the favourites: an album of their own, above the albums)
+    const fav = `<div class="rows"><div class="entry ph-im-album"><span class="ph-thumb">${icon('heart', 20)}</span>
+      <span class="lbl"><b>${esc(tr('Favoriten'))}</b><small>${esc(tr('Alle Fotos mit Herz in Immich'))}</small></span>
+      <button class="ph-check-box" role="checkbox" aria-checked="${photoImmich.fav}" id="im-fav" aria-label="${esc(tr('Favoriten'))}">${photoImmich.fav ? icon('check', 16) : ''}</button></div></div>`
+    body = `<div class="ph-im-pick">${photoImmichTabs()}${fav}<div class="card-head"><h2>${esc(tr(list?.albums ? `${list.albums.length} Alben in Immich` : 'Alben in Immich'))}</h2>${list?.albums?.length ? '<button class="btn sm" id="im-all">Alle wählen</button>' : ''}</div>
+      ${rows}<p class="help" style="margin:0">${esc(tr(`${photoImmich.chosen.size} ${photoImmich.chosen.size === 1 ? 'Album' : 'Alben'} gewählt`))}</p></div>`
     next = `<button class="btn primary" id="im-done">Fertig</button>`
   }
   // (the first step's way back: out of the assistant - to the service's page when connected, else to the photos)
@@ -12831,15 +12941,24 @@ function photoImmichTop() {
   return [
     `<section class="card wide"><h2>${esc(st.account ? tr(`Verbunden – Konto „${st.account}“`) : tr('Verbunden'))}</h2>
       <div class="ph-nas-state ${status[1]}">${status[0]}</div>
-      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div></dl>
+      <dl class="kv"><div><dt>Alben</dt><dd>${esc(tr(`${st.albumIds.length} · ${d.pictures} ${d.pictures === 1 ? 'Foto' : 'Fotos'}`))}</dd></div>${
+        st.people?.length ? `<div><dt>Personen</dt><dd>${esc(tr(`${st.people.length} ${st.people.length === 1 ? 'Album' : 'Alben'}`))}</dd></div>` : ''
+      }${st.favorites ? `<div><dt>Favoriten</dt><dd>${esc(tr('Eingeschaltet'))}</dd></div>` : ''}</dl>
       ${s.unauthorized ? `<div class="note danger">${icon('info', 18)}<span>Immich nimmt den Schlüssel nicht mehr an. Die Box zeigt weiter die gespeicherten Fotos. Lege in Immich einen neuen Schlüssel an und ersetze ihn unten.</span></div>` : ''}
       ${s.offlineSince ? `<div class="note danger">${icon('info', 18)}<span>Die Box zeigt weiter die gespeicherten Fotos. Prüfe, ob Immich läuft und die Adresse stimmt.</span></div>` : ''}
       ${s.missing ? `<div class="note warn">${icon('info', 18)}<span>${esc(s.missing === 1 ? tr('Ein gewähltes Album gibt es in Immich nicht mehr.') : tr(`${s.missing} gewählte Alben gibt es in Immich nicht mehr.`))}</span></div>` : ''}
       ${s.cacheFull && st.keepCopy ? `<div class="note warn">${icon('info', 18)}<span>Der Zwischenspeicher ist voll. Nicht alle Fotos sind auf der Box – erhöhe die Grenze oder wähle weniger Alben.</span></div>` : ''}
-      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('immich', s.running)}<button class="btn" id="im-albums">Alben ändern</button></div></section>`,
+      <div class="btns"><button class="btn primary" id="im-sync" ${s.running ? 'disabled' : ''}>${icon('sync', 18)}Jetzt abgleichen</button>${syncCancelButton('immich', s.running)}<button class="btn" id="im-albums">Alben und Personen</button></div></section>`,
     `<section class="card wide"><h2>Fotos</h2>
       <div class="row"><span class="lbl"><b>Fotos auf der Box speichern</b><small>An: Die Box speichert die Fotos in Anzeigegröße und zeigt sie auch ohne Netz. Aus: Die Fotos kommen beim Anzeigen live von Immich – ohne Netz sind diese Alben gerade nicht da.</small></span>
-        <label class="switch"><input type="checkbox" id="im-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div></section>`,
+        <label class="switch"><input type="checkbox" id="im-keep" ${st.keepCopy ? 'checked' : ''} aria-label="${esc(tr('Fotos auf der Box speichern'))}"><span></span></label></div>
+      ${
+        // the pictures at most of an album of people and of the favourites (immich.ts SEARCH_LIMITS)
+        st.people?.length || st.favorites
+          ? `<div class="field"><label>${esc(tr('Bilder je Personen-Album'))}</label><button class="select-btn" id="im-limit"><span>${esc(imLimitLabel(d.searchLimit, d.picturesMax))}</span>${icon('chevron', 18)}</button>
+      <small>${esc(tr('Gilt auch für die Favoriten. Gibt es mehr, wählt die Box gleichmäßig aus allen Jahren aus – bei jedem Abgleich dieselben.'))}</small></div>`
+          : ''
+      }</section>`,
     `<section class="card"><h2>Abgleich</h2>
       <div class="field"><label>Intervall</label><button class="select-btn" id="im-every"><span>${esc(tr(NAS_SYNC.find(([, m]) => m === st.syncMinutes)?.[0] ?? 'Alle 6 Stunden'))}</span>${icon('chevron', 18)}</button>
       <small>Neue Fotos aus Immich erscheinen spätestens nach dieser Zeit am Display.</small></div></section>`,
@@ -12863,6 +12982,27 @@ async function photoImmichLoadAlbums() {
   photoImmich.albums = null
   const r = await api(`${API}/photos/immich/albums`)
   photoImmich.albums = r.ok ? r.body : { error: true }
+}
+
+async function photoImmichLoadPeople() {
+  photoImmich.people = null
+  const r = await api(`${API}/photos/immich/people`)
+  photoImmich.people = r.ok ? r.body : { error: r.status === 403 ? 'permissions' : 'error' }
+}
+
+// the last step from the start: albums, people and favourites as saved, the albums' tab
+async function photoImmichOpenChoice(redraw) {
+  const st = photoImmich.data.settings
+  photoImmich.chosen = new Set(st.albumIds)
+  photoImmich.groups = (st.people ?? []).map((g) => [...g])
+  photoImmich.fav = st.favorites === true
+  photoImmich.tab = 'albums'
+  photoImmich.q = ''
+  photoImmich.people = null
+  photoImmich.step = 4
+  redraw()
+  await photoImmichLoadAlbums()
+  redraw()
 }
 
 function mountPhotoImmich(root, page) {
@@ -12921,11 +13061,59 @@ function mountPhotoImmich(root, page) {
     if (photoImmich.key) body.apiKey = photoImmich.key
     if (!(await save(body))) return
     photoImmich.key = ''
-    photoImmich.chosen = new Set(photoImmich.data.settings.albumIds)
-    photoImmich.step = 4
+    await photoImmichOpenChoice(redraw)
+  })
+  // Schritt 4: albums or people
+  for (const b of root.querySelectorAll('#im-tab [data-v]')) {
+    b.onclick = async () => {
+      if (photoImmich.tab === b.dataset.v) return
+      photoImmich.tab = b.dataset.v
+      redraw()
+      if (photoImmich.tab === 'people' && !photoImmich.people) {
+        await photoImmichLoadPeople()
+        redraw()
+      }
+    }
+  }
+  $('#im-fav', root)?.addEventListener('click', () => {
+    photoImmich.fav = !photoImmich.fav
     redraw()
-    await photoImmichLoadAlbums()
-    redraw()
+  })
+  const peopleMax = d.peopleMax ?? 20
+  const bindPeople = () => {
+    for (const b of root.querySelectorAll('[data-imp]')) {
+      b.onclick = () => {
+        const id = b.dataset.imp
+        const at = photoImmich.groups.findIndex((g) => g.length === 1 && g[0] === id)
+        if (at >= 0) photoImmich.groups.splice(at, 1)
+        else if (photoImmich.groups.length >= peopleMax) return toast(tr(`Höchstens ${peopleMax} Alben von Personen`), 'info')
+        else photoImmich.groups.push([id])
+        const q = $('#im-q', root)
+        const keep = q && document.activeElement === q
+        redraw()
+        if (keep) $('#im-q', root)?.focus()
+      }
+    }
+  }
+  bindPeople()
+  // (the search: only the list drawn anew - the field keeps the focus)
+  $('#im-q', root)?.addEventListener('input', (e) => {
+    photoImmich.q = e.target.value
+    const fresh = document.createElement('div')
+    fresh.innerHTML = photoImmichPeopleTab()
+    const list = $('#im-people', fresh)
+    if (list) $('#im-people', root).replaceWith(list)
+    bindPeople()
+  })
+  for (const b of root.querySelectorAll('[data-imungroup]')) {
+    b.onclick = () => {
+      photoImmich.groups = photoImmich.groups.filter((g) => imGroupKey(g) !== b.dataset.imungroup)
+      redraw()
+    }
+  }
+  $('#im-group', root)?.addEventListener('click', () => {
+    if (photoImmich.groups.length >= peopleMax) return toast(tr(`Höchstens ${peopleMax} Alben von Personen`), 'info')
+    photoImmichGroupSheet(redraw)
   })
   for (const b of root.querySelectorAll('[data-im]')) {
     b.onclick = () => {
@@ -12940,7 +13128,8 @@ function mountPhotoImmich(root, page) {
     redraw()
   })
   $('#im-done', root)?.addEventListener('click', async () => {
-    if (!(await save({ albumIds: [...photoImmich.chosen] }, photoImmich.chosen.size ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
+    const any = photoImmich.chosen.size || photoImmich.groups.length || photoImmich.fav
+    if (!(await save({ albumIds: [...photoImmich.chosen], people: photoImmich.groups, favorites: photoImmich.fav }, any ? 'Gespeichert – Abgleich gestartet' : 'Gespeichert'))) return
     photoImmich.step = 0
     redraw()
   })
@@ -12960,12 +13149,8 @@ function mountPhotoImmich(root, page) {
     redraw()
   })
   $('#im-albums', root)?.addEventListener('click', async () => {
-    photoImmich.chosen = new Set(d.settings.albumIds)
     photoImmich.test = null
-    photoImmich.step = 4
-    redraw()
-    await photoImmichLoadAlbums()
-    redraw()
+    await photoImmichOpenChoice(redraw)
   })
   $('#im-keep', root)?.addEventListener('change', async (e) => {
     const on = e.target.checked
@@ -12988,6 +13173,14 @@ function mountPhotoImmich(root, page) {
     )
   $('#im-every', root)?.addEventListener('click', () => choose('Intervall', NAS_SYNC, d.settings.syncMinutes, 'syncMinutes'))
   $('#im-cache', root)?.addEventListener('click', () => choose('Höchstens belegen', NAS_CACHE, d.settings.cacheLimitMb, 'cacheLimitMb'))
+  $('#im-limit', root)?.addEventListener('click', () =>
+    choose(
+      'Bilder je Personen-Album',
+      (d.searchLimits ?? [500, 1000, 2000, 5000, 0]).map((n) => [imLimitText(n, d.picturesMax), n]),
+      d.searchLimit,
+      'searchLimit',
+    ),
+  )
   $('#im-url-change', root)?.addEventListener('click', () => {
     photoImmich.url = d.settings.url
     photoImmich.test = null

@@ -116,6 +116,148 @@ test('photo Immich: address and settings checked, the key kept as given to encry
   assert.equal(immichSettings(cfg).apiKey, 'enc:zyxwvutsrqponmlk')
 })
 
+test('photo Immich: albums of people and the favourites - checked, kept, as the sync asks for them', async () => {
+  const { applyImmichSettings, FAVORITES_REF, immichRefs, immichSettings, peopleOfRef, peopleRef, searchLimitOf, spreadChoice } = await import('./app-api/photos/immich')
+  // (a choice spread: the same one whatever the order of the list, and a new picture moves at most one out)
+  const list = Array.from({ length: 50 }, (_, i) => ({ id: `id-${i}` }))
+  const ten = spreadChoice(list, 10).map((x) => x.id)
+  assert.equal(ten.length, 10)
+  assert.deepEqual(spreadChoice([...list].reverse(), 10).map((x) => x.id).sort(), [...ten].sort())
+  const withNew = spreadChoice([{ id: 'id-new' }, ...list], 10).map((x) => x.id)
+  assert.ok(ten.filter((x) => !withNew.includes(x)).length <= 1)
+  assert.equal(spreadChoice(list, 0).length, 50)
+  const A = '0f2b8c1e-1234-4abc-9def-0123456789ab'
+  const P1 = '11111111-2222-4333-8444-555555555555'
+  const P2 = '22222222-3333-4444-8555-666666666666'
+  const cfg: Record<string, unknown> = {}
+  assert.equal(applyImmichSettings(cfg, { albumIds: [A], people: [[P1], [P1, P2], [P2, P1]], favorites: true }), null)
+  const s = immichSettings(cfg)
+  // (the same people in another order: one album)
+  assert.deepEqual(s.people, [[P1], [P1, P2]])
+  assert.equal(s.favorites, true)
+  assert.deepEqual(immichRefs(s), [A, `people-${P1}`, `people-${P1}_${P2}`, FAVORITES_REF])
+  assert.deepEqual(peopleOfRef(peopleRef([P1, P2])), [P1, P2])
+  assert.equal(peopleOfRef(A), null)
+  assert.equal(peopleOfRef(`people-${P1}_x`), null)
+  // (an album id at the most 128 characters - the live pictures' check; three people fit)
+  assert.ok(peopleRef([P1, P2, A]).length <= 128)
+  const before = JSON.stringify(cfg)
+  assert.equal(applyImmichSettings(cfg, { people: [[P1, P2, A, P1.replace('1', '3')]] }), 'people')
+  assert.equal(applyImmichSettings(cfg, { people: [[]] }), 'people')
+  assert.equal(applyImmichSettings(cfg, { people: [['nope']] }), 'people')
+  assert.equal(applyImmichSettings(cfg, { people: Array.from({ length: 21 }, () => [P1]) }), 'people')
+  assert.equal(applyImmichSettings(cfg, { favorites: 'yes' }), 'favorites')
+  assert.equal(applyImmichSettings(cfg, { searchLimit: 1234 }), 'searchLimit')
+  assert.equal(JSON.stringify(cfg), before)
+  // the pictures at most: not set - 1000 kept on the box, all live; set - as set
+  assert.equal(searchLimitOf(immichSettings(cfg)), 1000)
+  assert.equal(applyImmichSettings(cfg, { keepCopy: false }), null)
+  assert.equal(searchLimitOf(immichSettings(cfg)), 0)
+  assert.equal(applyImmichSettings(cfg, { searchLimit: 2000 }), null)
+  assert.equal(searchLimitOf(immichSettings(cfg)), 2000)
+  // (a config without them: none)
+  assert.deepEqual(immichRefs(immichSettings({ photos: { sources: { immich: { albumIds: [A] } } } })), [A])
+})
+
+test('photo Immich: a person, two together and the favourites read from a server like Immich - newest first, nothing hidden, faces', async () => {
+  const { ImmichClient, peopleRef } = await import('./app-api/photos/immich')
+  const http = await import('node:http')
+  const P1 = '11111111-2222-4333-8444-555555555555'
+  const P2 = '22222222-3333-4444-8555-666666666666'
+  const GONE = '33333333-4444-4555-8666-777777777777'
+  const id = (n: number) => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, '0')}`
+  const asked: Array<Record<string, unknown>> = []
+  let knowsOrder = true
+  const server = http.createServer((req, res) => {
+    const json = (code: number, body: unknown) => {
+      res.writeHead(code, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(body))
+    }
+    const url = req.url ?? ''
+    if (url === `/api/people/${P1}`) return json(200, { id: P1, name: 'Oma' })
+    if (url === `/api/people/${P2}`) return json(200, { id: P2, name: 'Mia' })
+    if (url.startsWith('/api/people/') && url.endsWith('/thumbnail')) {
+      res.writeHead(200, { 'Content-Type': 'image/jpeg' })
+      return res.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))
+    }
+    if (url.startsWith('/api/people?')) {
+      const page = Number(new URL(url, 'http://x').searchParams.get('page'))
+      if (page === 1) return json(200, { people: [{ id: P2, name: 'Mia' }, { id: GONE, name: '' }, { id: P1, name: 'Oma' }], hasNextPage: true })
+      return json(200, { people: [{ id: GONE.replace('3', '4'), name: 'Versteckt', isHidden: true }], hasNextPage: false })
+    }
+    if (url.startsWith('/api/people/')) return json(404, { message: 'Person not found' })
+    if (url === '/api/search/metadata' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => (raw += c))
+      req.on('end', () => {
+        const body = JSON.parse(raw) as Record<string, unknown>
+        asked.push(body)
+        if ('order' in body && !knowsOrder) return json(400, { message: 'property order should not exist' })
+        const page = Number(body.page)
+        // two pages of 1000: the first with a live photo's movie, a locked one and one in the trash
+        const items = Array.from({ length: 1000 }, (_, i) => ({ id: id((page - 1) * 1000 + i), type: 'IMAGE', visibility: 'timeline', checksum: `c${i}` }))
+        if (page === 1) {
+          items[0] = { id: id(0), type: 'VIDEO', visibility: 'hidden', checksum: 'm' }
+          items[1] = { id: id(1), type: 'IMAGE', visibility: 'locked', checksum: 'l' }
+          ;(items[2] as Record<string, unknown>).isTrashed = true
+        }
+        json(200, { assets: { items, nextPage: page < 3 ? String(page + 1) : null } })
+      })
+      return
+    }
+    json(404, {})
+  })
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+  try {
+    // (all: the 3000 found less the hidden, the locked and the one in the trash - every page asked for)
+    const all = await new ImmichClient(base, 'good-key-0123', 'en', 0).album(peopleRef([P1, P2]), AbortSignal.timeout(5000), true)
+    assert.equal(all.items.length, 2997)
+    assert.ok(!all.items.some((x) => [id(0), id(1), id(2)].includes(x.ref)))
+    assert.deepEqual(
+      asked.map((b) => [b.page, b.order, b.personIds]),
+      [
+        [1, 'desc', [P1, P2]],
+        [2, 'desc', [P1, P2]],
+        [3, 'desc', [P1, P2]],
+      ],
+    )
+    // 1000 at most: a choice from all the pages (the oldest too), newest first as Immich gave them, the same one again
+    const client = new ImmichClient(base, 'good-key-0123', 'en', 1000)
+    const two = await client.album(peopleRef([P1, P2]), AbortSignal.timeout(5000), true)
+    assert.equal(two.name, 'Oma & Mia')
+    assert.deepEqual(two.faces, [P1, P2])
+    assert.equal(two.items.length, 1000)
+    const pageOf = (ref: string) => Math.floor(Number(ref.slice(-12)) / 1000)
+    assert.deepEqual([...new Set(two.items.map((x) => pageOf(x.ref)))].sort(), [0, 1, 2])
+    const order = all.items.map((x) => x.ref)
+    assert.ok(two.items.every((x, i) => i === 0 || order.indexOf(x.ref) > order.indexOf(two.items[i - 1].ref)))
+    const again = await client.album(peopleRef([P1, P2]), AbortSignal.timeout(5000), true)
+    assert.deepEqual(
+      again.items.map((x) => x.ref),
+      two.items.map((x) => x.ref),
+    )
+    // the favourites, in the box's language; an Immich without "order": asked without it
+    asked.length = 0
+    knowsOrder = false
+    const fav = await client.album('favorites', AbortSignal.timeout(5000), false)
+    assert.equal(fav.name, 'Favourites')
+    assert.equal(fav.faces, undefined)
+    assert.equal(asked[0].isFavorite, true)
+    assert.equal('order' in asked[1], false)
+    // a person deleted in Immich: the album is no longer there (404 - counted as missing by the sync)
+    await assert.rejects(client.album(peopleRef([GONE]), AbortSignal.timeout(5000), false), (err: { status?: number }) => err.status === 404)
+    // the people to tick: with a name, not hidden, by name, all pages
+    assert.deepEqual(await client.people(), [
+      { id: P2, name: 'Mia' },
+      { id: P1, name: 'Oma' },
+    ])
+    assert.equal((await client.face(P1)).status, 200)
+  } finally {
+    server.close()
+  }
+})
+
 test('photo Immich: the test and an album against a server like Immich (old version, wrong key, assets searched)', async () => {
   const { ImmichClient, testImmich } = await import('./app-api/photos/immich')
   const http = await import('node:http')
@@ -151,7 +293,8 @@ test('photo Immich: the test and an album against a server like Immich (old vers
   const port = (server.address() as { port: number }).port
   try {
     const base = `http://127.0.0.1:${port}`
-    assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: true, version: '1.120.2', account: 'Familie', albums: 1, assets: 2 })
+    // (no /api/people here: the people are not readable - the albums work all the same)
+    assert.deepEqual(await testImmich(new ImmichClient(base, 'good-key-0123')), { ok: true, version: '1.120.2', account: 'Familie', albums: 1, assets: 2, people: false })
     assert.deepEqual(await testImmich(new ImmichClient(base, 'wrong-key-0123')), { ok: false, error: 'unauthorized' })
     // (a key with chosen rights: one missing is told apart from a wrong key)
     for (const key of ['no-albums-0123', 'no-view-01234', 'no-read-01234']) assert.deepEqual(await testImmich(new ImmichClient(base, key)), { ok: false, error: 'permissions' }, key)

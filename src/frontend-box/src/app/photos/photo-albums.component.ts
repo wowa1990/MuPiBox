@@ -95,7 +95,16 @@ export function albumsPerView(width: number): number {
               } @else {
                 <span class="pa-mid pa-empty"></span>
               }
-              <img class="pa-front" [src]="photos.fileUrl(a.id, a.pictures[0], 's')" alt="" draggable="false" />
+              @if (facesOf(a); as n) {
+                <!-- an album of people (Immich): their faces in front - one fills it, two or three side by side -->
+                <span class="pa-front pa-faces" [attr.data-n]="n">
+                  @for (i of faceSlots(n); track i) {
+                    <img class="pa-face" [src]="photos.faceUrl(a.id, i)" alt="" draggable="false" />
+                  }
+                </span>
+              } @else {
+                <img class="pa-front" [src]="photos.fileUrl(a.id, a.pictures[0], 's')" alt="" draggable="false" />
+              }
               <span class="pa-badge">{{ a.count }}</span>
               @if (a.away) {
                 <span class="pa-away-pill">{{ texts.text('photosAway') }}</span>
@@ -386,6 +395,38 @@ export function albumsPerView(width: number): number {
     .pa-front {
       box-shadow: 0 6px 0 var(--km-shadow, rgba(0, 0, 0, 0.25));
     }
+    /* the faces of an album of people: one fills the front, two or three as round faces on the theme's colour */
+    .pa-faces {
+      display: flex;
+      flex-wrap: wrap;
+      align-content: center;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      overflow: hidden;
+      background: var(--km-night-3, #4a4560);
+    }
+    .pa-face {
+      display: block;
+      object-fit: cover;
+      border-radius: 50%;
+      box-sizing: border-box;
+      border: 4px solid var(--km-ring, var(--km-cream, #fff6e5));
+    }
+    .pa-faces[data-n='1'] .pa-face {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+    .pa-faces[data-n='2'] .pa-face {
+      width: 108px;
+      height: 108px;
+    }
+    .pa-faces[data-n='3'] .pa-face {
+      width: 98px;
+      height: 98px;
+    }
     .pa-badge {
       position: absolute;
       right: -6px;
@@ -464,12 +505,48 @@ export class PhotoAlbumsComponent {
 
   protected readonly albums = this.photos.albums
 
+  // the faces of the albums of people: tried first - one the box has not (yet) kept, and the album shows its picture
+  // (tried again with the next list, every two minutes: the sync may have fetched it meanwhile)
+  private readonly faceless = signal<ReadonlySet<string>>(new Set())
+  private readonly tried = new Set<string>()
+  private readonly tryFaces = effect(() => {
+    for (const a of this.albums()) {
+      for (let i = 0; i < Math.min(a.faces ?? 0, 3); i++) {
+        const url = this.photos.faceUrl(a.id, i)
+        if (this.tried.has(url)) continue
+        this.tried.add(url)
+        const img = new Image()
+        img.onload = () => {
+          if (untracked(() => this.faceless().has(a.id)))
+            this.faceless.update((s) => {
+              const next = new Set(s)
+              next.delete(a.id)
+              return next
+            })
+        }
+        img.onerror = () => {
+          this.tried.delete(url)
+          this.faceless.update((s) => new Set(s).add(a.id))
+        }
+        img.src = url
+      }
+    }
+  })
+  /** how many faces the album's stack shows (0: its picture) */
+  protected facesOf(a: PhotoAlbumSummary): number {
+    return a.faces && !this.faceless().has(a.id) ? Math.min(a.faces, 3) : 0
+  }
+  protected faceSlots(n: number): number[] {
+    return Array.from({ length: n }, (_, i) => i)
+  }
+
   // the stage (MuPi-Conf, the children's themes): the albums on it as picture stacks (swiper.component: SwiperData.stack)
   protected readonly stage = inject(KmThemeService).stage
   protected readonly stageData = computed<SwiperData<PhotoAlbumSummary>[]>(() =>
     this.albums().map((a) => ({
       name: a.title,
-      imgSrc: of(this.photos.fileUrl(a.id, a.pictures[0], 's')),
+      // (an album of people: the first face in front)
+      imgSrc: of(this.facesOf(a) ? this.photos.faceUrl(a.id, 0) : this.photos.fileUrl(a.id, a.pictures[0], 's')),
       data: a,
       stack: {
         mid: a.pictures[1] ? this.photos.fileUrl(a.id, a.pictures[1], 's') : undefined,

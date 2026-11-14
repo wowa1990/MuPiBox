@@ -18,6 +18,8 @@ export const NAS_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'nas')
 export const IMMICH_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'immich')
 /** Immich shown live: the pictures shown last (a small cache with a limit) */
 export const IMMICH_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'immich-live')
+/** The faces of the people whose albums come from Immich ("<person id>.jpg"), for the display's stacks */
+export const IMMICH_FACE_DIR = path.join(CACHE_DIR, 'photos', 'immich-faces')
 /** The same for the albums of Synology Photos */
 export const SYNOLOGY_PHOTO_DIR = path.join(CACHE_DIR, 'photos', 'synology')
 export const SYNOLOGY_LIVE_DIR = path.join(CACHE_DIR, 'photos', 'synology-live')
@@ -71,6 +73,8 @@ export interface PhotoAlbum {
   ref?: string
   /** an Immich album shown live: its pictures are not kept on the box, they come from Immich when shown */
   live?: boolean
+  /** an album of people (Immich): their ids there, whose faces the display shows on the stack */
+  faces?: string[]
 }
 
 interface Library {
