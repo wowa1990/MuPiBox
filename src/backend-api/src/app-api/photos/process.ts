@@ -111,6 +111,35 @@ async function afterInstalling(signal?: AbortSignal): Promise<void> {
   }
 }
 
+// pillow-heif with a libheif of its own (photos_setup.sh puts it there below libheif 1.17): a HEIC to a JPEG for the
+// script above. libheif hands the picture already turned (the turn of a HEIC is in the file's own boxes), so the EXIF
+// turn is set to "as it is" - kept, the script would turn it once more; the rest of the EXIF (the date) stays.
+export const HEIF_FALLBACK_PYTHON = '/opt/mupibox/heif/bin/python3'
+const HEIF_SCRIPT = `
+import sys
+from PIL import Image
+from pillow_heif import register_heif_opener
+register_heif_opener()
+im = Image.open(sys.argv[1])
+exif = im.getexif()
+exif[0x0112] = 1
+im.convert('RGB').save(sys.argv[2], 'JPEG', quality=92, exif=exif.tobytes())
+`
+async function heifFallback(src: string, dest: string, signal?: AbortSignal): Promise<boolean> {
+  try {
+    await fsp.access(HEIF_FALLBACK_PYTHON)
+  } catch {
+    return false
+  }
+  try {
+    await execFileAsync('nice', ['-n', '10', HEIF_FALLBACK_PYTHON, '-c', HEIF_SCRIPT, src, dest], { timeout: 120_000, signal })
+    return true
+  } catch {
+    await fsp.rm(dest, { force: true }).catch(() => undefined)
+    return false
+  }
+}
+
 /**
  * The three sizes of `src` as `<out>.jpg`, `<out>.s.jpg`, `<out>.b.jpg` (written next to each other and renamed at the
  * end: never half of them). `ext`: the source's kind (HEIC goes through heif-convert). Throws NotAPicture for a file
@@ -126,7 +155,12 @@ export function processPhoto(src: string, out: string, ext: string, signal?: Abo
     try {
       if (ext === '.heic' || ext === '.heif') {
         converted = `${out}.heic.jpg`
-        await execFileAsync('nice', ['-n', '10', 'heif-convert', '-q', '92', src, converted], { timeout: 120_000, signal }).catch((err) => {
+        const target = converted
+        await execFileAsync('nice', ['-n', '10', 'heif-convert', '-q', '92', src, target], { timeout: 120_000, signal }).catch(async (err) => {
+          if (signal?.aborted) throw new PhotoAborted()
+          // (heif-convert could not read it - a newer iPhone photo under Debian 12's libheif -, or it is missing: pillow-heif
+          // where the box has it (photos_setup.sh))
+          if (await heifFallback(src, target, signal)) return
           if (signal?.aborted) throw new PhotoAborted()
           // (started through nice: a missing heif-convert is nice's exit code 127, not an ENOENT - the photo is fine,
           // the box is still setting HEIC up or that failed; the app says so instead of "Datei beschädigt")
