@@ -669,8 +669,11 @@ export class RemoteLive {
         await pipeline(source, res)
       } catch (err) {
         // (the display went away - its own abort, not the service; the service's stream failed - it is away for now)
-        if (!displayGone && (sourceFailed || remoteDown(err) || remoteRefusedKey(err))) this.failedAt = Date.now()
-        if (remoteRefusedKey(err)) this.sync.refused()
+        // (as a picture: away only when the service does not answer a short question either)
+        if (remoteRefusedKey(err)) {
+          this.failedAt = Date.now()
+          this.sync.refused()
+        } else if (!displayGone && (sourceFailed || remoteDown(err))) void this.confirmAway()
         if (!res.headersSent) res.status(404).end()
         else res.destroy()
       }
@@ -706,11 +709,35 @@ export class RemoteLive {
       await fsp.rename(`${file}.tmp`, file)
       void this.prune()
     } catch (err) {
-      // (the service away or the login refused - not a single picture it does not have)
-      if (remoteDown(err) || remoteRefusedKey(err)) this.failedAt = Date.now()
-      if (remoteRefusedKey(err)) this.sync.refused()
+      // (the login refused: as the sync; the service not answering for this one picture - a big one over a slow line, a
+      // service busy for a moment: away only when it does not answer a short question either - one slow picture made
+      // every live album "Gerade nicht da" for two minutes)
+      if (remoteRefusedKey(err)) {
+        this.failedAt = Date.now()
+        this.sync.refused()
+      } else if (remoteDown(err)) void this.confirmAway()
       if (!res.headersSent) res.status(404).end()
     }
+  }
+
+  // a picture did not come: the service asked shortly (at most every 10 s) - no answer, it is away
+  private confirming: Promise<void> | null = null
+  private confirmAway(): Promise<void> {
+    if (this.confirming) return this.confirming
+    this.confirming = (async () => {
+      const client = this.sync.client()
+      if (!client) return
+      try {
+        await client.check(AbortSignal.timeout(5000))
+        this.sync.reachable()
+      } catch (err) {
+        this.failedAt = Date.now()
+        if (remoteRefusedKey(err)) this.sync.refused()
+      }
+    })().finally(() => {
+      setTimeout(() => (this.confirming = null), 10_000).unref?.()
+    })
+    return this.confirming
   }
 
   // the live cache within its limit: the ones shown longest ago go (at most every 5 minutes)

@@ -25,6 +25,8 @@ const CLIP_IN_SLIDESHOW = 30
 // a picture zoomed in at most so far (its display size has 1280 px on the long side), and by a double tap
 const MAX_ZOOM = 4
 const DOUBLE_TAP_ZOOM = 2.5
+// a picture that did not come: asked again after these pauses, then a button to try again
+const RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000]
 type Speed = (typeof SPEEDS)[number]
 
 /**
@@ -63,12 +65,21 @@ type Speed = (typeof SPEEDS)[number]
               [class.pv-fill]="fill()"
               [class.pv-glide]="s.key === slideKey() && zoomGlide()"
               [style.transform]="s.key === slideKey() ? zoomCss() : null"
-              [src]="photos.fileUrl(albumId(), s.asset.id, 'f')"
+              [src]="photos.fileUrl(albumId(), s.asset.id, 'f') + (s.key === slideKey() && attempt() ? '?r=' + attempt() : '')"
               [attr.alt]="pictureLabel(s.index)"
               draggable="false"
+              (error)="pictureFailed(s.key)"
+              (load)="s.key === slideKey() && gaveUp.set(false)"
             />
           }
         </div>
+      }
+
+      @if (gaveUp()) {
+        <!-- the picture did not come after its tries (a photo service away, a slow line): a tap tries again -->
+        <button class="pv-btn pv-96 pv-retry" type="button" data-ui [attr.aria-label]="pictureLabel(index())" (click)="retryNow()">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" /><path d="M19 4.5V9h-4.5" /></svg>
+        </button>
       }
 
       @if (playing()) {
@@ -226,6 +237,17 @@ type Speed = (typeof SPEEDS)[number]
     }
     .pv-fg.pv-fill {
       object-fit: cover;
+    }
+    /* a picture that did not come: in the middle, above the buttons' layer */
+    .pv-retry {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 4;
+    }
+    .pv-retry:active {
+      transform: translate(-50%, -50%) scale(0.9);
     }
     /* zoomed in or out by a double tap: it glides there (two fingers: it follows them at once) */
     .pv-fg.pv-glide {
@@ -584,6 +606,7 @@ export class PhotoViewerComponent implements OnDestroy {
     window.clearTimeout(this.hideTimer)
     window.clearTimeout(this.dropTimer)
     window.clearTimeout(this.tapTimer)
+    window.clearTimeout(this.retryTimer)
   }
 
   protected readonly speedLabel = computed(() =>
@@ -656,6 +679,7 @@ export class PhotoViewerComponent implements OnDestroy {
   private show(i: number): void {
     // (another picture: a clip on it starts by itself again - unless the box is locked; it comes whole, not zoomed)
     this.resetZoom()
+    this.resetRetry()
     this.clipHold = false
     this.clipPaused.set(false)
     this.previous.set({ key: this.slideKey(), index: this.index() })
@@ -680,6 +704,43 @@ export class PhotoViewerComponent implements OnDestroy {
     window.clearTimeout(this.hideTimer)
     if (!this.playing()) return
     this.hideTimer = window.setTimeout(() => this.controls.set(false), 4000)
+  }
+
+  // ---------- a picture that does not come: tried again ----------
+  /** the picture shown asked for anew (its address changes, the browser asks the box again) */
+  protected readonly attempt = signal(0)
+  /** it did not come after its tries: the button in the middle */
+  protected readonly gaveUp = signal(false)
+  private tries = 0
+  private retryTimer = 0
+
+  // (a photo service away for a moment, a slow line, a picture still being made: again after 1, 2, 4, 8 and 15 s)
+  protected pictureFailed(key: number): void {
+    if (key !== this.slideKey()) return
+    window.clearTimeout(this.retryTimer)
+    if (this.tries >= RETRY_DELAYS.length) {
+      this.gaveUp.set(true)
+      return
+    }
+    const wait = RETRY_DELAYS[this.tries++]
+    this.retryTimer = window.setTimeout(() => {
+      if (key === this.slideKey()) this.attempt.update((n) => n + 1)
+    }, wait)
+  }
+
+  protected retryNow(): void {
+    window.clearTimeout(this.retryTimer)
+    this.gaveUp.set(false)
+    this.tries = RETRY_DELAYS.length - 1
+    this.attempt.update((n) => n + 1)
+    this.touched()
+  }
+
+  private resetRetry(): void {
+    window.clearTimeout(this.retryTimer)
+    this.tries = 0
+    this.attempt.set(0)
+    this.gaveUp.set(false)
   }
 
   // ---------- zoom: two fingers, a double tap; zoomed in, one finger moves the picture ----------
