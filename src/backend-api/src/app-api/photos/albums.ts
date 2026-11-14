@@ -49,6 +49,8 @@ const STORED_BYTES_PER_PHOTO = 450 * 1024
 const TITLE_MAX = 40
 // the screensaver's list at most (at 3 s a picture: over an hour)
 const SCREENSAVER_MAX = 1500
+// touched while photos are looked at on the display - read by idle_shutdown.sh
+const AWAKE_FILE = '/tmp/mupibox-photos-awake'
 
 const cleanTitle = (raw: unknown): string | null => {
   // eslint-disable-next-line no-control-regex
@@ -506,5 +508,19 @@ export function registerPhotoDisplayRoutes(app: Express, deps: PhotoAlbumDeps): 
   app.get('/api/photos/face/:album/:n', (req, res) => {
     if (!on()) return void res.status(404).end()
     void sendFace(req, res, true)
+  })
+  // photos looked at on the display (touched in the last minutes): the switching off when idle (idle_shutdown.sh)
+  // counts the next two minutes as not idle - only the display itself, not a phone's session
+  app.post('/api/photos/awake', (req, res) => {
+    const ip = req.socket.remoteAddress ?? ''
+    if (!on() || !/^(127\.0\.0\.1|::1|::ffff:127\.0\.0\.1)$/.test(ip)) return void res.status(404).end()
+    const now = new Date()
+    fsp
+      .utimes(AWAKE_FILE, now, now)
+      .catch(() => fsp.writeFile(AWAKE_FILE, ''))
+      .then(
+        () => res.json({ ok: true }),
+        () => res.status(500).end(),
+      )
   })
 }

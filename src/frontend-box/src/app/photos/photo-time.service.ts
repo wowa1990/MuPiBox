@@ -7,6 +7,8 @@ import { PhotoScreensaverService } from './photo-screensaver.service'
 
 // how often the display tells the player that the photo time counts (the player stops counting 12 s after the last)
 const BEAT_MS = 5_000
+// photos looked at keep the box on up to so long after the last touch
+const AWAKE_AFTER_TOUCH_MS = 5 * 60_000
 
 /**
  * The photo time ("Bildzeit", 5.1, handoff §7/§8) on the display: it counts while an album is open - its grid, a
@@ -91,6 +93,16 @@ export class PhotoTimeService {
       const pause = this.status()?.idlePauseSeconds ?? 0
       this.idle.set(pause > 0 && Date.now() - this.lastTouch >= pause * 1000)
     }, 1000)
+    // the box stays on while photos are looked at (the switching off when idle counts only what plays): every minute,
+    // while the photos are on the screen and touched within the last five minutes - a child that went away, a
+    // slideshow left running, and the box switches off as before
+    window.setInterval(() => {
+      if (!this.shown() || this.saver.monitorOff() || Date.now() - this.lastTouch > AWAKE_AFTER_TOUCH_MS) return
+      this.http
+        .post(`${environment.backend.apiUrl}/photos/awake`, {})
+        .pipe(catchError(() => of(null)))
+        .subscribe()
+    }, 60_000)
     // counting: the player is told at once and then every few seconds; when it stops (the album left, the display
     // off, the grid idle) at once too - its own 12 s after the last word are only for a display that went silent
     let was = false
