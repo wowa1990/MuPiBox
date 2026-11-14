@@ -1896,4 +1896,20 @@ if [ -f /tmp/mupibox-update-failed ]; then
 	exit 1
 fi
 
+# Run in a systemd unit of its own without a terminal (systemd-run, as in the instructions for testing a branch): the box
+# restarts as after an update from the app - nobody may be at a terminal to do it, and the display kept the maintenance
+# screen until then. Not from the app or the admin interface: they restart the box themselves, after their own last
+# steps - both put a stand-in for whiptail first in PATH (the app since 5.0.3; MUPIBOX_UPDATE_LOCK_FOR only since
+# 5.0.15). And not in a terminal (curl | sudo bash): there the restart is the user's.
+own_unit_restart() {
+	[ -n "${INVOCATION_ID:-}" ] && [ -z "${MUPIBOX_UPDATE_LOCK_FOR:-}" ] && [ ! -t 1 ] || return 1
+	case "$(command -v whiptail)" in /usr/bin/* | /bin/* | /usr/local/bin/* | "") return 0 ;; esac
+	return 1
+}
+if own_unit_restart; then
+	echo "Update finished - the box restarts."
+	sleep 5
+	systemctl reboot
+	exit 0
+fi
 echo "Update finished - please reboot system now!"
