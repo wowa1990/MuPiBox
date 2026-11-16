@@ -49,7 +49,12 @@ function mediaLabel(media) {
 /** A picture a tag shows in the list of the app: an address of the box (/api/...) or of the web (https://...); '' if it is none. */
 function sanitizeImage(value) {
   const text = typeof value === 'string' ? value.trim() : ''
-  return text.length <= 600 && /^(\/api\/[\w\-./%?=&~+!()*,:;@]*|\/cover\/[\w\-.%]+|https:\/\/[^\s"'<>\\]+|http:\/\/[^\s/"'<>\\]+\/cover\/[\w\-.%]+)$/.test(text) ? text : ''
+  if (text.length > 600) return ''
+  // (an own picture comes as http://<box>/cover/<name>; it is kept as /cover/<name>, so it loads whatever address the box is
+  // reached by - the host name of the box does not resolve everywhere)
+  const own = /^http:\/\/[^\s/"'<>\\]+(\/cover\/[\w\-.%]+)$/.exec(text)
+  if (own) return own[1]
+  return /^(\/api\/[\w\-./%?=&~+!()*,:;@]*|\/cover\/[\w\-.%]+|https:\/\/[^\s"'<>\\]+)$/.test(text) ? text : ''
 }
 
 /** The picture of a tag: the one it was given, else the cover the app showed for its medium when it was assigned (a podcast or a
@@ -85,6 +90,9 @@ function normalizeUid(value) {
   return /^[0-9A-F]{8,20}$/.test(uid) ? uid : null
 }
 
+// (the kind of a tag: a USB reader gives a number as typed, no bytes of a chip - the list shows it as it is)
+const techOf = (tech) => (tech === 'ISO15693' || tech === 'HID' ? tech : 'ISO14443A')
+
 const emptyData = () => ({ version: 1, flex: null, tags: {} })
 
 /** What was read from tags.json as data the code can rely on (a damaged or foreign file gives an empty store, never an error). */
@@ -97,7 +105,7 @@ function readData(raw) {
     const media = sanitizeMedia(tag.media)
     data.tags[uid] = {
       uid,
-      tech: tag.tech === 'ISO15693' ? 'ISO15693' : 'ISO14443A',
+      tech: techOf(tag.tech),
       media,
       title: media ? mediaLabel(media) : '',
       image: media ? sanitizeImage(tag.image) : '',
@@ -148,7 +156,7 @@ function tagLaidOn(data, armed, event, now) {
   if (!tag) {
     tag = data.tags[uid] = { uid, tech: 'ISO14443A', media: null, title: '', image: '', cover: '', firstSeen: now, lastSeen: now, assignedAt: 0, count: 0 }
   }
-  tag.tech = event.tech === 'ISO15693' ? 'ISO15693' : 'ISO14443A'
+  tag.tech = techOf(event.tech)
   tag.lastSeen = now
   tag.count += 1
   const waiting = armed && armed.media && now < armed.until ? armed : null
@@ -264,6 +272,19 @@ function giveToFlex(data, media, now, image = '', cover = '') {
   return true
 }
 
+/** A known tag gets another medium (the "change tag" of the page of tags): its title, cover and picture go with it, the tag stays what it
+ *  was otherwise (flex or not). False when the tag is not known. */
+function giveToTag(data, uid, media, now, cover = '') {
+  const tag = data.tags[uid]
+  if (!tag) return false
+  tag.media = media
+  tag.title = mediaLabel(media)
+  tag.image = ''
+  tag.cover = sanitizeImage(cover)
+  tag.assignedAt = now
+  return true
+}
+
 /** The tag is forgotten: its entry is gone, a flex tag is none any more. False when it was not known. */
 function forgetTag(data, uid) {
   if (!data.tags[uid]) return false
@@ -275,5 +296,5 @@ function forgetTag(data, uid) {
 const countAssigned = (data) => Object.values(data.tags).filter((tag) => tag.media).length
 
 module.exports = {
-  MAX_TAGS, ARM_SECONDS, TARGETS, TYPES, sanitizeMedia, mediaLabel, sanitizeImage, tagImage, mediumKey, pickEpisode, normalizeUid, emptyData, readData, tagLaidOn, giveToFlex, forgetTag, countAssigned,
+  MAX_TAGS, ARM_SECONDS, TARGETS, TYPES, sanitizeMedia, mediaLabel, sanitizeImage, tagImage, mediumKey, pickEpisode, normalizeUid, emptyData, readData, tagLaidOn, giveToFlex, giveToTag, forgetTag, countAssigned,
 }

@@ -1,18 +1,21 @@
-// NFC extension - the API part (runs in the server of the box): starts the driver of the reader (pn5180.py, Python: Node has no way to
-// speak SPI), keeps what it reports, gives a tag its medium and tells the app what it sees.
+// NFC extension - the API part (runs in the server of the box): starts the driver of each reader (pn5180.py and the others, Python: Node
+// has no way to speak SPI), keeps what they report, gives a tag its medium and tells the app what it sees. Up to three readers run side
+// by side, each with its own driver program; a tag counts the same whichever reader it is laid on.
 //
-//   settings (which reader, which pins)  ->  logic.js
-//   the driver program                   ->  runner.js, pn5180.py
+//   settings (which readers, which pins) ->  logic.js
+//   the driver programs                  ->  runner.js, pn5180.py, rc522.py, pn532.py, usbreader.py
 //   which tag plays what                 ->  tags.js (the idea of TeddyCloud), the file tags.json in the extension's data folder
 //   "NFC-Tag hinzufügen" in the library  ->  POST /arm (the medium of the open album, station or podcast), GET /armstate, POST /cancel
 //   the list of the tags                 ->  GET /tags, POST /tagimage, /tagremove (with the login of the parents)
-//   the status block of the reader       ->  GET /state
+//   the status block of the readers      ->  GET /state (all), GET /stateone, /statetwo, /statethree (one reader each)
+//   the card Anschlüsse (SPI, I2C, UART) ->  GET /spistate, /iicstate, /uartstate (state, device, button), POST /spion, /spioff, /iicon, ... /uartconsole
 //   starting a medium                    ->  GET /pending, which display.js asks for: the display starts it like a tap on a tile
 'use strict'
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { readConfig, driverScript, driverArgs, statusRows, tagNumberText } = require('./logic.js')
+const { execFile } = require('node:child_process')
+const { readConfigs, driverScript, driverArgs, isUsb, statusRows, statusRowsAll, tagNumberText, spiState, spiRows, i2cState, i2cRows, i2cKeysOn, uartState, uartRows, uartConsoles, portIsOn } = require('./logic.js')
 const { createRunner, headerChipNumber, detect } = require('./runner.js')
 const tags = require('./tags.js')
 
@@ -42,9 +45,8 @@ exports.activate = (host) => {
   const dir = host.dir ?? __dirname
   const dataDir = host.dataDir ?? dir
   const tagsFile = path.join(dataDir, 'tags.json')
-  let runner = null
-  let config = readConfig({})
-  let view = null
+  // The readers that are switched on, in the order of their slots: { config, view, runner, running, inField, lastError } (the first one is always there)
+  let readers = []
   const history = []
 
   // ---- the store of the tags -------------------------------------------------------------------------------------------------
@@ -83,7 +85,6 @@ exports.activate = (host) => {
   // (not from 1: the display keeps the number of the last start it made - after a restart of the server alone a start with
   // that number again was dropped)
   let seq = Date.now()
-  let inField = null // the tag that lies on the reader now (its entry)
   let paused = null // the tag whose medium was paused when it was taken off: { uid, at }
   let lastStart = { uid: '', at: 0 }
   // the start the display made for a tag: { uid, at, rss, generation } - the player's number of that playback, once known
@@ -94,8 +95,10 @@ exports.activate = (host) => {
 
   // What a tag is called in the list (fixed phrases: the app translates the ones it knows)
   const KINDS = { library: 'SD-Karte', nas: 'NAS', spotify: 'Spotify', radio: 'Radio', rss: 'Podcast', tidal: 'TIDAL' }
-  const fresh = () => ({ config, phase: config.reader === 'none' || config.problem ? 'off' : 'starting', firmware: null, product: null, errorCode: null, inField: false, last: null })
-  view = fresh()
+  const fresh = (config) => ({ config, phase: config.reader === 'none' || config.problem ? 'off' : 'starting', firmware: null, product: null, errorCode: null, inField: false, last: null })
+  // (running: the driver and its arguments that run now; lastError: the last error of the reader that was logged)
+  const makeReader = (config) => ({ config, view: fresh(config), runner: null, running: '', inField: null, lastError: { code: '', at: 0 } })
+  readers = [makeReader(readConfigs({})[0])]
 
   // ---- the player ------------------------------------------------------------------------------------------------------------
   const player = async (command) => {
@@ -133,14 +136,17 @@ exports.activate = (host) => {
 
   // (taking the tag off pauses or stops: a tag laid on only for a moment starts nothing - not for a USB reader, which never
   // says that a card went)
-  const removeMatters = (settings) => config.reader !== 'hid' && (settings.onRemove === 'pause' || settings.onRemove === 'stop')
+  const removeMatters = (settings, reader) => Boolean(reader) && !isUsb(reader.config.reader) && (settings.onRemove === 'pause' || settings.onRemove === 'stop')
+  // (a tag lies on one of the readers)
+  const inAnyField = (uid) => readers.some((reader) => reader.inField?.uid === uid)
 
   // A tag with a medium: what it started goes on (it plays on, or a pause is taken back - one made by taking it off only
   // within RESUME_WITHIN_MS), else the display starts the medium.
-  const start = async (tag, settings) => {
+  // `force`: the start asked for on the page of tags ("Album abspielen") - the medium starts anew, whatever plays and whatever just started
+  const start = async (tag, settings, reader = null, force = false) => {
     const now = Date.now()
     // (first: a tag slipped off and laid on again within the 2 s goes on - the lock below is for the same report twice)
-    if (handed && handed.uid === tag.uid) {
+    if (!force && handed && handed.uid === tag.uid) {
       // (laid on again before its start came: taking it off counts no more)
       handed.gone = null
       await noteGeneration()
@@ -174,14 +180,14 @@ exports.activate = (host) => {
         }
       }
     }
-    if (lastStart.uid === tag.uid && now - lastStart.at < SAME_TAG_MS) return
+    if (!force && lastStart.uid === tag.uid && now - lastStart.at < SAME_TAG_MS) return
     lastStart = { uid: tag.uid, at: now }
     paused = null
     resumeTried = null
     const media = await playable(tag.media)
     if (!media) return log.warn(`[nfc] tag ${tag.uid}: no episode found for ${tag.title}`)
     // (taken off while its episode was looked for: nothing starts)
-    if (removeMatters(settings) && inField?.uid !== tag.uid) return log.info(`[nfc] tag ${tag.uid}: taken off before its start`)
+    if (!force && removeMatters(settings, reader) && !inAnyField(tag.uid)) return log.info(`[nfc] tag ${tag.uid}: taken off before its start`)
     pending = { seq: ++seq, media, at: now, uid: tag.uid }
   }
 
@@ -201,7 +207,7 @@ exports.activate = (host) => {
       // without the tag)
       const gone = handed.gone
       handed.gone = null
-      if (gone && inField?.uid !== handed.uid) {
+      if (gone && !inAnyField(handed.uid)) {
         if (gone === 'pause') {
           if (await player('pause')) paused = { uid: handed.uid, at: Date.now() }
         } else if (gone === 'stop') await player('stop')
@@ -224,7 +230,7 @@ exports.activate = (host) => {
     return ownPlayback(await playerMeta())
   }
 
-  const onTag = async (event) => {
+  const onTag = async (reader, event) => {
     const settings = (await host.settings()) ?? {}
     const now = Date.now()
     if (armed && (armed.until <= now || now - armed.asked > ARM_UNASKED_MS)) armed = null
@@ -235,17 +241,17 @@ exports.activate = (host) => {
     if (!known || result.armedId || result.kind === 'assigned' || result.kind === 'flex' || now - savedAt >= SEEN_SAVE_MS) saveTags()
     const again = restarted && restarted.uid === result.tag.uid && now < restarted.until
     restarted = null
-    inField = result.tag
+    reader.inField = result.tag
     if (result.armedId) remember(result.armedId, { uid: result.tag.uid, title: result.tag.title, previous: result.previous ?? '', flex: result.kind === 'flex' })
     log.info(`[nfc] tag ${result.tag.uid}: ${result.kind}${result.tag.title ? ` (${result.tag.title})` : ''}`)
     // (the tag that lay there while the driver started again: its medium plays already)
     if (again && !result.armedId) return
-    if (result.kind !== 'unknown' && settings.playOnTag !== false) await start(result.tag, settings)
+    if (result.kind !== 'unknown' && settings.playOnTag !== false) await start(result.tag, settings, reader)
   }
 
-  const onGone = async () => {
-    const tag = inField
-    inField = null
+  const onGone = async (reader) => {
+    const tag = reader.inField
+    reader.inField = null
     if (!tag?.media) return
     const settings = (await host.settings()) ?? {}
     if (settings.onRemove !== 'pause' && settings.onRemove !== 'stop') return
@@ -257,7 +263,7 @@ exports.activate = (host) => {
     // (only when this tag's medium is what plays: another album started meanwhile on the display stays)
     if (!(await playsThisTag(tag))) {
       // (its start handed over but not there yet: done when it comes, see noteGeneration)
-      if (handed && handed.uid === tag.uid && handed.generation === null && Date.now() - handed.at <= handed.within && inField?.uid !== tag.uid) handed.gone = settings.onRemove
+      if (handed && handed.uid === tag.uid && handed.generation === null && Date.now() - handed.at <= handed.within && !inAnyField(tag.uid)) handed.gone = settings.onRemove
       return
     }
     resumeTried = null
@@ -268,97 +274,109 @@ exports.activate = (host) => {
     }
   }
 
-  let lastError = { code: '', at: 0 } // the last error of the reader that was logged
-  const onEvent = (event) => {
+  // What a reader reports (each reader of the list has its own view of the status and its own tag in the field)
+  const onEvent = (reader, event) => {
+    const { config, view } = reader
+    const where = readers.length > 1 ? ` [reader ${config.slot}]` : ''
     switch (event.event) {
       case 'starting':
         view.phase = 'starting'
         break
       case 'ready':
-        lastError = { code: '', at: 0 }
+        reader.lastError = { code: '', at: 0 }
         Object.assign(view, { phase: 'ready', firmware: event.firmware, product: event.product, errorCode: null })
-        log.info(`[nfc] reader ready (${[event.product, event.firmware].filter(Boolean).join(' ')})`)
+        log.info(`[nfc] reader ready${where} (${[event.product, event.firmware].filter(Boolean).join(' ')})`)
         break
       case 'tag':
         // (a USB reader says when a card comes near, never when it goes: no tag stays in its field)
-        view.inField = config.reader !== 'hid'
-        view.last = { tech: event.tech, uid: event.uid, at: Date.now() }
+        view.inField = !isUsb(config.reader)
+        view.last = { tech: event.tech, uid: event.uid, at: Date.now(), slot: config.slot }
         history.push(view.last)
         if (history.length > 20) history.shift()
-        log.info(`[nfc] tag ${event.uid} (${event.tech})`)
-        onTag(event).catch((error) => log.warn(`[nfc] tag: ${error?.message ?? error}`))
+        log.info(`[nfc] tag ${event.uid} (${event.tech})${where}`)
+        onTag(reader, event).catch((error) => log.warn(`[nfc] tag: ${error?.message ?? error}`))
         break
       case 'gone':
         view.inField = false
-        if (config.reader === 'hid') break
-        onGone().catch((error) => log.warn(`[nfc] gone: ${error?.message ?? error}`))
+        if (isUsb(config.reader)) break
+        onGone(reader).catch((error) => log.warn(`[nfc] gone: ${error?.message ?? error}`))
         break
       case 'error':
         view.phase = 'error'
         view.errorCode = event.code
-        if (event.code !== lastError.code || Date.now() - lastError.at >= ERROR_LOG_MS) {
-          lastError = { code: event.code, at: Date.now() }
-          log.warn(`[nfc] reader: ${event.code}: ${event.message}`)
+        if (event.code !== reader.lastError.code || Date.now() - reader.lastError.at >= ERROR_LOG_MS) {
+          reader.lastError = { code: event.code, at: Date.now() }
+          log.warn(`[nfc] reader${where}: ${event.code}: ${event.message}`)
         }
         break
       default:
     }
   }
 
-  // (one change after the other: the pins and the SPI device of the settings before are free before the new ones are taken)
+  // (one change after the other: the pins and the SPI devices of the settings before are free before the new ones are taken)
   let chain = Promise.resolve()
   let running = '' // the driver and its arguments that run now
   const apply = (settings) => {
     chain = chain
       .then(async () => {
-        const next = readConfig(settings)
-        const chip = next.reader === 'none' || next.problem ? 0 : headerChipNumber(await detect())
-        const wanted = next.reader === 'none' || next.problem ? '' : JSON.stringify([driverScript(next), ...driverArgs(next, chip)])
+        const configs = readConfigs(settings)
+        const chip = configs.some((config) => config.reader !== 'none' && !config.problem) ? headerChipNumber(await detect()) : 0
+        const wantedOf = (config) => (config.reader === 'none' || config.problem ? '' : JSON.stringify([driverScript(config), ...driverArgs(config, chip)]))
         // (only another setting of the app - on taking off, start on laying on: the driver goes on, the medium plays on)
-        if (runner && wanted !== '' && wanted === running && view.phase !== 'error') {
-          config = next
-          view.config = next
-          return
+        const kept = new Map()
+        for (const config of configs) {
+          const was = readers.find((reader) => reader.config.slot === config.slot)
+          const wanted = wantedOf(config)
+          if (was?.runner && wanted !== '' && wanted === was.running && was.view.phase !== 'error') kept.set(config.slot, { was, config })
         }
-        if (runner) {
-          await runner.stop()
-          // (the tag on the reader is reported again by the new driver: no new start of what plays - not for a USB reader,
-          // which says only when a card comes, never when it goes: its last card lies there no longer)
-          if (inField && config.reader !== 'hid') restarted = { uid: inField.uid, until: Date.now() + AGAIN_AFTER_RESTART_MS }
-        }
-        runner = null
-        running = ''
-        inField = null
-        config = next
-        view = fresh()
-        if (config.reader === 'none') return
-        if (config.problem) {
-          log.warn(`[nfc] not started: ${config.problem}`)
-          return
-        }
-        running = wanted
-        runner = createRunner({
-          command: 'python3',
-          args: [path.join(dir, driverScript(config)), ...driverArgs(config, chip)],
-          onEvent,
-          onEnd: (reason, isNew = true) => {
-            // (the driver says what is wrong before it ends; if it did not - it fell over - this is all there is to say)
-            if (view.phase !== 'error') Object.assign(view, { phase: 'error', errorCode: 'other' })
-            view.inField = false
-            if (inField && config.reader !== 'hid') restarted = { uid: inField.uid, until: Date.now() + AGAIN_AFTER_RESTART_MS }
-            inField = null
-            if (isNew) log.warn(`[nfc] reader program: ${reason}`)
-          },
-          log,
+        // (the pins and the SPI devices of the settings before are free before the new ones are taken)
+        await Promise.all(
+          readers
+            .filter((reader) => !kept.has(reader.config.slot) || kept.get(reader.config.slot).was !== reader)
+            .map(async (reader) => {
+              await reader.runner?.stop()
+              // (the tag on the reader is reported again by the new driver: no new start of what plays - not for a USB reader,
+              // which says only when a card comes, never when it goes: its last card lies there no longer)
+              if (reader.runner && reader.inField && !isUsb(reader.config.reader)) restarted = { uid: reader.inField.uid, until: Date.now() + AGAIN_AFTER_RESTART_MS }
+            }),
+        )
+        readers = configs.map((config) => {
+          const keep = kept.get(config.slot)
+          if (!keep) return makeReader(config)
+          keep.was.config = config
+          keep.was.view.config = config
+          return keep.was
         })
-        runner.start()
-        log.info(`[nfc] reader ${config.reader} started (${driverArgs(config, chip).join(' ')})`)
+        for (const reader of readers) {
+          if (reader.config.problem) log.warn(`[nfc] reader ${reader.config.slot} not started: ${reader.config.problem}`)
+        }
+        for (const reader of readers) {
+          const { config, view } = reader
+          if (reader.runner || config.reader === 'none' || config.problem) continue
+          reader.running = wantedOf(config)
+          reader.runner = createRunner({
+            command: 'python3',
+            args: [path.join(dir, driverScript(config)), ...driverArgs(config, chip)],
+            onEvent: (event) => onEvent(reader, event),
+            onEnd: (reason, isNew = true) => {
+              // (the driver says what is wrong before it ends; if it did not - it fell over - this is all there is to say)
+              if (view.phase !== 'error') Object.assign(view, { phase: 'error', errorCode: 'other' })
+              view.inField = false
+              if (reader.inField && !isUsb(config.reader)) restarted = { uid: reader.inField.uid, until: Date.now() + AGAIN_AFTER_RESTART_MS }
+              reader.inField = null
+              if (isNew) log.warn(`[nfc] reader program${readers.length > 1 ? ` of reader ${config.slot}` : ''}: ${reason}`)
+            },
+            log,
+          })
+          reader.runner.start()
+          log.info(`[nfc] reader ${config.reader} started (${driverArgs(config, chip).join(' ')})`)
+        }
       })
       .catch((error) => log.warn(`[nfc] not started: ${error?.message ?? error}`))
     return chain
   }
-  // (the server ends: the driver must not stay behind and hold the pins and the SPI device)
-  process.once('exit', () => runner?.kill())
+  // (the server ends: no driver may stay behind and hold the pins and the SPI devices)
+  process.once('exit', () => readers.forEach((reader) => reader.runner?.kill()))
   if (typeof host.onSettings === 'function') host.onSettings(apply)
   Promise.resolve(host.settings()).then(apply)
 
@@ -368,10 +386,229 @@ exports.activate = (host) => {
     'get',
     '/state',
     (_req, res) => {
-      res.json({ rows: statusRows(view), reader: { ...view, config: undefined, reader: config.reader }, process: runner ? runner.state() : null, history })
+      const [first] = readers
+      res.json({
+        rows: statusRowsAll(readers.map((reader) => reader.view)),
+        // (the first reader as before; `readers` has all of them)
+        reader: { ...first.view, config: undefined, reader: first.config.reader },
+        readers: readers.map((reader) => ({ ...reader.view, config: undefined, slot: reader.config.slot, reader: reader.config.reader })),
+        process: first.runner ? first.runner.state() : null,
+        history,
+      })
     },
     { session: true },
   )
+
+  // The USB readers that are plugged in (usbreader.py --list: the devices that type, in the order of their ports), asked at most every
+  // two seconds - the page asks while it is open. { event, label, maker, ids } for each.
+  let usbSeen = { at: 0, list: [] }
+  const listUsb = () =>
+    Date.now() - usbSeen.at < 2000
+      ? Promise.resolve(usbSeen.list)
+      : new Promise((resolve) => {
+          execFile('python3', [path.join(dir, 'usbreader.py'), '--list'], { timeout: 6000 }, (error, stdout) => {
+            let list = []
+            if (!error) {
+              try {
+                const parsed = JSON.parse(String(stdout).trim().split(String.fromCharCode(10)).pop())
+                if (Array.isArray(parsed)) list = parsed.filter((d) => d && typeof d.label === 'string').slice(0, 8)
+              } catch {
+                /* not a list: none found */
+              }
+            }
+            usbSeen = { at: Date.now(), list }
+            resolve(list)
+          })
+        })
+
+  // SPI, I2C and the serial port: the cards above the readers say whether the port is on and let the user switch it on. It is a line of
+  // the boot configuration (as the core does it for the rotation of the display: DietPi's G_CONFIG_INJECT); the device is there after the
+  // next restart.
+  const bootConfigFile = () => ['/boot/firmware/config.txt', '/boot/config.txt'].find((file) => fs.existsSync(file))
+  const readText = (file) => {
+    try {
+      return file ? fs.readFileSync(file, 'utf8') : ''
+    } catch {
+      return '' // nothing to read: the port counts as off
+    }
+  }
+  const deviceNames = () => {
+    try {
+      return fs.readdirSync('/dev')
+    } catch {
+      return [] // no devices to list
+    }
+  }
+  const spiNow = () => spiState(readText(bootConfigFile()), deviceNames())
+  const i2cNow = () => i2cState(readText(bootConfigFile()), readText('/etc/modules'), deviceNames(), fs.existsSync('/sys/module/i2c_dev'))
+  const cmdlineText = () => readText(['/boot/firmware/cmdline.txt', '/boot/cmdline.txt'].find((file) => fs.existsSync(file)))
+  // the port /dev/serial0 stands for (ttyAMA0, ttyS0), '' while there is none
+  const uartTarget = () => {
+    try {
+      return path.basename(fs.realpathSync('/dev/serial0'))
+    } catch {
+      return ''
+    }
+  }
+  const loginRuns = (target) =>
+    new Promise((resolve) => {
+      if (!/^(?:ttyS|ttyAMA)\d+$/.test(target)) return resolve(false)
+      execFile('systemctl', ['is-active', '--quiet', `serial-getty@${target}`], { timeout: 5000 }, (error) => resolve(!error))
+    })
+  const uartNow = async () => {
+    const target = uartTarget()
+    return uartState(readText(bootConfigFile()), cmdlineText(), deviceNames(), target, await loginRuns(target))
+  }
+  // One command as the user dietpi (G_SUDO inside: the same way the core turns the display)
+  const asDietpi = (commands, done) =>
+    execFile('sudo', ['-n', 'su', '-', 'dietpi', '-c', `. /boot/dietpi/func/dietpi-globals && ${commands.join(' && ')}`], { timeout: 60000 }, done)
+  const inject = (key, line, file) => `G_SUDO G_CONFIG_INJECT '${key}' '${line}' ${file}`
+
+  // The card "Anschlüsse" has a block for each port (the lines of /spistate, /iicstate, /uartstate), each with a button that switches the
+  // port on or off (POST /<name>on, /<name>off; the serial port has one more: /uartconsole, the console of the system off). The state
+  // says which button there is, see portRows() in logic.js. `now` reads what the box has, `done` says nothing is left to do, `commands`
+  // are the steps (the file of the boot configuration given), `worked` checks the result.
+  const ports = [
+    {
+      route: 'spi',
+      name: 'SPI',
+      now: async () => spiNow(),
+      rows: spiRows,
+      actions: {
+        on: {
+          done: (now) => portIsOn(now),
+          commands: (file) => [inject('dtparam=spi=', 'dtparam=spi=on', file)],
+          worked: (now) => now.configured,
+          already: 'SPI ist schon eingeschaltet.',
+          said: 'SPI ist eingeschaltet. Die Box muss neu starten.',
+          failed: 'SPI ließ sich nicht einschalten.',
+        },
+        off: {
+          done: (now) => !portIsOn(now),
+          commands: (file) => [inject('dtparam=spi=', 'dtparam=spi=off', file)],
+          worked: (now) => !portIsOn({ ...now, devices: [] }),
+          already: 'Schon ausgeschaltet.',
+          said: 'Ausgeschaltet. Die Box muss neu starten.',
+          failed: 'Ausschalten hat nicht geklappt.',
+        },
+      },
+    },
+    {
+      route: 'iic',
+      name: 'I2C',
+      now: async () => i2cNow(),
+      rows: i2cRows,
+      actions: {
+        on: {
+          done: (now) => portIsOn(now) && now.devices.length > 0,
+          commands: (file) => [inject('dtparam=i2c_arm=', 'dtparam=i2c_arm=on', file), inject('i2c-dev', 'i2c-dev', '/etc/modules')],
+          worked: (now) => now.configured,
+          already: 'I2C ist schon eingeschaltet.',
+          said: 'I2C ist eingeschaltet. Die Box muss neu starten.',
+          failed: 'I2C ließ sich nicht einschalten.',
+        },
+        off: {
+          done: (now) => !portIsOn(now),
+          // (every line that has the bus on is set to off: the bus is on while one of them is)
+          commands: (file) => [...new Set(['i2c_arm', ...i2cKeysOn(readText(file))])].map((key) => inject(`dtparam=${key}=`, `dtparam=${key}=off`, file)),
+          worked: (now) => !portIsOn({ ...now, devices: [] }),
+          already: 'Schon ausgeschaltet.',
+          said: 'Ausgeschaltet. Die Box muss neu starten.',
+          failed: 'Ausschalten hat nicht geklappt.',
+        },
+      },
+    },
+    {
+      route: 'uart',
+      name: 'Seriell',
+      now: uartNow,
+      rows: uartRows,
+      actions: {
+        // (on: the console of the system is switched off on the port too - DietPi: the login and the console in cmdline.txt)
+        on: {
+          done: (now) => now.configured && now.device && !now.console,
+          commands: (file) => [inject('enable_uart=', 'enable_uart=1', file), ...consoleOff()],
+          worked: (now) => now.configured && !now.console,
+          already: 'Die serielle Schnittstelle ist schon eingeschaltet.',
+          said: 'Die serielle Schnittstelle ist eingeschaltet. Die Box muss neu starten.',
+          failed: 'Die serielle Schnittstelle ließ sich nicht einschalten.',
+        },
+        off: {
+          done: (now) => !portIsOn(now),
+          commands: (file) => [inject('enable_uart=', 'enable_uart=0', file)],
+          worked: (now) => !now.configured,
+          already: 'Schon ausgeschaltet.',
+          said: 'Ausgeschaltet. Die Box muss neu starten.',
+          failed: 'Ausschalten hat nicht geklappt.',
+        },
+        // (the port stays on, the console goes)
+        console: {
+          done: (now) => !now.console,
+          commands: () => consoleOff(),
+          worked: (now) => !now.console,
+          already: 'Die Konsole ist schon abgeschaltet.',
+          said: 'Die Konsole ist abgeschaltet. Die Box muss neu starten.',
+          failed: 'Die Konsole ließ sich nicht abschalten.',
+        },
+      },
+    },
+  ]
+  // the steps that switch off the console of the system on the serial port of the header
+  function consoleOff() {
+    const target = uartTarget()
+    const names = new Set([target, ...uartConsoles(cmdlineText(), target)].filter((n) => /^(?:serial|ttyS|ttyAMA)\d+$/.test(n)))
+    return [...names].map((n) => `G_SUDO /boot/dietpi/func/dietpi-set_hardware serialconsole disable ${n}`)
+  }
+  for (const port of ports) {
+    host.route('get', `/${port.route}state`, async (_req, res) => res.json({ rows: port.rows(await port.now()) }), { session: true })
+    for (const [action, step] of Object.entries(port.actions)) {
+      host.route(
+        'post',
+        `/${port.route}${action}`,
+        async (_req, res) => {
+          if (step.done(await port.now())) return res.json({ ok: true, message: step.already })
+          const file = bootConfigFile()
+          if (!file) return res.status(500).json({ ok: false, error: 'no_config', message: step.failed })
+          asDietpi(step.commands(file), async (error) => {
+            if (error || !step.worked(await port.now())) {
+              log.warn(`[nfc] ${port.name} (${action}) did not work: ${error?.message ?? 'the result is not in the configuration'}`)
+              return res.status(500).json({ ok: false, error: 'failed', message: step.failed })
+            }
+            log.info?.(`[nfc] ${port.name} (${action}) done in the boot configuration (the box has to restart)`)
+            res.json({ ok: true, message: step.said })
+          })
+        },
+        { session: true },
+      )
+    }
+  }
+
+  // What the choice of the reader type offers (the page asks for it, `live`): "USB Reader 1" and "USB Reader 2" with the name of the
+  // device they stand for; the second one is greyed out while no second device is plugged in.
+  host.route(
+    'get',
+    '/usbstate',
+    async (_req, res) => {
+      const list = await listUsb()
+      const name = (n) => (list[n] ? `USB Reader ${n + 1} · ${String(list[n].label).slice(0, 60)}` : `USB Reader ${n + 1}`)
+      res.json({ options: { hid: { label: name(0) }, hid2: { label: name(1), disabled: list.length < 2 } }, devices: list })
+    },
+    { session: true },
+  )
+
+  // The status of one reader for its own card on the page (the routes have letters only: one, two, three). A reader that is not
+  // in use says it is off.
+  for (const [name, slot] of [['stateone', 1], ['statetwo', 2], ['statethree', 3]]) {
+    host.route(
+      'get',
+      `/${name}`,
+      (_req, res) => {
+        const reader = readers.find((r) => r.config.slot === slot)
+        res.json({ rows: reader ? statusRows(reader.view) : [{ label: 'Leser', value: 'Aus', tone: 'warn' }] })
+      },
+      { session: true },
+    )
+  }
 
   // "NFC-Tag" in the library, "add another tag": the medium of the open album, station or podcast goes to the next tag that is laid on
   // (a tag that had one is given the new one), or - with `flex` - to the flex tag at once. `image` is the picture the user chose,
@@ -383,7 +620,7 @@ exports.activate = (host) => {
       const body = req.body && typeof req.body === 'object' ? req.body : {}
       const media = tags.sanitizeMedia(body.media)
       if (!media) return res.status(400).json({ ok: false, error: 'not_startable', message: 'Dieses Medium lässt sich keinem Tag zuordnen' })
-      if (view.phase === 'off' || view.phase === 'error') return res.status(409).json({ ok: false, error: 'no_reader', message: 'Der NFC-Leser ist nicht bereit' })
+      if (readers.every((reader) => reader.view.phase === 'off' || reader.view.phase === 'error')) return res.status(409).json({ ok: false, error: 'no_reader', message: 'Der NFC-Leser ist nicht bereit' })
       const image = tags.sanitizeImage(body.image)
       const cover = tags.sanitizeImage(body.cover)
       const title = tags.mediaLabel(media)
@@ -430,14 +667,23 @@ exports.activate = (host) => {
   )
 
   // A row of the list of tags: { id, title, text, image, imageOwn, coverPost, actions }
-  const tagRow = (tag) => ({
+  const tagRow = (tag, page = false) => ({
     id: tag.uid,
     title: tag.title,
-    text: [KINDS[tag.media.type], tagNumberText(config, tag.uid), data.flex === tag.uid ? 'Flex-Tag' : ''].filter(Boolean),
+    text: [KINDS[tag.media.type], tagNumberText({ reader: tag.tech === 'HID' ? 'hid' : '' }, tag.uid), data.flex === tag.uid ? 'Flex-Tag' : ''].filter(Boolean),
     image: tags.tagImage(tag),
     imageOwn: Boolean(tags.sanitizeImage(tag.image)),
     coverPost: '/api/ext/nfc/tagimage',
-    actions: [{ label: 'Entfernen', post: '/api/ext/nfc/tagremove', confirm: 'Diesen Tag entfernen? Er spielt dann nichts mehr.' }],
+    // (the page shows the buttons as symbols; "Tag ändern" is the app's: it goes to the library to choose the new album)
+    actions: [
+      ...(page
+        ? [
+            { label: 'Album abspielen', icon: 'play', post: '/api/ext/nfc/tagplay', safe: true },
+            { label: 'Tag ändern', icon: 'swap', change: true },
+          ]
+        : []),
+      { label: 'Entfernen', icon: 'trash', post: '/api/ext/nfc/tagremove', confirm: 'Diesen Tag entfernen? Er spielt dann nichts mehr.' },
+    ],
   })
   const byRecent = (a, b) => b.assignedAt - a.assignedAt || b.lastSeen - a.lastSeen
 
@@ -446,7 +692,7 @@ exports.activate = (host) => {
     'get',
     '/tags',
     (_req, res) => {
-      res.json({ items: Object.values(data.tags).filter((tag) => tag.media).sort(byRecent).map(tagRow) })
+      res.json({ items: Object.values(data.tags).filter((tag) => tag.media).sort(byRecent).map((tag) => tagRow(tag, true)) })
     },
     { session: true },
   )
@@ -459,7 +705,7 @@ exports.activate = (host) => {
       const media = tags.sanitizeMedia(req.body?.media)
       if (!media) return res.json({ items: [] })
       const key = tags.mediumKey(media)
-      res.json({ items: Object.values(data.tags).filter((tag) => tag.media && tags.mediumKey(tag.media) === key).sort(byRecent).map(tagRow) })
+      res.json({ items: Object.values(data.tags).filter((tag) => tag.media && tags.mediumKey(tag.media) === key).sort(byRecent).map((tag) => tagRow(tag)) })
     },
     { session: true },
   )
@@ -495,6 +741,38 @@ exports.activate = (host) => {
     { session: true },
   )
 
+  // A tag gets another medium without being laid on ({ id, media, cover? }): "change tag" on the page of tags, after the user chose the new
+  // album in the library
+  host.route(
+    'post',
+    '/tagchange',
+    (req, res) => {
+      const body = req.body && typeof req.body === 'object' ? req.body : {}
+      const uid = tags.normalizeUid(body.id)
+      if (!uid || !data.tags[uid]?.media) return res.status(404).json({ ok: false, error: 'no_tag', message: 'Diesen Tag gibt es nicht mehr' })
+      const media = tags.sanitizeMedia(body.media)
+      if (!media) return res.status(400).json({ ok: false, error: 'not_startable', message: 'Dieses Medium lässt sich keinem Tag zuordnen' })
+      tags.giveToTag(data, uid, media, Date.now(), body.cover)
+      saveTags()
+      res.json({ ok: true, message: 'Tag geändert' })
+    },
+    { session: true },
+  )
+
+  // The medium of a tag starts as if the tag was laid on ({ id })
+  host.route(
+    'post',
+    '/tagplay',
+    async (req, res) => {
+      const uid = tags.normalizeUid(req.body?.id)
+      const tag = uid ? data.tags[uid] : null
+      if (!tag?.media) return res.status(404).json({ ok: false, error: 'no_tag', message: 'Diesen Tag gibt es nicht mehr' })
+      await start(tag, (await host.settings()) ?? {}, null, true)
+      res.json({ ok: true, message: 'Wird abgespielt' })
+    },
+    { session: true },
+  )
+
   // What the display asks for every second: the medium to start (once - it is gone when it was handed over, and a start older
   // than a few seconds is not wanted any more: the display was away)
   host.route('get', '/pending', async (_req, res) => {
@@ -513,8 +791,8 @@ exports.activate = (host) => {
     res.json(command ? { seq: command.seq, media: command.media } : {})
   })
 
-  // (the reports of the driver, handed in directly: for the tests)
-  return { feed: onEvent }
+  // (the reports of a driver, handed in directly: for the tests; `slot` is the reader that reports, the first by default)
+  return { feed: (event, slot = 1) => onEvent(readers.find((reader) => reader.config.slot === slot) ?? readers[0], event) }
 }
 
 exports._test = { RESUME_WITHIN_MS }

@@ -39,7 +39,7 @@ test('a medium is named as the user reads it', () => {
 test('a picture is an address of the box or of the web, nothing else; a tag shows its own, else the cover of its medium', () => {
   assert.strictEqual(tags.sanitizeImage('/api/library/file?path=a%20b'), '/api/library/file?path=a%20b')
   assert.strictEqual(tags.sanitizeImage('https://i.scdn.co/image/abc'), 'https://i.scdn.co/image/abc')
-  assert.strictEqual(tags.sanitizeImage('http://mupibox.local/cover/nfc-tag-ab12cd.jpg'), 'http://mupibox.local/cover/nfc-tag-ab12cd.jpg')
+  assert.strictEqual(tags.sanitizeImage('http://mupibox.local/cover/nfc-tag-ab12cd.jpg'), '/cover/nfc-tag-ab12cd.jpg') // kept without the host name of the box
   assert.strictEqual(tags.sanitizeImage('/cover/nfc-tag-ab12cd.jpg'), '/cover/nfc-tag-ab12cd.jpg')
   assert.strictEqual(tags.sanitizeImage("/api/library/file?path=a%2Fb%20(2)!"), "/api/library/file?path=a%2Fb%20(2)!")
   for (const bad of ['javascript:alert(1)', '/cover/../etc', "/api/x'y", 'http://evil.example/x.jpg', 'data:image/png;base64,AAAA', '//evil.example/x', '/etc/passwd', '/api/x"onerror="y', 7, null, '']) assert.strictEqual(tags.sanitizeImage(bad), '')
@@ -130,6 +130,14 @@ test('the flex tag: the next tag becomes it, and a new medium goes to it without
   assert.deepStrictEqual([r.kind, data.flex], ['flex', 'FFFFFFFF'])
   assert.strictEqual(tags.giveToFlex(data, tags.sanitizeMedia(radio), NOW + 5), true)
   assert.strictEqual(data.tags.FFFFFFFF.title, 'Kinderradio')
+})
+
+test('a known tag gets another medium (the flex mark stays), an unknown one does not', () => {
+  const data = tags.emptyData()
+  tags.tagLaidOn(data, { target: 'flex', media: tags.sanitizeMedia(book), image: 'https://i.scdn.co/own.jpg', until: NOW + 1000 }, { uid: 'FFFFFFFF' }, NOW)
+  assert.strictEqual(tags.giveToTag(data, 'FFFFFFFF', tags.sanitizeMedia(radio), NOW + 9, '/cover/x.jpg'), true)
+  assert.deepStrictEqual([data.flex, data.tags.FFFFFFFF.title, data.tags.FFFFFFFF.image, data.tags.FFFFFFFF.cover, data.tags.FFFFFFFF.assignedAt], ['FFFFFFFF', 'Kinderradio', '', '/cover/x.jpg', NOW + 9])
+  assert.strictEqual(tags.giveToTag(data, 'DEADBEEF', tags.sanitizeMedia(radio), NOW), false)
 })
 
 test('a tag that is forgotten is new again, a flex tag is none any more', () => {
@@ -229,7 +237,7 @@ test('the API part: arm with a medium, lay a new tag on, the display is told to 
     const list = (await call(routes['get /tags'])).body.items
     assert.strictEqual(list.length, 1)
     assert.deepStrictEqual([list[0].id, list[0].title, list[0].image, list[0].text], ['04A1B2C3', 'Pippi Langstrumpf – Astrid Lindgren', 'https://i.scdn.co/own.jpg', ['SD-Karte', '04:A1:B2:C3']])
-    assert.deepStrictEqual(list[0].actions.map((a) => a.post), ['/api/ext/nfc/tagremove'])
+    assert.deepStrictEqual(list[0].actions.map((a) => a.post ?? 'change'), ['/api/ext/nfc/tagplay', 'change', '/api/ext/nfc/tagremove'], 'the tile: play, change, remove')
     assert.strictEqual((await call(routes['post /tagimage'], { body: { id: '04A1B2C3', image: 'javascript:alert(1)' } })).status, 400)
     assert.strictEqual((await call(routes['post /tagimage'], { body: { id: '04A1B2C3', image: '' } })).body.ok, true)
     assert.strictEqual((await call(routes['get /tags'])).body.items[0].image, '/api/rssfeed/cover?url=x&w=400', 'the cover the app showed comes back')
@@ -238,6 +246,21 @@ test('the API part: arm with a medium, lay a new tag on, the display is told to 
     assert.deepStrictEqual((await call(routes['post /tagsfor'], { body: { media: radio } })).body.items, [])
     assert.deepStrictEqual((await call(routes['post /tagsfor'], { body: {} })).body.items, [])
     assert.strictEqual((await call(routes['post /tagimage'], { body: { id: 'DEADBEEF', image: '' } })).status, 404)
+    assert.deepStrictEqual((await call(routes['post /tagsfor'], { body: { media: book } })).body.items[0].actions.map((a) => a.post), ['/api/ext/nfc/tagremove'], 'the sheet of a medium has remove only')
+
+    // "Album abspielen": the display is told to start it at once (also right after it started)
+    assert.strictEqual((await call(routes['post /tagplay'], { body: { id: '04A1B2C3' } })).body.ok, true)
+    assert.strictEqual((await call(routes['get /pending'])).body.media.libraryPath, 'audiobook/Astrid Lindgren/Pippi Langstrumpf')
+    generation = 8 // (the display started it anew: this start is the tag's now)
+    await later(1100)
+    assert.strictEqual((await call(routes['post /tagplay'], { body: { id: 'DEADBEEF' } })).status, 404)
+    // "Tag ändern": another medium for the tag, its own picture goes and the cover of the new one comes
+    assert.strictEqual((await call(routes['post /tagchange'], { body: { id: 'DEADBEEF', media: radio } })).status, 404)
+    assert.strictEqual((await call(routes['post /tagchange'], { body: { id: '04A1B2C3', media: { ...book, libraryIsContainer: true } } })).status, 400)
+    assert.strictEqual((await call(routes['post /tagchange'], { body: { id: '04A1B2C3', media: radio, cover: '/cover/x.jpg' } })).body.ok, true)
+    const changed = (await call(routes['get /tags'])).body.items[0]
+    assert.deepStrictEqual([changed.title, changed.image, changed.imageOwn], ['Kinderradio', '/cover/x.jpg', false])
+    assert.deepStrictEqual((await call(routes['post /tagsfor'], { body: { media: book } })).body.items, [])
 
     // taken off: pause; laid on again at once (it slipped), while it is paused: goes on instead of starting again
     nfc.feed({ event: 'gone' })
@@ -249,12 +272,12 @@ test('the API part: arm with a medium, lay a new tag on, the display is told to 
     assert.deepStrictEqual((await call(routes['get /pending'])).body, {})
 
     // another album started on the display meanwhile: taking the tag off leaves it playing
-    generation = 8
+    generation = 9
     player.length = 0
     nfc.feed({ event: 'gone' })
     await later()
     assert.ok(!player.some((u) => u.startsWith('http://player.test/pause')), 'what the display started is not the tag of the reader')
-    generation = 7
+    generation = 8
 
     // laid on again while it plays (a USB reader: at every hold): it plays on, nothing starts anew
     playing = true
@@ -270,11 +293,11 @@ test('the API part: arm with a medium, lay a new tag on, the display is told to 
     nfc.feed({ event: 'gone' })
     await later()
     assert.ok(player.some((u) => u.startsWith('http://player.test/pause?src=nfc')))
-    generation = 9 // (stopped on the display)
+    generation = 10 // (stopped on the display)
     nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
     await later()
     assert.ok(!player.some((u) => u.startsWith('http://player.test/play')), 'what is not the tag’s is not resumed')
-    assert.strictEqual((await call(routes['get /pending'])).body.media?.libraryPath, 'audiobook/Astrid Lindgren/Pippi Langstrumpf', 'a new start, at the first laying on')
+    assert.strictEqual((await call(routes['get /pending'])).body.media?.type, 'radio', 'a new start (of the medium the tag was changed to), at the first laying on')
 
     // removed, it is new again and plays nothing
     assert.strictEqual((await call(routes['post /tagremove'], { body: { id: '04A1B2C3' } })).body.ok, true)
@@ -418,6 +441,29 @@ test('the API part: the display is told to play an episode of the podcast, not i
     nfc.feed({ event: 'tag', tech: 'ISO15693', uid: 'E0040350181B0F84' })
     await later(50)
     assert.deepStrictEqual((await call(routes['get /pending'])).body, {})
+  } finally {
+    global.fetch = realFetch
+  }
+})
+
+test('the API part: a tag from a USB reader is listed with its number as typed, and keeps its kind after a restart', async () => {
+  const realFetch = global.fetch
+  global.fetch = async () => ({ ok: true, json: async () => ({}) })
+  try {
+    const { host, routes, dataDir } = makeHost({ reader: 'none', onRemove: 'nothing', playOnTag: false })
+    const nfc = require('../api.js').activate(host)
+    await later(0)
+    feedReady(nfc)
+    const armed = (await call(routes['post /arm'], { body: { media: book } })).body
+    assert.strictEqual(armed.state, 'waiting')
+    nfc.feed({ event: 'tag', tech: 'HID', uid: '4006381333931' }, 2)
+    await later(0)
+    const row = (await call(routes['get /tags'])).body.items[0]
+    assert.ok(row.text.includes('4006381333931'), 'as typed, not in pairs')
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'tags.json'), 'utf8')).tags['4006381333931'].tech, 'HID')
+    // a chip UID is still written in pairs
+    nfc.feed({ event: 'tag', tech: 'ISO14443A', uid: '04A1B2C3' })
+    assert.strictEqual(tags.readData(JSON.parse(fs.readFileSync(path.join(dataDir, 'tags.json'), 'utf8'))).tags['4006381333931'].tech, 'HID')
   } finally {
     global.fetch = realFetch
   }

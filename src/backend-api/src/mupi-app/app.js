@@ -398,17 +398,33 @@ function renderPageNav(page) {
     })
     main.append(nav)
   }
-  const siblings = groupPages(page)
+  // (a sub page of an extension stands in the list under the page of its extension, which is in the list of its group)
+  const top = page.extId && page.parent === `ext-${page.extId}` ? state.pages.get(page.parent) : page
+  const siblings = top ? groupPages(top) : []
   nav.dataset.sibs = String(siblings.length > 1 ? siblings.length : 0)
+  // (the sub pages of an extension's page; under the shown one the cards of the page to jump to - `jumps`, see updatePageNavSections)
+  const kids = (p) => state.schema.pages.filter((c) => c.parent === p.id && c.extId)
+  const under = (p) => {
+    if (p.id !== top?.id) return ''
+    const list = kids(p)
+    if (!list.length) return p.id === page.id ? '<ul class="sub jumps"></ul>' : ''
+    return `<ul class="sub">${list.map((k) => `<li><button data-go="${esc(k.id)}" ${k.id === page.id ? 'aria-current="page"' : ''}>${esc(k.title)}</button>${k.id === page.id ? '<ul class="sub jumps"></ul>' : ''}</li>`).join('')}</ul>`
+  }
   nav.innerHTML = !page.parent
     ? ''
     : `<p>Auf dieser Seite</p>${
         siblings.length > 1
-          ? `<ul>${siblings.map((p) => `<li><button data-go="${esc(p.id)}" ${p.id === page.id ? 'aria-current="page"' : ''}>${esc(p.title)}</button>${p.id === page.id ? '<ul class="sub"></ul>' : ''}</li>`).join('')}</ul>`
-          : '<ul class="sub"></ul>'
+          ? `<ul>${siblings.map((p) => `<li><button data-go="${esc(p.id)}" ${p.id === page.id ? 'aria-current="page"' : ''}${p.id === top.id && page.id !== top.id ? ' class="parent"' : ''}>${esc(p.title)}</button>${under(p)}</li>`).join('')}</ul>`
+          : '<ul class="sub jumps"></ul>'
       }`
   updatePageNavSections(page)
 }
+
+// (a card of an extension page came or went: "Auf dieser Seite" lists the ones that are there)
+document.addEventListener('mupi-cards', () => {
+  const page = state.pages.get($('#content')?.dataset.page)
+  if (page && $('#pagenav')) updatePageNavSections(page)
+})
 
 // The pages a settings group's page leads to (its nav rows, card after card)
 // (the pages of extensions - they have no card in the schema - stand after "Erweiterungen", as on the page of the group itself)
@@ -455,12 +471,17 @@ function updatePageNavSections(page) {
   // (the page itself is drawn later: until then only its group's pages count)
   $('.main').classList.toggle('has-pagenav', Number(nav.dataset.sibs) > 1)
   if (!page.parent || content.dataset.page !== page.id) return
-  const cards = [...content.querySelectorAll('section.card')].filter((c) => !c.hidden && c.querySelector(':scope > h2, :scope > .card-head > h2'))
-  const heads = cards.map((c, i) => {
-    c.id ||= `sec-${i}`
-    return { id: c.id, text: c.querySelector('h2').textContent.trim(), card: c }
-  })
-  const sub = nav.querySelector('.sub')
+  // (the card of a group of an extension page has its title in the head of the group)
+  const title = (c) => c.querySelector(':scope > h2, :scope > .card-head > h2, :scope > .ext-group > .ext-group-head > h3')
+  const cards = [...content.querySelectorAll('section.card')].filter((c) => !c.hidden && title(c))
+  // (a sub page of an extension: its first card has the title of the page, which is in the list above it)
+  const heads = cards
+    .map((c, i) => {
+      c.id ||= `sec-${i}`
+      return { id: c.id, text: title(c).textContent.trim(), card: c }
+    })
+    .filter((h) => !(page.extId && page.parent === `ext-${page.extId}` && h.text === page.title))
+  const sub = nav.querySelector('.jumps')
   const useful = heads.length >= 2 && sub
   if (sub) sub.innerHTML = useful ? heads.map((h) => `<li><button data-sec="${esc(h.id)}">${esc(h.text)}</button></li>`).join('') : ''
   $('.main').classList.toggle('has-pagenav', Number(nav.dataset.sibs) > 1 || !!useful)
@@ -1234,6 +1255,89 @@ async function playbackAction(root, action) {
     )
   }
   setTimeout(() => loadNow(root), 600)
+}
+
+// A small player pinned to the bottom of the page of tags (the player of the start page in short: back, play/pause, next, the cover and
+// the title, how far it is, the volume): a tag, a tile of the display or this page starts something - the bar shows and steers it.
+function mountMiniPlayer(root) {
+  root.querySelector('.mini-player')?.remove()
+  const bar = document.createElement('div')
+  bar.className = 'mini-player'
+  bar.setAttribute('role', 'region')
+  bar.setAttribute('aria-label', tr('Player'))
+  bar.innerHTML = `<div class="mini-ctrl">
+      <button type="button" class="mini-btn" data-a="previous" aria-label="${esc(tr('Zurück'))}">${PREV_SVG}</button>
+      <button type="button" class="mini-btn mini-main" data-a="toggle" aria-label="${esc(tr('Play/Pause'))}">${PLAY_SVG}</button>
+      <button type="button" class="mini-btn" data-a="next" aria-label="${esc(tr('Weiter'))}">${NEXT_SVG}</button>
+    </div>
+    <div class="mini-now"><span class="mini-cover"><img alt="" hidden><span>${icon('music', 20)}</span></span><b class="mini-title" translate="no">—</b></div>
+    <div class="mini-prog"><span class="mini-time">0:00 / 0:00</span><div class="track"><i></i></div></div>
+    <div class="mini-vol">${icon('vol', 20)}<input type="range" min="0" max="100" step="1" value="0" aria-label="${esc(tr('Lautstärke'))}"></div>`
+  root.append(bar)
+  const q = (sel) => bar.querySelector(sel)
+  const vol = q('.mini-vol input')
+  let busy = false
+  const refresh = async () => {
+    if (!bar.isConnected) return document.removeEventListener('mupi-nfc-played', soon)
+    const r = await api(`${API}/playback`)
+    if (!bar.isConnected || !r.ok) return
+    const b = r.body ?? {}
+    const has = !!b.player && !!(b.title || b.artist)
+    q('.mini-title').textContent = has ? b.title || b.artist : tr('Gerade läuft nichts.')
+    const img = q('.mini-cover img')
+    if (has && b.coverUrl) {
+      if (img.getAttribute('src') !== b.coverUrl) img.src = b.coverUrl
+      img.hidden = false
+    } else img.hidden = true
+    const toggle = q('[data-a="toggle"]')
+    toggle.dataset.state = b.playing ? 'playing' : 'paused'
+    toggle.innerHTML = b.playing ? PAUSE_SVG : PLAY_SVG
+    const known = Number.isFinite(b.progressMs) && Number.isFinite(b.durationMs) && b.durationMs > 0
+    q('.mini-time').textContent = known ? `${clock(b.progressMs)} / ${clock(b.durationMs)}` : has ? clock(b.progressMs || 0) : ''
+    q('.mini-prog .track i').style.width = known ? `${Math.min(100, (b.progressMs / b.durationMs) * 100)}%` : '0%'
+    if (Number.isFinite(b.volume) && vol.dataset.dragging !== '1') {
+      vol.value = b.volume
+      vol.style.setProperty('--fill', `${b.volume}%`)
+    }
+  }
+  // (a tile of this page started something: the display takes a moment, so the bar looks again a few times)
+  const soon = () => {
+    for (const ms of [1200, 2800, 5000]) setTimeout(() => void refresh(), ms)
+  }
+  document.addEventListener('mupi-nfc-played', soon)
+  for (const btn of bar.querySelectorAll('[data-a]')) {
+    btn.onclick = async () => {
+      if (busy) return
+      busy = true
+      const a = btn.dataset.a === 'toggle' ? (btn.dataset.state === 'playing' ? 'pause' : 'play') : btn.dataset.a
+      const r = await api(`${API}/playback/${a}`, { method: 'POST' })
+      if (!r.ok) {
+        const code = r.body?.error ?? ''
+        toast({ playtime_limit_reached: 'Die Hörzeit für heute ist aufgebraucht.', quiet_hours_active: 'Gerade ist Ruhezeit.', no_active_track: 'Es ist nichts zum Fortsetzen da.' }[code] ?? 'Das hat nicht geklappt', 'info')
+      }
+      busy = false
+      setTimeout(() => void refresh(), 600)
+    }
+  }
+  const hold = (on) => () => (vol.dataset.dragging = on ? '1' : '')
+  vol.addEventListener('pointerdown', hold(true))
+  for (const ev of ['pointerup', 'pointercancel', 'change']) vol.addEventListener(ev, hold(false))
+  let timer = 0
+  vol.addEventListener('input', () => {
+    const v = Number(vol.value)
+    vol.style.setProperty('--fill', `${v}%`)
+    clearTimeout(timer)
+    timer = setTimeout(async () => {
+      const r = await api(`${API}/audio/volume`, { method: 'POST', body: { volume: v } })
+      if (r.ok && r.body?.capped) {
+        toast(`Hörschutz: höchstens ${r.body.applied} %`, 'info')
+        vol.value = r.body.applied
+        vol.style.setProperty('--fill', `${r.body.applied}%`)
+      } else if (!r.ok) toast('Lautstärke ließ sich nicht setzen', 'info')
+    }, 200)
+  })
+  void refresh()
+  every(2500, refresh)
 }
 
 // Where the box plays (backend-api audio-output.ts), for the row above the volume: kept here, the card is drawn anew
@@ -4036,7 +4140,33 @@ const nfcExt = () => extPages.list.find((e) => e.id === 'nfc') ?? null
 // the button, when the extension is on (the sheets put it among their buttons and wire it with wireNfc)
 function nfcButtonHtml() {
   const ext = nfcExt()
-  return ext ? `<button type="button" class="btn" data-nfc>${icon(ext.icon || 'plug', 18)}NFC-Tag</button>` : ''
+  if (!ext) return ''
+  // ("change tag" waits for the album: its button sits right under "NFC-Tag")
+  return `<button type="button" class="btn" data-nfc>${icon(ext.icon || 'plug', 18)}NFC-Tag</button>${nfcChange ? `<button type="button" class="btn nfc-change-here" data-nfc-change>${icon('check', 18)}Weise den NFC-Tag diesem Album zu</button>` : ''}`
+}
+
+// "Tag ändern" on the page of tags: the app goes to the library and waits for the album the tag is to get - { id, title, from }, or null.
+// A bar at the bottom says so (and cancels); the sheets of the library show "Weise den NFC-Tag diesem Album zu" under "NFC-Tag".
+let nfcChange = null
+function endNfcChange() {
+  nfcChange = null
+  document.getElementById('nfc-change-bar')?.remove()
+}
+function startNfcChange(row) {
+  endNfcChange()
+  nfcChange = { id: String(row.id), title: String(row.title ?? ''), from: currentPage()?.id ?? '' }
+  const bar = document.createElement('div')
+  bar.id = 'nfc-change-bar'
+  bar.className = 'nfc-change-bar'
+  bar.setAttribute('role', 'status')
+  bar.innerHTML = `<div class="nfc-change-text"><b>Tag ändern</b><span class="nfc-change-title" translate="no">${esc(nfcChange.title)}</span><span>Öffne das neue Album und tippe auf „Weise den NFC-Tag diesem Album zu“.</span></div><button type="button" class="btn sm">Abbrechen</button>`
+  bar.querySelector('button').onclick = () => {
+    const from = nfcChange?.from
+    endNfcChange()
+    if (from) go(from)
+  }
+  document.body.append(bar)
+  go('bibliothek')
 }
 // (an entry of data.json: what a Smart-Sync entry has been given instead - the display shows it so, and so the tag should)
 function nfcMediaOfEntry(item) {
@@ -4054,6 +4184,23 @@ function wireNfc(sheet, close, media, back) {
     close()
     openNfcTagsSheet(media, back)
   })
+  const here = sheet.querySelector('[data-nfc-change]')
+  if (here) {
+    here.addEventListener('click', async () => {
+      const mode = nfcChange
+      if (!mode) return
+      here.disabled = true
+      const r = await api(`${NFC_ROUTE}/tagchange`, { method: 'POST', body: { id: mode.id, media, cover: nfcCover(media) }, timeoutMs: 20000 })
+      toast(typeof r.body?.message === 'string' ? tr(r.body.message.slice(0, 120)) : tr(r.ok ? 'Tag geändert' : 'Hat nicht geklappt'), r.ok ? 'ok' : 'info')
+      if (!r.ok) {
+        here.disabled = false
+        return
+      }
+      endNfcChange()
+      close()
+      if (mode.from) go(mode.from)
+    })
+  }
 }
 
 // "NFC-Tag" in the library: the tags this medium has (a picture for each, the picture can be changed, the tag taken away), and
@@ -4208,15 +4355,18 @@ function openNfcSheet(media, { back = null, image = '' } = {}) {
 
 // The rows of a list of tags (the list of the extension page, hostApi 8 `list`, and the sheet "NFC-Tag" of a medium): a picture for each
 // row, a button for the picture and the extension's own buttons; each posts { id }. redraw(): the list asks again after a change.
-function fillTagRows(box, rows, redraw) {
+// tiles (the page): each row is a tile - the title, the picture, the text and a row of buttons with symbols; an own button of the
+// extension may bring `icon` (a symbol of the app) and `change` (it is "Tag ändern": the app goes to the library to choose the new album).
+function fillTagRows(box, rows, redraw, tiles = false) {
   const post = (route, body) => api(route, { method: 'POST', body, timeoutMs: 20000 })
   const said = (r, fallback) => (typeof r.body?.message === 'string' ? tr(r.body.message.slice(0, 120)) : tr(fallback))
   for (const row of rows) {
     const li = document.createElement('li')
-    li.className = 'ext-tag'
+    li.className = tiles ? 'ext-tag tag-tile' : 'ext-tag'
     const pic = document.createElement('span')
-    pic.className = 'lib-thumb ext-tag-pic'
-    if (/^(\/api\/|https:\/\/|http:\/\/)/.test(String(row.image ?? ''))) {
+    pic.className = tiles ? 'lib-thumb ext-tag-pic tag-tile-pic' : 'lib-thumb ext-tag-pic'
+    // (an own picture is /cover/<name>, the others come through /api/ or from the web)
+    if (/^(\/api\/|\/cover\/|https:\/\/|http:\/\/)/.test(String(row.image ?? ''))) {
       const img = document.createElement('img')
       img.src = row.image
       img.alt = ''
@@ -4225,66 +4375,94 @@ function fillTagRows(box, rows, redraw) {
       img.addEventListener('error', () => img.remove(), { once: true })
       pic.append(img)
     }
-    pic.insertAdjacentHTML('afterbegin', icon('image', 22))
+    pic.insertAdjacentHTML('afterbegin', icon('image', tiles ? 40 : 22))
     const main = document.createElement('div')
     main.className = 'ext-tag-main'
     const name = document.createElement('b')
     name.translate = false
     name.textContent = String(row.title ?? '')
+    // (the tile cuts a long title off: the whole title is in the tooltip)
+    if (tiles) name.title = name.textContent
     const sub = document.createElement('small')
     sub.textContent = (Array.isArray(row.text) ? row.text : []).map((t) => tr(String(t))).join(' · ')
     const buttons = document.createElement('div')
-    buttons.className = 'ext-tag-btns'
-    const add = (label, onclick, danger = false) => {
+    buttons.className = tiles ? 'tag-tile-btns' : 'ext-tag-btns'
+    const add = (label, onclick, { danger = false, glyph = 'info', off = false } = {}) => {
       const b = document.createElement('button')
       b.type = 'button'
-      b.className = `btn sm${danger ? ' danger' : ''}`
-      b.textContent = tr(label)
+      if (tiles) {
+        b.className = `icon-btn tag-tile-btn${danger ? ' danger' : ''}`
+        b.innerHTML = icon(glyph, 20)
+        b.title = tr(label)
+        b.setAttribute('aria-label', tr(label))
+      } else {
+        b.className = `btn sm${danger ? ' danger' : ''}`
+        b.textContent = tr(label)
+      }
+      b.disabled = off
       b.onclick = async () => {
         b.disabled = true
         await onclick()
-        if (b.isConnected) b.disabled = false
+        if (b.isConnected) b.disabled = off
       }
       buttons.append(b)
     }
     if (typeof row.coverPost === 'string') {
-      add(row.image ? 'Bild ändern' : 'Bild wählen', async () => {
-        openCoverPicker({
-          target: `own:nfc-${String(row.id).slice(0, 20)}`,
-          title: String(row.title ?? ''),
-          query: String(row.title ?? '').replace(/\s+–\s+/, ' '),
-          fallbacks: [],
-          current: String(row.image ?? ''),
-          onDone: async (body) => {
-            const saved = await post(row.coverPost, { id: row.id, image: String(body?.url ?? '') })
+      add(
+        row.image ? 'Bild ändern' : 'Bild wählen',
+        async () => {
+          openCoverPicker({
+            target: `own:nfc-${String(row.id).slice(0, 20)}`,
+            title: String(row.title ?? ''),
+            query: String(row.title ?? '').replace(/\s+–\s+/, ' '),
+            fallbacks: [],
+            current: String(row.image ?? ''),
+            onDone: async (body) => {
+              const saved = await post(row.coverPost, { id: row.id, image: String(body?.url ?? '') })
+              toast(said(saved, 'Hat nicht geklappt'), saved.ok ? 'ok' : 'info')
+              redraw()
+            },
+            onCancel: redraw,
+          })
+        },
+        { glyph: 'image' },
+      )
+      // (the tiles keep all their buttons in place: this one is greyed out while the tag has no picture of its own)
+      if (row.imageOwn || tiles) {
+        add(
+          'Cover des Mediums nehmen',
+          async () => {
+            const saved = await post(row.coverPost, { id: row.id, image: '' })
             toast(said(saved, 'Hat nicht geklappt'), saved.ok ? 'ok' : 'info')
             redraw()
           },
-          onCancel: redraw,
-        })
-      })
-      if (row.imageOwn) {
-        add('Cover des Mediums nehmen', async () => {
-          const saved = await post(row.coverPost, { id: row.id, image: '' })
-          toast(said(saved, 'Hat nicht geklappt'), saved.ok ? 'ok' : 'info')
-          redraw()
-        })
+          { glyph: 'undo', off: !row.imageOwn },
+        )
       }
     }
-    for (const action of Array.isArray(row.actions) ? row.actions.slice(0, 4) : []) {
+    for (const action of Array.isArray(row.actions) ? row.actions.slice(0, 6) : []) {
+      const glyph = /^[a-z0-9]{1,12}$/.test(String(action.icon ?? '')) ? action.icon : 'info'
+      if (action.change === true) {
+        add('Tag ändern', async () => startNfcChange(row), { glyph })
+        continue
+      }
       add(
         String(action.label ?? ''),
         async () => {
           if (action.confirm && !(await ask(tr(action.label), tr(action.confirm), tr('OK')))) return
           const done = await post(action.post, { id: row.id })
           toast(said(done, done.ok ? 'Erledigt' : 'Hat nicht geklappt'), done.ok ? 'ok' : 'info')
+          if (done.ok && String(action.post).endsWith('/tagplay')) document.dispatchEvent(new Event('mupi-nfc-played'))
           redraw()
         },
-        true,
+        { glyph, danger: !action.safe },
       )
     }
-    main.append(name, sub, buttons)
-    li.append(pic, main)
+    if (tiles) li.append(name, pic, sub, buttons)
+    else {
+      main.append(name, sub, buttons)
+      li.append(pic, main)
+    }
     box.append(li)
   }
 }
@@ -15757,7 +15935,7 @@ function extGroups(fields) {
   return groups
 }
 
-function extFormHtml(e, fields) {
+function extFormHtml(e, fields, cards = false) {
   const type = (it) => e.settingTypes?.[it.key]
   const groups = extGroups(fields)
   // (a second choice beside a field with choices - by how much, beside "louder": a list, shown while the field has one of the
@@ -15797,7 +15975,7 @@ function extFormHtml(e, fields) {
       }
       if (it.type === 'list') {
         // a list with a picture for each entry (hostApi 8): drawn by extFormMount from what the extension's route answers
-        return `<div class="field ext-list"><label>${esc(it.label)}</label><ul class="ext-tags" data-xlist="${index}" aria-live="polite"></ul>${help}</div>`
+        return `<div class="field ext-list"><label>${esc(it.label)}</label><ul class="ext-tags tag-grid" data-xlist="${index}" aria-live="polite"></ul>${help}</div>`
       }
       if (it.type === 'roster') {
         // a list the extension keeps itself (the users of the box, say): to look at, to add to, to take from and to choose from
@@ -15822,7 +16000,9 @@ function extFormHtml(e, fields) {
       if (it.choices && it.choices.length > 5) {
         // (a choice from many: a list to pick from instead of a row of buttons)
         const now = e.settings?.[it.key]
-        const select = `<select class="input" id="xs-${k}" data-xsel="${k}">${it.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
+        // (live: a route that says which choices are there now and what they are called - wired by extFormMount)
+        const live = it.live ? ` data-xlive="${esc(it.live)}"` : ''
+        const select = `<select class="input" id="xs-${k}" data-xsel="${k}"${live}>${it.choices.map((c) => `<option value="${esc(c.value)}"${c.value === now ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}</select>`
         return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xs-${k}">${esc(it.label)}</label>${it.extra ? `<div class="ext-with">${select}${extra(it)}</div>` : select}${help}</div>`
       }
       if (it.choices) {
@@ -15834,17 +16014,29 @@ function extFormHtml(e, fields) {
       const kind = secret ? 'password' : type(it) === 'number' ? 'number' : 'text'
       return `<div class="field" data-ext-dep="${esc(it.dep ?? '')}"><label for="xk-${k}">${esc(it.label)}</label><input class="input" id="xk-${k}" type="${kind}" data-xk="${k}" data-secret="${secret}" value="${secret ? '' : esc(e.settings?.[it.key] ?? '')}" placeholder="${secret && e.settings?.[`${it.key}Set`] ? 'gespeichert' : ''}" ${NO_PW_MANAGER}>${help}</div>`
   }
+  // (cards: a heading with `card` starts a card of its own - the page of an extension with several readers shows each in one; the
+  // "+" of a series stands between the cards, a card that is not there yet is hidden by extFormMount)
+  const cardMode = cards && fields.some((it) => it.type === 'heading' && it.card)
+  let cardOpen = false
+  const closeCard = () => {
+    const end = cardOpen ? '</section>' : ''
+    cardOpen = false
+    return end
+  }
   const form = fields
     .map((it, index) => {
       // (every field knows its group, data-xgroup: the index of its heading; after the last field of a series stands its "+")
       const g = groups.findLast((x) => x.index <= index)
+      const begin = cardMode && it.type === 'heading' && it.card ? `${closeCard()}<section class="card wide ext-page ext-sec" data-xcard="${index}">` : ''
+      if (begin) cardOpen = true
       // (showIf: a field of one of several readers, shown while the choice has one of its values - see dep() in extFormMount)
       const showIf = it.showIf ? ` data-xshow="${esc(JSON.stringify(it.showIf))}"` : ''
       const html = one(it, index).replace('<div ', `<div data-xgroup="${g ? g.index : ''}"${showIf} `)
       const lastOfSeries = g && g.last === index && groups.findLast((x) => x.series === g.series) === g && groups.some((x) => x.series === g.series && x.heading.optional)
-      return lastOfSeries ? `${html}<div class="ext-add" data-xaddrow="${g.series}"><button type="button" class="btn" data-xadd="${g.series}"><span aria-hidden="true">+</span> <span>${esc(g.heading.label)}</span></button></div>` : html
+      const add = lastOfSeries ? `<div class="ext-add" data-xaddrow="${g.series}"><button type="button" class="btn" data-xadd="${g.series}"><span aria-hidden="true">+</span> <span>${esc(g.heading.label)}</span></button></div>` : ''
+      return `${begin}${html}${cardMode && add ? closeCard() : ''}${add}`
     })
-    .join('')
+    .join('') + closeCard()
   const hasText = fields.some((it) => type(it) !== 'boolean' && type(it) !== 'gpio' && !it.choices && it.type !== 'lookup' && it.type !== 'roster' && it.type !== 'heading' && it.type !== 'status' && it.type !== 'action' && it.type !== 'list')
   return { form, hasText }
 }
@@ -15877,8 +16069,15 @@ function extFormMount(sheet, e, fields, saved) {
     }
     // (the second choice beside a field: there while the field has one of its values)
     for (const x of sheet.querySelectorAll('[data-xwhen]')) x.hidden = !JSON.parse(x.dataset.xwhen).includes(String(e.settings?.[x.dataset.xof]))
+    // (a card of a group that is not there yet)
+    for (const c of sheet.querySelectorAll('[data-xcard]')) {
+      const g = groups.find((x) => String(x.index) === c.dataset.xcard)
+      c.hidden = g ? !groupOn(g) : false
+    }
     // (the "+" of a series, while one of its groups is not there yet)
     for (const row of sheet.querySelectorAll('[data-xaddrow]')) row.hidden = !groups.some((g) => String(g.series) === row.dataset.xaddrow && !groupOn(g))
+    // ("Auf dieser Seite" lists the cards that are there)
+    document.dispatchEvent(new Event('mupi-cards'))
   }
   dep()
   // (the list of the pins is drawn again when a name or a group changes: it names the groups)
@@ -15962,6 +16161,25 @@ function extFormMount(sheet, e, fields, saved) {
       else select.value = String(e.settings?.[key] ?? '')
       dep()
     }
+  }
+  // (a choice that follows what the box finds, `live`: its route says which choices are there now and what they are called - a USB
+  // reader that is not plugged in is greyed out, one that is has the name of the device. The choice that is made stays.)
+  for (const select of sheet.querySelectorAll('select[data-xlive]')) {
+    const route = select.dataset.xlive
+    let timer = 0
+    const draw = async () => {
+      if (!select.isConnected) return clearInterval(timer)
+      const r = await api(route, { timeoutMs: 8000 })
+      if (!select.isConnected || !r.ok || typeof r.body?.options !== 'object' || r.body.options === null) return
+      for (const option of select.options) {
+        const live = r.body.options[option.value]
+        if (!live || typeof live !== 'object') continue
+        if (typeof live.label === 'string' && live.label !== '') option.textContent = live.label.slice(0, 100)
+        option.disabled = live.disabled === true && option.value !== select.value
+      }
+    }
+    draw()
+    timer = setInterval(draw, 4000)
   }
   // (GPIO pins: every pin of the header to choose from. A pin something else holds - the box says who - and a pin another field
   // of this extension has cannot be chosen. Saved at once; the fields that depend on the pin show then.)
@@ -16140,18 +16358,42 @@ function extFormMount(sheet, e, fields, saved) {
     const box = sheet.querySelector(`[data-xstatus="${index}"]`)
     if (!box) return
     let timer = 0
+    let busy = false
     const draw = async () => {
       if (!box.isConnected) return clearInterval(timer)
       const r = await api(item.state, { timeoutMs: 8000 })
       if (!box.isConnected) return clearInterval(timer)
+      // (a button of a row is being used: the rows stay as they are until it is done)
+      if (busy) return
       const rows = r.ok && Array.isArray(r.body?.rows) ? r.body.rows : [{ label: 'Status', value: 'Nicht erreichbar', tone: 'warn' }]
       box.textContent = ''
       for (const row of rows.slice(0, 12)) {
         const dt = document.createElement('dt')
         dt.textContent = tr(String(row.label ?? ''))
         const dd = document.createElement('dd')
-        dd.textContent = tr(String(row.value ?? ''))
-        if (['ok', 'warn', 'error'].includes(row.tone)) dd.className = `ext-status-${row.tone}`
+        const text = document.createElement('span')
+        text.textContent = tr(String(row.value ?? ''))
+        if (['ok', 'warn', 'error'].includes(row.tone)) text.className = `ext-status-${row.tone}`
+        dd.append(text)
+        // (a button at the right of the value, hostApi 8: { label, post, confirm } - a route of an extension, asked with POST like an action)
+        const act = row.button
+        if (act && typeof act.label === 'string' && /^\/api\/ext\/[a-z][a-z0-9-]*\/[a-z]{1,30}$/.test(String(act.post))) {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'btn ext-status-btn'
+          button.textContent = tr(act.label.slice(0, 60))
+          button.onclick = async () => {
+            if (act.confirm && !(await ask(tr(act.label), tr(String(act.confirm).slice(0, 300)), tr('OK')))) return
+            busy = true
+            button.disabled = true
+            const done = await api(act.post, { method: 'POST', body: {}, timeoutMs: 60000 })
+            busy = false
+            const said = typeof done.body?.message === 'string' ? tr(done.body.message.slice(0, 120)) : ''
+            toast(said || tr(done.ok ? 'Erledigt' : 'Hat nicht geklappt'), done.ok ? 'ok' : 'info')
+            draw()
+          }
+          dd.append(button)
+        }
         box.append(dt, dd)
       }
     }
@@ -16193,7 +16435,7 @@ function extFormMount(sheet, e, fields, saved) {
         box.append(empty)
         return
       }
-      fillTagRows(box, r.body.items.slice(0, 300), draw)
+      fillTagRows(box, r.body.items.slice(0, 300), draw, true)
     }
     draw()
   })
@@ -16552,8 +16794,15 @@ function extPageController(entry, sub = 0) {
       if (!sub && entry.pages.length) {
         return [`<section class="card wide ext-page" id="ext-page-card"><h2>${esc(e.ui.heading ?? e.ui.title)}</h2><p class="help" style="margin:0">${esc(e.ui.help ?? '')}</p>${e.enabled ? '' : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}</section>`]
       }
-      const { form, hasText } = extFormHtml(e, e.enabled ? slice() : [])
+      const cardPage = !!e.enabled && slice().some((it) => it.type === 'heading' && it.card)
+      const { form, hasText } = extFormHtml(e, e.enabled ? slice() : [], cardPage)
       const named = sub ? e.ui.items[starts()[sub - 1]] : null
+      // (a page of cards: its text in a card of its own, then a card for each group; the wrapper takes no room of its own)
+      if (cardPage) {
+        return [
+          `<div id="ext-page-card" class="ext-cards"><section class="card wide ext-page"><h2>${esc(named ? named.label : (e.ui.heading ?? e.ui.title))}</h2><p class="help" style="margin:0">${esc(named ? (named.help ?? '') : (e.ui.help ?? ''))}</p></section>${form}${hasText ? '<div class="btns"><button class="btn primary" data-xsave>Speichern</button></div>' : ''}</div>`,
+        ]
+      }
       return [
         `<section class="card wide ext-page" id="ext-page-card"><h2>${esc(named ? named.label : (e.ui.heading ?? e.ui.title))}</h2><p class="help" style="margin:0">${esc(named ? (named.help ?? '') : (e.ui.help ?? ''))}</p>
          ${e.enabled ? form : '<p class="help" style="margin:0">Die Einstellungen gibt es, solange die Erweiterung an ist.</p>'}
@@ -16569,6 +16818,8 @@ function extPageController(entry, sub = 0) {
     mount(root, page) {
       const card = $('#ext-page-card', root)
       if (card && own.e?.enabled && own.e.ui && (sub || !entry.pages.length)) extFormMount(card, own.e, slice(), () => renderPage(page, true))
+      // (the page of the tags has the player pinned at its bottom)
+      if (card && own.e?.id === 'nfc' && own.e.enabled && slice().some((it) => it.type === 'list' && it.list === `${NFC_ROUTE}/tags`)) mountMiniPlayer(root)
       for (const a of adopted()) a.ctrl.mount?.(root, a.page)
     },
   }

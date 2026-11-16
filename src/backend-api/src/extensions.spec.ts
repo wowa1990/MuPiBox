@@ -265,6 +265,15 @@ describe('GPIO pins the user chooses, and a page of its own (hostApi 5)', () => 
     assert.match(String(checkManifest(ui({}, { optional: 'on' }), files())), /only a heading/)
   })
 
+  it('a heading can be a card of its own: true, and not on a field', () => {
+    const settings = { p: pin }
+    const ui = (heading: Record<string, unknown>, field: Record<string, unknown> = {}) => manifest(settings, { items: [{ type: 'heading', label: 'Leser', ...heading }, { key: 'p', label: 'Pin', ...field }] })
+    assert.strictEqual(checkManifest(ui({ card: true }), files()), null)
+    assert.match(String(checkManifest(ui({ card: false }), files())), /card is true/)
+    assert.match(String(checkManifest(ui({ card: 'yes' }), files())), /card is true/)
+    assert.match(String(checkManifest(ui({}, { card: true }), files())), /only a heading/)
+  })
+
   it('a field with choices can have a second choice beside it, shown for some of its values', () => {
     const settings = { act: { type: 'string', default: 'next', options: ['next', 'up', 'down'] }, step: { type: 'number', default: 5, options: [1, 5, 10] }, free: { type: 'number', default: 5 }, p: pin }
     const choices = [{ value: 'next', label: 'Weiter' }, { value: 'up', label: 'Lauter' }, { value: 'down', label: 'Leiser' }]
@@ -472,7 +481,7 @@ describe('the NFC extension of this repository', () => {
   it('lists the tags with their pictures, and what to do when a tag is taken off', () => {
     const items = nfc.ui?.items ?? []
     assert.strictEqual(items.find((i) => i.type === 'list')?.list, '/api/ext/nfc/tags')
-    assert.strictEqual(items.filter((i) => i.type === 'action' || i.type === 'lookup').length, 0, 'the medium is given in the library, not on this page')
+    assert.strictEqual(items.filter((i) => i.type === 'action' || i.type === 'lookup').length, 0, 'the medium is given in the library, not on this page; the buttons of SPI, I2C and the serial port are in the rows of their state')
     assert.strictEqual(checkSettings(nfc, { onRemove: 'stop', playOnTag: false }).ok, true)
     assert.strictEqual(checkSettings(nfc, { onRemove: 'rewind' }).ok, false)
   })
@@ -493,6 +502,36 @@ describe('the NFC extension of this repository', () => {
     assert.strictEqual(checkSettings(nfc, { hidDevice: 'a; rm -rf /' }).ok, false, 'a name is plain text')
     assert.strictEqual(checkSettings(nfc, { spiDevice: '1.0' }).ok, false)
     assert.strictEqual(checkSettings(nfc, { busyPin: 40 }).ok, false)
+  })
+  it('lets the choice of the reader follow what is plugged in: `live` is a route of the extension, on a field with choices', () => {
+    const live = (nfc.ui?.items ?? []).filter((i) => i.live)
+    assert.deepStrictEqual(live.map((i) => i.key), ['reader', 'reader2', 'reader3'])
+    assert.ok(live.every((i) => i.live === '/api/ext/nfc/usbstate'))
+    const withLive = (item: Record<string, unknown>) => ({ ...nfc, ui: { ...nfc.ui!, items: nfc.ui!.items.map((i) => (i.key === 'reader' ? { ...i, ...item } : i)) } }) as Manifest
+    const check = (m: Manifest) => checkManifest(m, files('api.js', 'display.js', 'icon.svg', '99-mpx-nfc.rules'))
+    assert.match(String(check(withLive({ live: '/api/ext/other/usbstate' }))), /live address/)
+    assert.match(String(check(withLive({ live: '/api/ext/nfc/usb/state' }))), /live address/)
+    const noChoices = { ...nfc, ui: { ...nfc.ui!, items: nfc.ui!.items.map((i) => (i.key === 'busyPin' ? { ...i, live: '/api/ext/nfc/usbstate' } : i)) } } as Manifest
+    assert.match(String(check(noChoices)), /live belongs to a field with choices/)
+  })
+  it('runs up to three readers: the second and third have settings of their own, the fields of each follow its choice', () => {
+    assert.strictEqual(checkSettings(nfc, { reader: 'pn5180', busyPin: 25, resetPin: 23, reader2: 'rc522', spiDevice2: '0.1', reader3: 'hid', hidDevice3: 'Tera' }).ok, true)
+    assert.strictEqual(checkSettings(nfc, { reader2: 'mfrc' }).ok, false)
+    assert.strictEqual(checkSettings(nfc, { reader2On: true, reader3On: false }).ok, true)
+    // the page: Reader 1, and the two that are added with the "+" (the groups of a series: the same heading, the later ones optional), each with its status
+    const items = nfc.ui?.items ?? []
+    const heads = items.filter((i) => i.type === 'heading' && i.label === 'Leser')
+    assert.deepStrictEqual(heads.map((h) => h.optional), [undefined, 'reader2On', 'reader3On'])
+    assert.deepStrictEqual(items.filter((i) => i.type === 'status').map((i) => i.state), ['/api/ext/nfc/spistate', '/api/ext/nfc/iicstate', '/api/ext/nfc/uartstate', '/api/ext/nfc/stateone', '/api/ext/nfc/statetwo', '/api/ext/nfc/statethree'], 'the card of the ports first (a block for each), then one status per reader')
+    const at = (h: unknown) => items.indexOf(h as never)
+    assert.strictEqual(items[at(heads[1]) - 1].key, 'tech', 'no heading between the groups of the readers')
+    assert.strictEqual(items[at(heads[0]) + 1].type, 'status', 'the status is the first line of its reader')
+    assert.strictEqual(checkSettings(nfc, { reader4: 'hid' }).ok, false, 'no fourth reader')
+    assert.strictEqual(checkSettings(nfc, { hidDevice2: 'a; rm -rf /' }).ok, false)
+    const shown = (n: number) => (nfc.ui?.items ?? []).filter((i) => i.showIf?.key === `reader${n === 1 ? '' : n}`).map((i) => i.key)
+    const base = (keys: (string | undefined)[], n: number) => keys.map((k) => k?.replace(n === 1 ? /$/ : new RegExp(`${n}$`), ''))
+    assert.deepStrictEqual(base(shown(2), 2).filter(Boolean), base(shown(1), 1).filter(Boolean), 'the same fields for each reader')
+    assert.deepStrictEqual(base(shown(3), 3).filter(Boolean), base(shown(1), 1).filter(Boolean))
   })
   it('is packed as the catalog says, with its Python driver in it', () => {
     const entry = JSON.parse(readFileSync(path.join(extDir, 'catalog.json'), 'utf8')).find((e: { id: string }) => e.id === 'nfc')

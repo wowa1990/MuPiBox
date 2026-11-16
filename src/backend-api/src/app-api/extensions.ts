@@ -74,7 +74,7 @@ export interface Manifest {
   icon?: string
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
-  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean }[] }
+  ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string }[]; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list'; state?: string; post?: string; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean }[] }
   settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
@@ -423,6 +423,8 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         if (item.optional !== undefined && !(Object.hasOwn(settings, String(item.optional)) && settings[item.optional].type === 'boolean')) return `ui: optional must be a switch: ${item.label}`
         // (hostApi 7) a heading that starts a page of its own under the page of the extension (a category with sub categories)
         if (item.page !== undefined && (item.page !== true || x.hostApi < 7 || ui.place !== 'system' || item.optional !== undefined || item.rename !== undefined || item.dep !== undefined)) return `ui: a page needs hostApi 7, a page of its own for the extension, and no rename, optional or dep: ${item.label}`
+        // (a group of its own card on the page: the page shows each group of the page in a card of its own)
+        if (item.card !== undefined && (item.card !== true || item.page !== undefined)) return `ui: card is true, on a heading that is no page: ${item.label}`
         continue
       }
       if (item.type === 'status') {
@@ -450,7 +452,7 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         continue
       }
       // (a pin is chosen from the pins of the box: the app draws the choice, the manifest has no say in it)
-      if (item.rename !== undefined || item.optional !== undefined) return `ui: only a heading is renamed or optional: ${item.key}`
+      if (item.rename !== undefined || item.optional !== undefined || item.card !== undefined) return `ui: only a heading is renamed, optional or a card: ${item.key}`
       if (item.type !== 'roster' && settings[item.key].type === GPIO_SETTING && (item.type !== undefined || item.choices !== undefined)) return `ui: a gpio setting is a plain field: ${item.key}`
       if (item.type === 'roster') {
         // a list to look at, to add to, to take from and to choose from (hostApi 4): four routes of the extension's own API part
@@ -480,6 +482,11 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
         const options = settings[item.key].options
         if (!options || !Array.isArray(item.choices) || item.choices.length !== options.length) return `ui: choices must name every option: ${item.key}`
         if (item.choices.some((c) => !options.includes(c?.value as never) || typeof c.label !== 'string' || c.label.length > 60)) return `ui: bad choices: ${item.key}`
+        // (a choice that follows what the box finds - the USB readers that are plugged in: `live` is a route of the extension that
+        // answers { options: { <value>: { label?, disabled? } } }; a box that does not know it shows the choices as they are)
+        if (item.live !== undefined && (typeof item.live !== 'string' || !new RegExp(`^/api/ext/${x.id}/[a-z]{1,30}$`).test(item.live))) return `ui: bad live address: ${item.key}`
+      } else if (item.live !== undefined) {
+        return `ui: live belongs to a field with choices: ${item.label}`
       }
       if (item.extra !== undefined) {
         // (hostApi 5) a second choice beside a field with choices, shown while the field has one of the values of `when`:
