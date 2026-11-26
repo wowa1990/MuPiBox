@@ -4695,5 +4695,15 @@
  "Play/Pause halten für den zweiten Satz",
  "1 Sekunde",
  "2 Sekunden",
- "3 Sekunden"
+ "3 Sekunden",
+ "Taste",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.",
+ "Taste gespeichert",
+ "Taste entfernt",
+ "Diesen Pin hat schon ein anderer Benutzer.",
+ "GPIO {} nutzt schon: {}",
+ "MuPiBox (Taste von {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.",
+ "Am Display zuerst die PIN abfragen",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort."
 ]

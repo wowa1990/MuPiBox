@@ -85,6 +85,12 @@ export interface User {
   color: string
   /** the PIN asked at the display before switching to this user (B5): a hash, never the digits */
   pin?: string
+  /** A button of its own at the box (BCM pin 2-27, to GND): pressing it switches to this user - at once, whatever the
+   *  display's way of switching (user-buttons.ts) - and without a PIN, unless gpioAsk is set. None: no such button. */
+  gpio?: number
+  /** The button asks his PIN at the display before it switches (the display shows the pad for him). Without a PIN of his
+   *  own there is nothing to ask: the button then switches at once. Kept apart from the PIN itself. */
+  gpioAsk?: boolean
 }
 export interface UsersFile {
   version: number
@@ -101,6 +107,9 @@ export interface UserConfigPart {
   sections: Record<string, unknown>
   photos: Record<string, unknown>
 }
+
+/** A pin of the header a user's button may be on (BCM 2-27) */
+export const isUserGpio = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 2 && v <= 27
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T))
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -210,7 +219,8 @@ export class UserFiles {
       const name = cleanName(o.name)
       if (typeof o.id !== 'string' || !ID.test(o.id) || !name || users.some((x) => x.id === o.id)) continue
       const color = typeof o.color === 'string' && (USER_COLORS as readonly string[]).includes(o.color) ? o.color : USER_COLORS[0]
-      users.push({ id: o.id, name, color, ...(typeof o.pin === 'string' && o.pin ? { pin: o.pin } : {}) })
+      const gpio = typeof o.gpio === 'number' && isUserGpio(o.gpio) && !users.some((x) => x.gpio === o.gpio) ? o.gpio : undefined
+      users.push({ id: o.id, name, color, ...(typeof o.pin === 'string' && o.pin ? { pin: o.pin } : {}), ...(gpio ? { gpio } : {}), ...(o.gpioAsk === true ? { gpioAsk: true } : {}) })
     }
     if (users.length === 0) users.push({ id: MAIN_ID, name: 'Standard', color: USER_COLORS[0] })
     const current = typeof raw.current === 'string' && users.some((u) => u.id === raw.current) ? raw.current : users[0].id
@@ -692,7 +702,7 @@ export interface SwitchHooks {
 
 export class UserSwitchError extends Error {
   constructor(
-    readonly code: 'busy' | 'unknown_user' | 'disabled' | 'failed' | 'mode' | 'pin' | 'pin_locked',
+    readonly code: 'busy' | 'unknown_user' | 'disabled' | 'failed' | 'mode' | 'pin' | 'pin_locked' | 'gpio_twice',
     message: string,
   ) {
     super(message)
@@ -705,6 +715,8 @@ export const PIN_RE = /^\d{4}$/
 /** Wrong PINs in a row at the display, then a pause */
 export const PIN_TRIES = 5
 export const PIN_PAUSE_MS = 60_000
+/** How long the display's pad, opened by a user's button, may be answered */
+export const ASK_MS = 60_000
 
 /** A PIN as users.json keeps it: scrypt with a salt of its own, never the digits */
 export function hashPin(pin: string): string {
@@ -740,6 +752,8 @@ export class Users {
    *  round it), and until when the display may try none */
   private pinFails = 0
   private pinPausedUntil = 0
+  /** a user's button asked for his PIN at the display (not answered yet) */
+  private asked: { id: string; at: number } | null = null
   constructor(
     readonly files: UserFiles,
     private readonly hooks: SwitchHooks,
@@ -823,7 +837,22 @@ export class Users {
 
   /** Switch to user `id`: refused while the box is busy (an update, a restore, a sync ...) - after waiting a little */
   switchTo(id: string): Promise<UsersFile> {
-    return this.serial(() => this.switchNow(id, false))
+    return this.serial(async () => {
+      const f = await this.switchNow(id, false)
+      this.asked = null
+      return f
+    })
+  }
+
+  /** A user's button asks for his PIN at the display: the display shows the pad for him (it asks `pendingAsk`) */
+  askPinAtDisplay(id: string): void {
+    this.asked = { id, at: Date.now() }
+  }
+
+  /** The user a button asked the display to ask for, until it is answered or ASK_MS are over; null: none */
+  pendingAsk(): { id: string; at: number } | null {
+    if (this.asked && Date.now() - this.asked.at > ASK_MS) this.asked = null
+    return this.asked
   }
 
   /**
@@ -834,7 +863,8 @@ export class Users {
     return this.serial(async () => {
       const f = this.files.read()
       if (!f.enabled) throw new UserSwitchError('disabled', 'several users are switched off')
-      if (f.switchMode === 'app') throw new UserSwitchError('mode', 'switching only in the app')
+      // (not when his button asked: that is a way of switching of its own, whatever the display's - only the PIN remains)
+      if (f.switchMode === 'app' && this.pendingAsk()?.id !== id) throw new UserSwitchError('mode', 'switching only in the app')
       const u = f.users.find((x) => x.id === id)
       if (!u) throw new UserSwitchError('unknown_user', 'no such user')
       if (u.pin && f.current !== id) {
@@ -854,7 +884,9 @@ export class Users {
         }
         this.pinFails = 0
       }
-      return this.switchNow(id, false)
+      const done = await this.switchNow(id, false)
+      this.asked = null
+      return done
     })
   }
 
@@ -870,6 +902,44 @@ export class Users {
       else throw new UserSwitchError('failed', 'pin')
       this.files.write(f)
     })
+  }
+
+  /** Give a user a button of his own (a BCM pin 2-27) or take it away (null, 0, ''). Each pin belongs to one user. That
+   *  nothing else on the box holds the pin is for the caller to check (the route does: it knows the extensions). */
+  setGpio(id: string, pin: unknown): Promise<void> {
+    return this.serial(async () => {
+      this.notDuringRestore()
+      const f = this.files.read()
+      const u = f.users.find((x) => x.id === id)
+      if (!u) throw new UserSwitchError('unknown_user', 'no such user')
+      if (pin === null || pin === 0 || pin === '') delete u.gpio
+      else if (isUserGpio(pin)) {
+        if (f.users.some((x) => x.id !== id && x.gpio === pin)) throw new UserSwitchError('gpio_twice', String(pin))
+        u.gpio = pin
+      } else throw new UserSwitchError('failed', 'gpio')
+      this.files.write(f)
+    })
+  }
+
+  /** Whether a user's button asks his PIN at the display (or switches at once) */
+  setGpioAsk(id: string, ask: unknown): Promise<void> {
+    return this.serial(async () => {
+      this.notDuringRestore()
+      const f = this.files.read()
+      const u = f.users.find((x) => x.id === id)
+      if (!u) throw new UserSwitchError('unknown_user', 'no such user')
+      if (typeof ask !== 'boolean') throw new UserSwitchError('failed', 'ask')
+      if (ask) u.gpioAsk = true
+      else delete u.gpioAsk
+      this.files.write(f)
+    })
+  }
+
+  /** The pins of the users' buttons - while several users are switched on (else the pins are free). `ask`: the button asks the
+   *  PIN at the display (set, and the user has a PIN to ask) */
+  gpioPins(): { pin: number; id: string; name: string; ask: boolean }[] {
+    const f = this.files.read()
+    return f.enabled ? f.users.filter((u) => u.gpio).map((u) => ({ pin: u.gpio as number, id: u.id, name: u.name, ask: Boolean(u.gpioAsk && u.pin) })) : []
   }
 
   private async switchNow(id: string, evenWhenOff: boolean): Promise<UsersFile> {

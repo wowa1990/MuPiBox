@@ -37,7 +37,9 @@ import { createSpotifySyncRouter } from './spotify-sync/routes'
 import { isSyncRunning, startScheduler } from './spotify-sync/scheduler'
 import { acquireSyncLock, releaseSyncLock } from './spotify-sync/sync-lock'
 import type { RunSyncDeps } from './spotify-sync/state-machine'
-import { mountExtensions, notifyUserChanged, noteExtensionCrash, setExtensionUsers } from './app-api/extensions'
+import { mountExtensions, notifyUserChanged, noteExtensionCrash, setExtensionUsers, takenForUsers } from './app-api/extensions'
+import { setUserButtonPins } from './app-api/extension-resources'
+import { createUserButtons } from './user-buttons'
 import { buildElternLandingHandler, createElternApiRouter, registerDisplayNetworkRoutes, runSettingUpdate, setOnSpotifyCacheCleared } from './app-api/routes'
 import { isRestoreRunning } from './app-api/admin'
 import { updateRunning } from './app-api/updates'
@@ -1343,7 +1345,27 @@ const users = new Users(userFiles, {
 })
 // (the settings of the extensions that every user has for himself, hostApi 13)
 setExtensionUsers({ current: () => userFiles.read().current, exists: (id) => userFiles.read().users.some((u) => u.id === id) })
-registerUserRoutes(app, users, { session: requireSession, csrf: requireCsrf, local: localOnly })
+// The buttons of the users (a pin of the header each: pressing it switches to him, user-buttons.ts). They are watched after every change
+// of the users and now and then (a restore changes the users behind the routes' back); what holds their pins is known to the extensions
+// and the rotary encoder's choice of pins (setUserButtonPins)
+const userButtons = createUserButtons({ users })
+setUserButtonPins(() => users.gpioPins().map((g) => ({ pin: g.pin, by: `MuPiBox (button of user ${g.name})` })))
+registerUserRoutes(
+  app,
+  users,
+  { session: requireSession, csrf: requireCsrf, local: localOnly },
+  {
+    taken: async () => {
+      const own = users.state().users.flatMap((u) => (u.gpio ? [u.gpio] : []))
+      const t = await takenForUsers(getMupiboxConfigSync() as unknown as Record<string, unknown> | undefined, own)
+      return { pins: t.gpio, blind: t.blind }
+    },
+    changed: () => void userButtons.sync(),
+  },
+)
+void userButtons.sync()
+setInterval(() => void userButtons.sync(), 30_000).unref()
+process.once('exit', () => userButtons.kill())
 
 // The library a request is for (the app edits the library of a user who is not in place - users.ts): ?user=<id>, none
 // or the one in place = data.json in place under the library's lock; another = his data.json under a lock of his own

@@ -41,7 +41,20 @@ Das geht auch vom **Sperrbild** aus. Die Spielzeit gilt ja je Kind: Hat ein Gesc
 
 ## PIN
 
-Jeder Benutzer kann eine **PIN** aus vier Ziffern bekommen (**PIN** in seiner Zeile). Das Display fragt sie, bevor es **zu diesem Benutzer** wechselt. So kommt ein Kind nicht an die Bibliothek eines Erwachsenen oder an die Spielzeit eines Geschwisters. Nach fünf falschen Versuchen nimmt das Display eine Minute lang keine PIN an. Die App, Telegram, Home Assistant und MQTT fragen keine PIN.
+Jeder Benutzer kann eine **PIN** aus vier Ziffern bekommen (**PIN** in seiner Zeile). Das Display fragt sie, bevor es **zu diesem Benutzer** wechselt. So kommt ein Kind nicht an die Bibliothek eines Erwachsenen oder an die Spielzeit eines Geschwisters. Nach fünf falschen Versuchen nimmt das Display eine Minute lang keine PIN an. Die App, Telegram, Home Assistant und MQTT fragen keine PIN. Eine [Taste für einen Benutzer](#taste-fuer-einen-benutzer) fragt sie nur, wenn du das für sie einstellst.
+
+## Taste für einen Benutzer
+
+Jeder Benutzer kann eine **Taste** an der Box bekommen: einen Taster an einem **freien GPIO-Pin**, der gegen **GND** schaltet. Ein Druck darauf wechselt sofort zu diesem Benutzer. In seiner Zeile wählst du unter **Taste** den Pin; **Kein Pin** nimmt die Taste wieder weg. Die Liste bietet nur Pins an, die nichts anderes belegt (die Box, eine Erweiterung, ein Drehregler, ein anderer Benutzer) und sagt bei den übrigen, wer sie hält.
+
+Wechseln mit der Taste geht auch bei **Nur in der App**, denn ein Taster an der Box ist wie die App oder MQTT: Wer ihn drücken kann, steht an der Box. Ob die Taste dabei eine PIN verlangt, stellst du in demselben Blatt ein, mit **Am Display zuerst die PIN abfragen**:
+
+| Einstellung | Wirkung eines Drucks auf die Taste |
+| --- | --- |
+| aus | wechselt sofort, ohne PIN, auch wenn für den Benutzer eine PIN am Display eingestellt ist |
+| an | das Display zeigt das Zahlenfeld für den Benutzer, und gewechselt wird erst mit der richtigen PIN. Gilt dieselbe Sperre wie bei jedem Wechsel am Display: nach fünf falschen Versuchen nimmt es eine Minute lang keine PIN an |
+
+Das Abfragen hängt nur an dieser Einstellung, nicht am Wechselmodus. Hat der Benutzer keine [PIN](#pin), gibt es nichts abzufragen, und die Taste wechselt sofort. Die Tasten gelten, solange **Mehrere Benutzer** an ist; danach sind ihre Pins wieder frei. Der Taster verbindet den Pin mit GND, den Pull-up bringt der Pin selbst mit (siehe [GPIO-Belegung](../anhang/gpio.md)).
 
 ## Ein anderes Kind bearbeiten, ohne zu wechseln
 

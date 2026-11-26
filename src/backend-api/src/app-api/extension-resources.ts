@@ -425,6 +425,15 @@ export function coreResources(config: Record<string, unknown> | undefined): { po
   return { ports, gpio }
 }
 
+/**
+ * The pins of the users' buttons (users.ts: a button of its own that switches to the user), given by the server: the core holds
+ * them while several users are switched on, as it holds the rotary encoder's. A function and not a list - the users change.
+ */
+let userButtonPins: () => { pin: number; by: string }[] = () => []
+export function setUserButtonPins(source: () => { pin: number; by: string }[]): void {
+  userButtonPins = source
+}
+
 export interface Probe {
   /** runs a command and gives its output ('' when it failed) */
   run: (cmd: string, args: string[]) => Promise<{ ok: boolean; out: string }>
@@ -444,11 +453,14 @@ export async function gatherTaken(options: {
   probe: Probe
   /** what the installed version of `self` declared: what listens or is claimed for that is its own and no collision */
   selfDeclared?: Resources
+  /** the users' buttons: left out (the choice of a user's button: his own pin is his own) - else the server's list */
+  withoutUserButtons?: boolean
 }): Promise<Taken> {
   const t = emptyTaken()
   const core = coreResources(options.config)
   for (const p of core.ports) addPort(t, p.proto, p.port, p.by)
   for (const g of core.gpio) addGpio(t, g.pin, g.by)
+  if (!options.withoutUserButtons) for (const g of userButtonPins()) addGpio(t, g.pin, g.by)
 
   for (const other of options.others) {
     if (other.id === options.self) continue

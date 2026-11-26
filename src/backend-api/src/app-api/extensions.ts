@@ -326,6 +326,22 @@ export async function takenForRotary(config: Record<string, unknown> | undefined
   })
 }
 
+/**
+ * Everything that is taken on the box, for the choice of the pins of the users' buttons (users.ts): the pins the users' buttons have now
+ * are theirs (the server's gpiomon holds them), whatever else the core, the boot configuration, the extensions or a running program
+ * hold is not.
+ */
+export async function takenForUsers(config: Record<string, unknown> | undefined, own: number[]): Promise<Awaited<ReturnType<typeof gatherTaken>>> {
+  const installed = await installedManifests()
+  return gatherTaken({
+    selfDeclared: { gpio: own.map((pin) => ({ pin })) },
+    config,
+    withoutUserButtons: true,
+    others: await Promise.all(installed.map(async (m) => ({ id: m.id, resources: await heldResources(m) }))),
+    probe: realProbe((cmd, args) => run(cmd, args, 15000)),
+  })
+}
+
 /** The GPIO pins chosen in the settings of an extension (its settings of the type "gpio"; 0 is "none"), each once. */
 export function chosenGpio(manifest: Manifest, settings: Record<string, unknown>): GpioUse[] {
   const out: GpioUse[] = []

@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Mantener reproducir/pausa para el segundo juego",
  "1 Sekunde": "1 segundo",
  "2 Sekunden": "2 segundos",
- "3 Sekunden": "3 segundos"
+ "3 Sekunden": "3 segundos",
+ "Taste": "Botón",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "El botón vale mientras «Varios usuarios» esté activado.",
+ "Taste gespeichert": "Botón guardado",
+ "Taste entfernt": "Botón eliminado",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Otro usuario ya tiene este pin.",
+ "GPIO {} nutzt schon: {}": "GPIO {} ya lo usa: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (botón de {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Un botón en un pin GPIO libre (a GND) cambia a {}. Funciona también con «Solo en la app».",
+ "Am Display zuerst die PIN abfragen": "Pedir primero el PIN en la pantalla",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "La pantalla muestra entonces el teclado numérico de {}, y el cambio solo funciona con el PIN correcto. Sin un PIN configurado, el botón cambia de inmediato."
 }

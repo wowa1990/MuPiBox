@@ -17600,6 +17600,7 @@ const EXT_WHO = {
 }
 const EXT_WHO_PATTERNS = [
   [/^extension (.+)$/, 'Erweiterung {}'],
+  [/^MuPiBox \(button of user (.+)\)$/, 'MuPiBox (Taste von {})'],
   [/^the boot configuration \((i2c\w*): I2C bus\)$/, 'die Boot-Konfiguration ({}: I²C-Bus)'],
   [/^the boot configuration \(dtoverlay (.+)\)$/, 'die Boot-Konfiguration (dtoverlay {})'],
   [/^(.+) \(running\)$/, '{} (läuft)'],
@@ -19154,6 +19155,8 @@ function userError(r) {
   if (reason === 'current') return 'Der aktive Benutzer lässt sich nicht entfernen.'
   if (reason === 'color') return 'Diese Farbe hat schon jemand.'
   if (reason === 'pin') return 'Bitte vier Ziffern eingeben'
+  if (e === 'gpio_twice') return 'Diesen Pin hat schon ein anderer Benutzer.'
+  if (e === 'gpio_taken') return tr(`GPIO ${r.body.pin} nutzt schon: ${String(r.body.by ?? '').split(', ').map(extWho).join(', ')}`)
   // (the list changed meanwhile - on another phone, at the display: it is loaded anew)
   if (e === 'unknown_user' || e === 'disabled') return 'Die Liste hat sich inzwischen geändert.'
   return 'Das hat nicht geklappt'
@@ -19282,6 +19285,31 @@ function userPinSheet(u) {
     },
   )
 }
+// The button of a user: a pin of the header with a button to GND - pressing it switches to him, without the PIN of the display
+async function userGpioSheet(u) {
+  const r = await api(`${API}/users/gpio`, { timeoutMs: 20000 })
+  // (no answer: his own pin stays, nothing else is offered)
+  const free = r.ok && Array.isArray(r.body?.pins) ? r.body.pins.filter((p) => !(p.holders ?? []).length).map((p) => Number(p.pin)) : []
+  const others = new Set((usersState?.users ?? []).filter((o) => o.id !== u.id && o.gpio).map((o) => o.gpio))
+  const pins = [...new Set([u.gpio, ...free])].filter((pin) => Number.isInteger(pin) && GPIO_HEADER[pin] && !others.has(pin)).sort((x, y) => x - y)
+  const options = [rotaryPinText(0), ...pins.map(rotaryPinText)]
+  openSheet(
+    `<h2>${esc(tr('Taste'))}</h2><p class="help" style="margin:0">${esc(tr(`Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu ${un(u.name)}. Das geht auch bei „Nur in der App“.`))}</p>
+     <div class="field"><label for="user-gpio">${esc(tr('GPIO-Pin Taster'))}</label><select class="input" id="user-gpio">${options.map((o) => `<option${o === rotaryPinText(u.gpio ?? 0) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>
+     <small>${esc(tr('Die Taste gilt, solange „Mehrere Benutzer“ an ist.'))}</small></div>
+     <div class="row"><span class="lbl"><b>Am Display zuerst die PIN abfragen</b><small>${esc(tr(`Das Display zeigt dann das Zahlenfeld für ${un(u.name)}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.`))}</small></span><label class="switch"><input type="checkbox" id="user-gpio-ask" ${u.gpioAsk ? 'checked' : ''} aria-label="${esc(tr('Am Display zuerst die PIN abfragen'))}"><span></span></label></div>
+     <div class="btns"><button class="btn" data-close>Abbrechen</button><button class="btn primary" data-ok>Speichern</button></div>`,
+    (sheet, close) => {
+      sheet.querySelector('[data-close]').onclick = close
+      sheet.querySelector('[data-ok]').onclick = async () => {
+        const pin = rotaryPinNumber(sheet.querySelector('#user-gpio').value)
+        const ask = sheet.querySelector('#user-gpio-ask').checked
+        if (pin === (u.gpio ?? 0) && ask === (u.gpioAsk === true)) return close()
+        if (await userAction('gpio', { id: u.id, pin, ask }, pin ? 'Taste gespeichert' : 'Taste entfernt')) close()
+      }
+    },
+  )
+}
 // Several users off: with whom the box goes on - the others rest with their things
 function usersOffSheet() {
   const list = usersState?.users ?? []
@@ -19316,9 +19344,9 @@ function usersSections() {
       const active = u.id === s.current
       // (name, its library and "aktiv" in one line with the dot; switching at its end; what can be changed below, under
       // the name)
-      return `<div class="entry user-row${active ? ' is-active' : ''}">${userDot(u.color, 28)}<span class="lbl"><b><span translate="no">${esc(u.name)}</span>${active ? `<span class="chip ok">${esc(tr('aktiv'))}</span>` : ''}</b><small>${esc(u.count === 1 ? tr('Ein Eintrag in der Bibliothek') : tr(`${u.count} Einträge in der Bibliothek`))}${u.pin ? ` · ${esc(tr('mit PIN'))}` : ''}</small></span>
+      return `<div class="entry user-row${active ? ' is-active' : ''}">${userDot(u.color, 28)}<span class="lbl"><b><span translate="no">${esc(u.name)}</span>${active ? `<span class="chip ok">${esc(tr('aktiv'))}</span>` : ''}</b><small>${esc(u.count === 1 ? tr('Ein Eintrag in der Bibliothek') : tr(`${u.count} Einträge in der Bibliothek`))}${u.pin ? ` · ${esc(tr('mit PIN'))}` : ''}${u.gpio ? ` · ${esc(tr('Taste'))} GPIO ${u.gpio}${u.gpioAsk && u.pin ? ` ${esc(tr('mit PIN'))}` : ''}` : ''}</small></span>
         ${active ? '' : `<button class="btn sm primary" data-user-switch="${esc(u.id)}">Wechseln</button>`}
-        <span class="user-acts"><button class="btn sm" data-user-rename="${esc(u.id)}">${icon('edit', 16)}Umbenennen</button><button class="btn sm" data-user-color="${esc(u.id)}">${userDot(u.color, 14)}Farbe</button><button class="btn sm" data-user-pin="${esc(u.id)}">${icon('lock', 16)}PIN</button>
+        <span class="user-acts"><button class="btn sm" data-user-rename="${esc(u.id)}">${icon('edit', 16)}Umbenennen</button><button class="btn sm" data-user-color="${esc(u.id)}">${userDot(u.color, 14)}Farbe</button><button class="btn sm" data-user-pin="${esc(u.id)}">${icon('lock', 16)}PIN</button><button class="btn sm" data-user-gpio="${esc(u.id)}">${icon('buttons', 16)}${esc(tr('Taste'))}</button>
         ${active ? '' : `<button class="btn sm danger" data-user-remove="${esc(u.id)}">${icon('trash', 16)}Entfernen</button>`}</span></div>`
     })
     .join('')
@@ -19381,6 +19409,7 @@ function mountUsers(root) {
   for (const b of root.querySelectorAll('[data-user-rename]')) b.onclick = () => userNameSheet(byId(b.dataset.userRename))
   for (const b of root.querySelectorAll('[data-user-color]')) b.onclick = () => userColorSheet(byId(b.dataset.userColor))
   for (const b of root.querySelectorAll('[data-user-pin]')) b.onclick = () => userPinSheet(byId(b.dataset.userPin))
+  for (const b of root.querySelectorAll('[data-user-gpio]')) b.onclick = () => userGpioSheet(byId(b.dataset.userGpio))
   for (const b of root.querySelectorAll('[data-user-remove]')) {
     const u = byId(b.dataset.userRemove)
     b.onclick = () =>

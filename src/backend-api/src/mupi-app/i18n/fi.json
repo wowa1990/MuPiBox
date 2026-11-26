@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Pidä toisto/tauko painettuna toista sarjaa varten",
  "1 Sekunde": "1 sekunti",
  "2 Sekunden": "2 sekuntia",
- "3 Sekunden": "3 sekuntia"
+ "3 Sekunden": "3 sekuntia",
+ "Taste": "Painike",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Painike toimii niin kauan kuin ”Useampi käyttäjä” on päällä.",
+ "Taste gespeichert": "Painike tallennettu",
+ "Taste entfernt": "Painike poistettu",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Toisella käyttäjällä on jo tämä pinni.",
+ "GPIO {} nutzt schon: {}": "GPIO {} on jo käytössä: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (käyttäjän {} painike)",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Vapaaseen GPIO-pinniin (GND:tä vasten) kytketty painike vaihtaa käyttäjään {}. Se toimii myös asetuksella ”Vain sovelluksessa”.",
+ "Am Display zuerst die PIN abfragen": "Kysy PIN ensin näytöllä",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Näyttö näyttää silloin käyttäjän {} numeronäppäimistön, ja vaihto onnistuu vasta oikealla PIN-koodilla. Ilman asetettua PIN-koodia painike vaihtaa heti."
 }

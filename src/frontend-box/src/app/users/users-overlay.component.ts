@@ -299,12 +299,41 @@ export class UsersOverlayComponent {
   /** the page is being left (the server loads it anew after a switch): its cut-off request is no failure */
   private leaving = false
   private idleTimer = 0
+  /** the user whose pad a button opened the overview with */
+  private keepPad: BoxUser | null = null
 
   constructor() {
+    // (a user's button asked for his PIN: the overview opens with the pad for him - also when the display shows a book or plays)
+    effect(() => {
+      const a = this.users.asked()
+      if (!a) return
+      untracked(() => {
+        const u = this.users.state()?.users.find((x) => x.id === a.id)
+        if (!u || !u.pin || !this.users.apart() || this.switching()) return
+        if (this.users.overviewOpen()) this.pinFor.set(u)
+        else {
+          // (the effect below clears the pad of a fresh overview - not this one)
+          this.keepPad = u
+          this.users.overviewOpen.set(true)
+        }
+        this.digits.set('')
+        this.message.set('')
+        this.touched()
+      })
+    })
     // (opened - the dot in the header: fresh, and closed again without a touch)
     effect(() => {
       if (!this.users.overviewOpen()) return
       untracked(() => {
+        const keep = this.keepPad
+        this.keepPad = null
+        if (keep) {
+          this.pinFor.set(keep)
+          this.digits.set('')
+          this.message.set('')
+          this.touched()
+          return
+        }
         this.pinFor.set(null)
         this.digits.set('')
         this.message.set('')

@@ -507,3 +507,109 @@ describe('the PIN of a user', () => {
     assert.ok(pinMatches(users.state().users.find((u) => u.id === back.id)?.pin, '2580'))
   })
 })
+
+describe('the button of a user (GPIO)', () => {
+  it('is a pin of the header that belongs to one user; 0 takes it away; only while several users are switched on', async () => {
+    const users = new Users(files, hooks)
+    await users.setEnabled(true)
+    const leni = await users.add('Leni', null)
+    await assert.rejects(users.setGpio(leni.id, 1), (e: UserSwitchError) => e.code === 'failed')
+    await assert.rejects(users.setGpio(leni.id, 28), (e: UserSwitchError) => e.code === 'failed')
+    await assert.rejects(users.setGpio(leni.id, '17'), (e: UserSwitchError) => e.code === 'failed')
+    await assert.rejects(users.setGpio('nobody', 17), (e: UserSwitchError) => e.code === 'unknown_user')
+    await users.setGpio(leni.id, 17)
+    assert.equal(users.state().users.find((u) => u.id === leni.id)?.gpio, 17)
+    // (each pin one user's)
+    await assert.rejects(users.setGpio(MAIN_ID, 17), (e: UserSwitchError) => e.code === 'gpio_twice')
+    await users.setGpio(MAIN_ID, 22)
+    assert.deepEqual(
+      users.gpioPins().map((g) => [g.pin, g.id]),
+      [
+        [22, MAIN_ID],
+        [17, leni.id],
+      ],
+    )
+    // (the same pin again: no error)
+    await users.setGpio(leni.id, 17)
+    await users.setGpio(MAIN_ID, 0)
+    assert.equal(users.state().users.find((u) => u.id === MAIN_ID)?.gpio, undefined)
+    // (switched off: the pins are free, but kept for when it is switched on again)
+    await users.setEnabled(false, MAIN_ID)
+    assert.deepEqual(users.gpioPins(), [])
+    await users.setEnabled(true)
+    assert.deepEqual(users.gpioPins().map((g) => g.pin), [17])
+  })
+
+  it('is independent of the PIN at the display: both can be set, the button switches without it', async () => {
+    const users = new Users(files, hooks)
+    await users.setEnabled(true)
+    const leni = await users.add('Leni', null)
+    await users.setPin(leni.id, '2580')
+    await users.setGpio(leni.id, 17)
+    const u = users.state().users.find((x) => x.id === leni.id)
+    assert.ok(u?.pin?.startsWith('s1$'))
+    assert.equal(u?.gpio, 17)
+    // (the display asks for the PIN, the button - switchTo, as the app and MQTT - does not)
+    await assert.rejects(users.switchFromDisplay(leni.id, undefined), (e: UserSwitchError) => e.code === 'pin')
+    await users.switchTo(leni.id)
+    assert.equal(users.state().current, leni.id)
+    // taking the PIN away leaves the button, and the other way round
+    await users.setPin(leni.id, '')
+    assert.equal(users.state().users.find((x) => x.id === leni.id)?.gpio, 17)
+    await users.setGpio(leni.id, null)
+    assert.equal(users.state().users.find((x) => x.id === leni.id)?.gpio, undefined)
+  })
+
+  it('may ask the PIN at the display first: only with a PIN of his own, and then the display switches even with "only in the app"', async () => {
+    const users = new Users(files, hooks)
+    await users.setEnabled(true)
+    const leni = await users.add('Leni', null)
+    await users.setGpio(leni.id, 17)
+    await assert.rejects(users.setGpioAsk(leni.id, 'yes'), (e: UserSwitchError) => e.code === 'failed')
+    await users.setGpioAsk(leni.id, true)
+    // (set, but no PIN of his own to ask: the button switches at once)
+    assert.deepEqual(users.gpioPins().map((g) => g.ask), [false])
+    await users.setPin(leni.id, '2580')
+    assert.deepEqual(users.gpioPins().map((g) => g.ask), [true])
+    // (the display is asked for the PIN; nothing yet)
+    assert.equal(users.pendingAsk(), null)
+    users.askPinAtDisplay(leni.id)
+    assert.equal(users.pendingAsk()?.id, leni.id)
+    assert.equal(users.state().current, MAIN_ID)
+    // ("only in the app" shuts the display's own tiles, not the pad its button opened; the PIN is still checked)
+    await users.setSwitchMode('app')
+    await assert.rejects(users.switchFromDisplay(leni.id, '0000'), (e: UserSwitchError) => e.code === 'pin')
+    await users.switchFromDisplay(leni.id, '2580')
+    assert.equal(users.state().current, leni.id)
+    assert.equal(users.pendingAsk(), null)
+    // (nothing asked: shut as before)
+    await assert.rejects(users.switchFromDisplay(MAIN_ID, undefined), (e: UserSwitchError) => e.code === 'mode')
+    // (a question about someone else does not open the way to him)
+    users.askPinAtDisplay(MAIN_ID)
+    await users.setSwitchMode('free')
+    await users.setGpioAsk(leni.id, false)
+    assert.equal(users.state().users.find((x) => x.id === leni.id)?.gpioAsk, undefined)
+    assert.deepEqual(users.gpioPins().map((g) => g.ask), [false])
+  })
+
+  it('is given up with the trash and a pin doubled in a damaged list stays with the first', async () => {
+    const users = new Users(files, hooks)
+    await users.setEnabled(true)
+    const leni = await users.add('Leni', null)
+    await users.setGpio(leni.id, 17)
+    await users.remove(leni.id)
+    assert.deepEqual(users.gpioPins(), [])
+    const [t] = files.trashList()
+    const back = await users.restore(t.key)
+    assert.equal(users.state().users.find((x) => x.id === back.id)?.gpio, undefined)
+    // (two users on one pin in the file - edited by hand: the first keeps it)
+    const f = files.read()
+    f.users[0].gpio = 5
+    f.users[1].gpio = 5
+    files.write(f)
+    assert.deepEqual(
+      files.read().users.map((x) => x.gpio),
+      [5, undefined],
+    )
+  })
+})

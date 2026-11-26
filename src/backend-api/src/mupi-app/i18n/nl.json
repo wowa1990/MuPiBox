@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Afspelen/pauzeren ingedrukt houden voor de tweede set",
  "1 Sekunde": "1 seconde",
  "2 Sekunden": "2 seconden",
- "3 Sekunden": "3 seconden"
+ "3 Sekunden": "3 seconden",
+ "Taste": "Knop",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "De knop werkt zolang ‘Meerdere gebruikers’ aan staat.",
+ "Taste gespeichert": "Knop opgeslagen",
+ "Taste entfernt": "Knop verwijderd",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Een andere gebruiker heeft deze pin al.",
+ "GPIO {} nutzt schon: {}": "GPIO {} wordt al gebruikt door: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (knop van {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Een knop op een vrije GPIO-pin (naar GND) schakelt over naar {}. Dat werkt ook bij ‘Alleen in de app’.",
+ "Am Display zuerst die PIN abfragen": "Eerst om de PIN vragen op het display",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Het display toont dan het cijferpaneel voor {}, en het overschakelen lukt pas met de juiste PIN. Zonder ingestelde PIN schakelt de knop meteen over."
 }

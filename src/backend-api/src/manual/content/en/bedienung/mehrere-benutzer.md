@@ -41,7 +41,20 @@ This works from the **lock screen** too. Play time belongs to each child, so a b
 
 ## PIN
 
-Every user can get a four-digit **PIN** (**PIN** in their row). The display asks for it before it switches **to that user**. That way a child cannot get to an adult's library or a sibling's play time. After five wrong tries the display takes no PIN for a minute. The app, Telegram, Home Assistant and MQTT ask for no PIN.
+Every user can get a four-digit **PIN** (**PIN** in their row). The display asks for it before it switches **to that user**. That way a child cannot get to an adult's library or a sibling's play time. After five wrong tries the display takes no PIN for a minute. The app, Telegram, Home Assistant and MQTT ask for no PIN. A [button for a user](#a-button-for-a-user) asks for it only if you set it to.
+
+## A button for a user
+
+Every user can get a **button** on the box: a push button on a **free GPIO pin** that connects to **GND**. Pressing it switches to that user at once. In their row you pick the pin under **Button**; **No pin** takes the button away again. The list offers only pins that nothing else holds (the box, an extension, a rotary encoder, another user) and says who holds the others.
+
+Switching with the button also works with **Only in the app**, because a button on the box is like the app or MQTT: whoever can press it is standing at the box. Whether the button asks for a PIN is set on the same sheet, with **Ask for the PIN at the display first**:
+
+| Setting | What pressing the button does |
+| --- | --- |
+| off | switches at once, without a PIN, even if a PIN is set at the display for that user |
+| on | the display shows the number pad for that user, and the switch happens only with the right PIN. The same lock applies as for any switch at the display: after five wrong tries it takes no PIN for a minute |
+
+Asking depends only on this setting, not on the way of switching. If the user has no [PIN](#pin), there is nothing to ask and the button switches at once. The buttons work as long as **Several users** is on; after that their pins are free again. The button connects the pin to GND; the pin brings its own pull-up (see [GPIO assignment](../anhang/gpio.md)).
 
 ## Editing another child without switching
 

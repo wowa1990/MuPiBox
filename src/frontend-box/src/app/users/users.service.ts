@@ -17,12 +17,18 @@ export interface UsersState {
   current: string
   switchMode: 'free' | 'hold' | 'app'
   users: BoxUser[]
+  /** a user's button asks for his PIN at the display: the display looks for that question (UsersService.pollAsk) */
+  ask: boolean
 }
 /** What a switch at the display answered */
 export type SwitchResult = { ok: true } | { error: 'pin'; left: number } | { error: 'pin_locked'; seconds: number } | { error: 'busy' | 'mode' | 'failed' }
 
 /** How long a tile is held with "hold" */
 export const HOLD_MS = 3000
+/** How often the display looks for the question of a user's button (only while a button asks for a PIN) */
+const ASK_POLL_MS = 1500
+/** A question older than this is none (a page that loads anew after a switch must not open an old one) */
+const ASK_FRESH_MS = 10_000
 
 /** The colour of a user (#RRGGBB); anything else grey */
 export function colorOf(user: { color?: unknown } | null | undefined): string {
@@ -36,6 +42,7 @@ function stateOf(raw: unknown): UsersState | null {
     enabled: r.enabled === true,
     current: r.current,
     switchMode: r.switchMode === 'hold' || r.switchMode === 'app' ? r.switchMode : 'free',
+    ask: r.ask === true,
     users: r.users
       .filter((u) => u && typeof u.id === 'string' && typeof u.name === 'string')
       .map((u) => ({ id: u.id, name: u.name, color: colorOf(u), pin: u.pin === true })),
@@ -96,6 +103,9 @@ export class UsersService {
     return s?.users.find((u) => u.id === s.current) ?? null
   })
   readonly overviewOpen = signal(false)
+  /** the user whose button asked for his PIN at the display: the overview opens with the pad for him */
+  readonly asked = signal<{ id: string; at: number } | null>(null)
+  private lastAskAt = 0
   /** a short note over the display (a medium of another library); null: none */
   readonly hint = signal<string | null>(null)
   private hintTimer = 0
@@ -104,6 +114,23 @@ export class UsersService {
     if (!isPlatformBrowser(inject(PLATFORM_ID))) return
     void this.load()
     window.setInterval((): void => void this.load(), 15_000)
+    window.setInterval((): void => void this.pollAsk(), ASK_POLL_MS)
+  }
+
+  /** Whether a user's button asked for a PIN just now - looked up only while some button is set to ask */
+  private async pollAsk(): Promise<void> {
+    if (!this.state()?.ask || !this.apart()) return
+    try {
+      const response = await fetch(`${environment.backend.apiUrl}/users/ask`, { cache: 'no-store', signal: AbortSignal.timeout(3000) })
+      if (!response.ok) return
+      const a = (await response.json()) as { id?: unknown; at?: unknown; ageMs?: unknown }
+      if (typeof a.id !== 'string' || typeof a.at !== 'number' || typeof a.ageMs !== 'number') return
+      if (a.at === this.lastAskAt || a.ageMs > ASK_FRESH_MS) return
+      this.lastAskAt = a.at
+      if (a.id !== this.state()?.current) this.asked.set({ id: a.id, at: a.at })
+    } catch {
+      // (nothing heard: the next look)
+    }
   }
 
   private loading: Promise<void> | null = null

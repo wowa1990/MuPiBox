@@ -27,7 +27,7 @@ På din box visar den här tabellen **bara de stift som används där med de akt
 
 ## Stift för egna knappar
 
-Med tillägget [Buttons & GPIO Input](../erweiterungen/buttons.md) ansluter du egna knappar till lediga GPIO-stift. Vilka stift som är lediga på din box visar tilläggets eget val: Upptagna stift går inte att välja där, och listan nämner vem som håller dem. Även andra [tillägg](../erweiterungen/index.md) kan uppta stift; boxen kontrollerar det före installationen. [NFC-tillägget](../erweiterungen/nfc.md) upptar SPI-anslutningen (GPIO 8, 9, 10 och 11) och två stift som du väljer i tillägget; i kortet ovan går det att välja som tillbehör.
+Med tillägget [Buttons & GPIO Input](../erweiterungen/buttons.md) ansluter du egna knappar till lediga GPIO-stift. Med [flera användare](../bedienung/mehrere-benutzer.md) kan varje användare också få en knapp på ett ledigt stift som byter direkt till hen; boxen håller de här stiften, och tilläggets lista nämner dem ”knapp för …”. Vilka stift som är lediga på din box visar tilläggets eget val: Upptagna stift går inte att välja där, och listan nämner vem som håller dem. Även andra [tillägg](../erweiterungen/index.md) kan uppta stift; boxen kontrollerar det före installationen. [NFC-tillägget](../erweiterungen/nfc.md) upptar SPI-anslutningen (GPIO 8, 9, 10 och 11) och två stift som du väljer i tillägget; i kortet ovan går det att välja som tillbehör.
 
 ## Var står stiftinställningen mer?
 

@@ -22,6 +22,7 @@ import {
   rotaryHeldPins,
   rotaryPins,
   sameResources,
+  setUserButtonPins,
 } from './app-api/extension-resources'
 import { checkManifest } from './app-api/extensions'
 
@@ -276,6 +277,18 @@ describe('extension resources: reading the box', () => {
     // (its own earlier declaration in "others" is skipped too)
     assert.equal(taken.ports.has('tcp:9300'), false)
     assert.deepEqual(taken.blind, [])
+  })
+
+  it("holds the pins of the users' buttons - except for the choice of a user's button, where they are the users' own", async () => {
+    const probe: Probe = { run: async () => ({ ok: false, out: '' }), readFile: async () => '' }
+    setUserButtonPins(() => [{ pin: 17, by: 'MuPiBox (button of user Leni)' }])
+    try {
+      assert.match(String((await gatherTaken({ config: undefined, others: [], probe })).gpio.get(17)), /button of user Leni/)
+      assert.equal((await gatherTaken({ config: undefined, others: [], probe, withoutUserButtons: true })).gpio.has(17), false)
+    } finally {
+      setUserButtonPins(() => [])
+    }
+    assert.equal((await gatherTaken({ config: undefined, others: [], probe })).gpio.has(17), false)
   })
 
   it('a probe that fails is reported, not guessed', async () => {

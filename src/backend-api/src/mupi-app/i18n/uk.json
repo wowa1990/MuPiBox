@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Утримуйте відтворення/паузу для другого набору",
  "1 Sekunde": "1 секунда",
  "2 Sekunden": "2 секунди",
- "3 Sekunden": "3 секунди"
+ "3 Sekunden": "3 секунди",
+ "Taste": "Кнопка",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Кнопка працює, доки ввімкнено «Кілька користувачів».",
+ "Taste gespeichert": "Кнопку збережено",
+ "Taste entfernt": "Кнопку видалено",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Цей пін уже зайнятий іншим користувачем.",
+ "GPIO {} nutzt schon: {}": "GPIO {} уже використовується: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (кнопка користувача {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Кнопка на вільному піні GPIO (на GND) перемикає на {}. Це працює і в режимі «Лише в застосунку».",
+ "Am Display zuerst die PIN abfragen": "Спочатку запитувати PIN на дисплеї",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Тоді дисплей покаже цифрову панель для {}, і перемикання вдасться лише з правильним PIN. Якщо PIN не задано, кнопка перемикає одразу."
 }

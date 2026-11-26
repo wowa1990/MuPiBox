@@ -4851,5 +4851,15 @@
  "Play/Pause halten für den zweiten Satz": "Hold play/pause for the second set",
  "1 Sekunde": "1 second",
  "2 Sekunden": "2 seconds",
- "3 Sekunden": "3 seconds"
+ "3 Sekunden": "3 seconds",
+ "Taste": "Button",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "The button works as long as “Several users” is on.",
+ "Taste gespeichert": "Button saved",
+ "Taste entfernt": "Button removed",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Another user already has this pin.",
+ "GPIO {} nutzt schon: {}": "GPIO {} is already used by: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (button of {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "A button on a free GPIO pin (to GND) switches to {}. That also works with “Only in the app”.",
+ "Am Display zuerst die PIN abfragen": "Ask for the PIN at the display first",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "The display then shows the number pad for {}, and the switch works only with the right PIN. Without a PIN set, the button switches at once."
 }

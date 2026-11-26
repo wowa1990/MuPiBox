@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Przytrzymaj odtwarzanie/pauzę, aby przejść do drugiego zestawu",
  "1 Sekunde": "1 sekunda",
  "2 Sekunden": "2 sekundy",
- "3 Sekunden": "3 sekundy"
+ "3 Sekunden": "3 sekundy",
+ "Taste": "Przycisk",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Przycisk działa, dopóki włączona jest opcja „Wielu użytkowników”.",
+ "Taste gespeichert": "Przycisk zapisany",
+ "Taste entfernt": "Przycisk usunięty",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Inny użytkownik ma już ten pin.",
+ "GPIO {} nutzt schon: {}": "GPIO {} jest już używany przez: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (przycisk użytkownika {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Przycisk na wolnym pinie GPIO (do GND) przełącza na {}. Działa to także przy opcji „Tylko w aplikacji”.",
+ "Am Display zuerst die PIN abfragen": "Najpierw zapytaj o PIN na wyświetlaczu",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Wyświetlacz pokazuje wtedy klawiaturę numeryczną dla {}, a przełączenie działa dopiero z właściwym PIN-em. Bez ustawionego PIN-u przycisk przełącza od razu."
 }

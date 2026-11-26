@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "İkinci set için oynat/duraklat tuşunu basılı tut",
  "1 Sekunde": "1 saniye",
  "2 Sekunden": "2 saniye",
- "3 Sekunden": "3 saniye"
+ "3 Sekunden": "3 saniye",
+ "Taste": "Düğme",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Düğme, “Birden çok kullanıcı” açık olduğu sürece geçerlidir.",
+ "Taste gespeichert": "Düğme kaydedildi",
+ "Taste entfernt": "Düğme kaldırıldı",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Bu pini başka bir kullanıcı zaten kullanıyor.",
+ "GPIO {} nutzt schon: {}": "GPIO {} zaten şu tarafından kullanılıyor: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (kullanıcı {} düğmesi)",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Boş bir GPIO pinindeki (GND’ye) düğme {} kullanıcısına geçer. Bu “Yalnızca uygulamada” seçiliyken de çalışır.",
+ "Am Display zuerst die PIN abfragen": "Önce ekranda PIN sor",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Ekran bu durumda {} için sayı tuş takımını gösterir ve geçiş yalnızca doğru PIN ile olur. PIN ayarlanmamışsa düğme hemen geçiş yapar."
 }

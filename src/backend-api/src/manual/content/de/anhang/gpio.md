@@ -27,7 +27,7 @@ Auf deiner Box zeigt diese Tabelle **nur die Pins, die dort mit den aktuellen Ei
 
 ## Pins für eigene Taster
 
-Mit der Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) schließt du eigene Taster an freie GPIO-Pins an. Welche Pins auf deiner Box frei sind, zeigt die Auswahl der Erweiterung selbst: Belegte Pins lassen sich dort nicht wählen, und die Liste nennt, wer sie hält. Auch andere [Erweiterungen](../erweiterungen/index.md) können Pins belegen; die Box prüft das vor der Installation. Der [NFC-Extension](../erweiterungen/nfc.md) belegt den SPI-Anschluss (GPIO 8, 9, 10 und 11) und zwei Pins, die du in der Erweiterung wählst; in der Karte oben ist er als Zubehör zu wählen.
+Mit der Erweiterung [Buttons & GPIO Input](../erweiterungen/buttons.md) schließt du eigene Taster an freie GPIO-Pins an. Auch bei [mehreren Benutzern](../bedienung/mehrere-benutzer.md) kann jeder Benutzer einen Taster an einem freien Pin bekommen, der direkt zu ihm wechselt; diese Pins hält die Box, und die Auswahl der Erweiterung nennt sie als „Taste von …“. Welche Pins auf deiner Box frei sind, zeigt die Auswahl der Erweiterung selbst: Belegte Pins lassen sich dort nicht wählen, und die Liste nennt, wer sie hält. Auch andere [Erweiterungen](../erweiterungen/index.md) können Pins belegen; die Box prüft das vor der Installation. Der [NFC-Extension](../erweiterungen/nfc.md) belegt den SPI-Anschluss (GPIO 8, 9, 10 und 11) und zwei Pins, die du in der Erweiterung wählst; in der Karte oben ist er als Zubehör zu wählen.
 
 ## Wo steht die Pin-Einstellung noch?
 

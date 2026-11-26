@@ -35,6 +35,8 @@ export const ICONS = {
   text: "M4 6h16M4 12h10M4 18h13",
   touch: "M9 11V5a2 2 0 0 1 4 0v6M13 10a2 2 0 0 1 4 0v2M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3l-3-5a2 2 0 0 1 3-2l2 2",
   eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  // (the picture of the extension "Buttons & GPIO Input": a button with its rays)
+  buttons: "M4.86 14.06h14.28a1.3 1.3 0 0 1 1.3 1.3v3.03a1.3 1.3 0 0 1-1.3 1.3H4.86a1.3 1.3 0 0 1-1.3-1.3v-3.03a1.3 1.3 0 0 1 1.3-1.3zM7.3 14.06v-3a4.69 4.69 0 0 1 9.38 0v3M12 4.3V2.06M7.03 5.8l-1.4-1.7M16.97 5.8l1.4-1.7",
   chip: "M7 7h10v10H7zM10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3",
   knob: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5",
   power: "M12 2v10M6.3 6.3a8 8 0 1 0 11.4 0",

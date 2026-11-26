@@ -41,7 +41,20 @@ Det går även från **spärrbilden**. Speltiden gäller ju per barn: har ett sy
 
 ## PIN
 
-Varje användare kan få en **PIN** på fyra siffror (**PIN** på hens rad). Displayen frågar efter den innan den byter **till den här användaren**. Så kommer inget barn åt en vuxens bibliotek eller ett syskons speltid. Efter fem felaktiga försök tar displayen inte emot någon PIN på en minut. Appen, Telegram, Home Assistant och MQTT frågar inte efter någon PIN.
+Varje användare kan få en **PIN** på fyra siffror (**PIN** på hens rad). Displayen frågar efter den innan den byter **till den här användaren**. Så kommer inget barn åt en vuxens bibliotek eller ett syskons speltid. Efter fem felaktiga försök tar displayen inte emot någon PIN på en minut. Appen, Telegram, Home Assistant och MQTT frågar inte efter någon PIN. [En knapp för en användare](#en-knapp-foer-en-anvaendare) frågar bara om du ställer in det.
+
+## En knapp för en användare
+
+Varje användare kan få en **knapp** på boxen: en tryckknapp på ett **ledigt GPIO-stift** som kopplas mot **GND**. Ett tryck på den byter genast till den användaren. På hens rad väljer du stiftet under **Knapp**; **Ingen pin** tar bort knappen igen. Listan erbjuder bara stift som inget annat använder (boxen, ett tillägg, en vridratt, en annan användare) och säger vem som håller de övriga.
+
+Att byta med knappen går också vid **Bara i appen**, eftersom en knapp på boxen är som appen eller MQTT: den som kan trycka på den står vid boxen. Om knappen kräver en PIN ställer du in på samma ark, med **Fråga efter PIN på skärmen först**:
+
+| Inställning | Vad ett tryck på knappen gör |
+| --- | --- |
+| av | byter genast, utan PIN, även om en PIN är inställd på skärmen för användaren |
+| på | skärmen visar sifferpanelen för användaren, och bytet sker först med rätt PIN. Samma spärr gäller som vid varje byte på skärmen: efter fem felaktiga försök tar den inte emot någon PIN på en minut |
+
+Frågan hänger bara på den här inställningen, inte på sättet att byta. Har användaren ingen [PIN](#pin) finns inget att fråga efter, och knappen byter genast. Knapparna gäller så länge **Flera användare** är på; därefter är deras stift lediga igen. Knappen kopplar stiftet mot GND, stiftet har själv sin pull-up (se [GPIO-belägging](../anhang/gpio.md)).
 
 ## Redigera ett annat barn utan att byta
 

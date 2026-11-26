@@ -4743,5 +4743,15 @@
  "Play/Pause halten für den zweiten Satz": "Podržet přehrát/pozastavit pro druhou sadu",
  "1 Sekunde": "1 sekunda",
  "2 Sekunden": "2 sekundy",
- "3 Sekunden": "3 sekundy"
+ "3 Sekunden": "3 sekundy",
+ "Taste": "Tlačítko",
+ "Die Taste gilt, solange „Mehrere Benutzer“ an ist.": "Tlačítko platí, dokud je zapnuto „Více uživatelů“.",
+ "Taste gespeichert": "Tlačítko uloženo",
+ "Taste entfernt": "Tlačítko odebráno",
+ "Diesen Pin hat schon ein anderer Benutzer.": "Tento pin už má jiný uživatel.",
+ "GPIO {} nutzt schon: {}": "GPIO {} už používá: {}",
+ "MuPiBox (Taste von {})": "MuPiBox (tlačítko uživatele {})",
+ "Ein Taster an einem freien GPIO-Pin (gegen GND) wechselt zu {}. Das geht auch bei „Nur in der App“.": "Tlačítko na volném pinu GPIO (proti GND) přepne na {}. Funguje to i při volbě „Jen v aplikaci“.",
+ "Am Display zuerst die PIN abfragen": "Nejdřív se zeptat na PIN na displeji",
+ "Das Display zeigt dann das Zahlenfeld für {}, und der Wechsel klappt erst mit der richtigen PIN. Ohne eingestellte PIN wechselt die Taste sofort.": "Displej pak ukáže číselnou klávesnici pro {} a přepnutí se podaří až se správným PINem. Bez nastaveného PINu tlačítko přepne hned."
 }
