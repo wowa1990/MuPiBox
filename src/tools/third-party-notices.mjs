@@ -373,6 +373,12 @@ const STATIC = {
       'the source of the version built (1.1, commit 57f26fb1 - github.com/godspeed1989/fbv, also github.com/splitti/fbv) next to it: `bin/fbv/fbv-1.1-57f26fb1-source.tar.gz`; built with `dev/compile_scripts/fbv.sh`',
     ],
     ['led_control', 'power LED, compiled on the box from `scripts/led/led_control.c`', 'MuPiBox project code', ''],
+    [
+      'SteelSeries-Canvas (steelseries.js)',
+      'the gauges of the Weather extension (`extensions/weather/steelseries.js`, drawn on the display without the internet)',
+      'BSD-2-Clause (Gerrit Grunwald, Mark Crossley)',
+      'https://github.com/HanSolo/SteelSeries-Canvas - licence text in `extensions/weather/LICENSE-steelseries.md`; the ES build is bundled with one local fix (`new` for the brushed-metal texture)',
+    ],
     ...themeFonts(),
     [
       '"Glitch019 / Computer Startup" by Zeraora (`media/sound/startup.wav`)',

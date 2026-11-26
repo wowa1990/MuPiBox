@@ -91,6 +91,9 @@ settings card from what the manifest declares.
   route is in your API part and needs the login of the parents; it answers `{ "rows": [{ "label": "…", "value": "…", "tone": "ok|warn|error" }] }`
   (at most 12 rows), and the app asks it every 2.5 seconds while the card is open. Report fixed sentences, not composed ones: the app translates a
   text if it knows it exactly.
+  With `hostApi` 19 a setting can be **quiet**: `"quiet": true` (needs a `display` part). When the app saves only quiet settings, the display does not
+  load its page again, so the user can change several one after the other; the extension reloads the display itself when it is time (an `action`
+  button whose route calls `POST http://127.0.0.1:5005/display/reload-page`).
   With `hostApi` 13 a setting can be **per user**: `"perUser": true` (not on a `secret` or a `gpio` setting - those belong to the box).
   Every user of the box (several users, 5.1) then has a value of their own, a favourite club, say; one they have not set is the value
   of the whole box, else the default. `host.settings()`, the `settings` of the player part and the display always get those of the user

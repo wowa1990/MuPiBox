@@ -165,6 +165,7 @@ the packages in the bundles.
 | Baloo 2 font | kids' themes (`themes/_fonts`) | SIL Open Font License 1.1 | `OFL-Baloo2.txt` next to the font |
 | fbv (framebuffer image viewer) | boot and shutdown pictures, prebuilt in `bin/fbv` | GPL-2.0 | the source of the version built (1.1, commit 57f26fb1 - github.com/godspeed1989/fbv, also github.com/splitti/fbv) next to it: `bin/fbv/fbv-1.1-57f26fb1-source.tar.gz`; built with `dev/compile_scripts/fbv.sh` |
 | led_control | power LED, compiled on the box from `scripts/led/led_control.c` | MuPiBox project code |  |
+| SteelSeries-Canvas (steelseries.js) | the gauges of the Weather extension (`extensions/weather/steelseries.js`, drawn on the display without the internet) | BSD-2-Clause (Gerrit Grunwald, Mark Crossley) | https://github.com/HanSolo/SteelSeries-Canvas - licence text in `extensions/weather/LICENSE-steelseries.md`; the ES build is bundled with one local fix (`new` for the brushed-metal texture) |
 | Berlin Small Caps by Manfred Klein (`BerlinSmallCaps.ttf`) | theme `dinosaur` | dafont "100% Free"; the file names only the copyright | https://www.dafont.com/berlin-small-caps.font |
 | Intensa Fuente by Edumorcel (`IntensaFuente.ttf`) | theme `spiderman` | dafont "100% Free"; the file has no license of its own | https://www.dafont.com/intensa-fuente.font |
 | Komikandy by Link Olsson & Apostrophic Lab (`KOMIKND_.ttf`) | theme `lines` | Apostrophic Labs freeware: use in any context; not to be modified for re-release, nor sold (passed on unmodified here) | https://www.dafont.com/komikandy.font |

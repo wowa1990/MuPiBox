@@ -44,8 +44,10 @@ if (!process.env.MUPIBOX_EXT_DIR && process.env.NODE_ENV !== 'test' && process.e
 // size (128 × 50): NFC 0.15.2 has the OLED picture of a tag there, an older app went straight to the file and named 128 × 64;
 // 17: a `form` item - a button that opens a dialog the extension describes (fields, a table of rows, a picture) - and `host.libraryChanged()`,
 // `host.paths.media`: the USB CD drive 1.1.0 rips a CD into a folder of the media, asking for the album's data first;
-// 18: `api.player.controls` on the display - the buttons of the player page, in place of the normal ones: Media-Control 1.0.0)
-export const HOST_API = 18
+// 18: `api.player.controls` on the display - the buttons of the player page, in place of the normal ones: Media-Control 1.0.0;
+// 19: a setting with `quiet: true` - saving it does not load the display again, the extension does it when it wants: Weather 1.10.0, whose
+//     look is changed in several steps and then applied with a button)
+export const HOST_API = 19
 // (the catalog of the MuPiBox, in its repository: what is in it is trusted - an extension can do everything on the box; while 5.1
 // is not with splitti yet, the 5.1 branch of the fork that builds it)
 const DEFAULT_CATALOG = 'https://raw.githubusercontent.com/wowa1990/MuPiBox/upstream-v5.1-pr/extensions/catalog.json'
@@ -96,7 +98,7 @@ export interface Manifest {
   // the settings page of the extension in the app, declared (no code of the extension runs in the app): a card with these fields
   // (place, adopt - hostApi 5: the settings as a page of their own under Einstellungen > System, and pages of the core shown there)
   ui?: { title: string; heading?: string; help?: string; place?: 'system'; adopt?: string[]; items: { key: string; label: string; help?: string; dep?: string; showIf?: { key: string; is: string[] }; hideIf?: { key: string; is: string[] }; live?: string; choices?: { value: string | number; label: string; image?: string }[]; tip?: boolean; core?: string; type?: 'lookup' | 'order' | 'roster' | 'heading' | 'status' | 'action' | 'list' | 'form'; state?: string; post?: string; form?: string; inline?: boolean; confirm?: string; empty?: string; page?: boolean; card?: boolean; rename?: string; optional?: string; extra?: { key: string; label?: string; when: (string | number)[]; choices: { value: string | number; label: string }[] }; search?: string; list?: string; add?: string; remove?: string; select?: string; color?: string; restore?: string; addFrom?: boolean; slider?: boolean; adopt?: string[]; download?: string; upload?: string; file?: string; ext?: string; accept?: string; beside?: boolean; holder?: string }[] }
-  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string; perUser?: boolean }>
+  settings?: Record<string, { type: 'boolean' | 'string' | 'number' | 'secret' | 'gpio'; default?: unknown; pattern?: string; options?: (string | number)[]; min?: number; max?: number; legacy?: string; perUser?: boolean; quiet?: boolean }>
   system?: { udev?: { name: string; file: string }[]; units?: { name: string; file: string }[]; groups?: string[]; packages?: string[] }
   /** what it needs from the box: ports, GPIO pins, services (required; {} for nothing) - tested against the box before it is installed */
   resources?: Resources
@@ -597,6 +599,8 @@ export function checkManifest(m: unknown, files: Set<string>): string | null {
     // (hostApi 13) a setting every user of the box has for himself (a favourite club, say): not a secret and not a pin - those
     // belong to the box
     if (spec.perUser !== undefined && (spec.perUser !== true || x.hostApi < 13 || spec.type === SECRET_SETTING || spec.type === GPIO_SETTING)) return `a setting per user needs hostApi 13 and is no secret and no pin: ${key}`
+    // (hostApi 19) a setting that does not make the display load its page again when it is saved: the extension has a button for that
+    if (spec.quiet !== undefined && (spec.quiet !== true || x.hostApi < 19 || x.display === undefined)) return `a quiet setting needs hostApi 19 and a display part: ${key}`
     if (spec.options !== undefined && (!Array.isArray(spec.options) || spec.options.length < 2 || spec.options.length > 20 || spec.type === 'boolean' || spec.options.some((o) => (spec.type === 'number' ? typeof o !== 'number' : typeof o !== 'string')))) return `bad options: ${key}`
     if ((spec.min !== undefined || spec.max !== undefined) && (spec.type !== 'number' || (spec.min !== undefined && !Number.isFinite(spec.min)) || (spec.max !== undefined && !Number.isFinite(spec.max)))) return `bad range: ${key}`
     if (spec.pattern !== undefined) {
@@ -1699,7 +1703,8 @@ export function registerExtensionRoutes(router: Router, deps: ExtensionDeps): vo
       // (the API part hears of it - it may hold pins or timers that follow the settings)
       await notifySettings(manifest)
       // (the display reads the settings of its part when its page loads)
-      if (manifest.display) reloadDisplay()
+      // (unless every setting saved is a quiet one: the extension loads the display again itself when its user says so)
+      if (manifest.display && !Object.keys(checked.clean).every((k) => manifest.settings?.[k]?.quiet === true)) reloadDisplay()
     }
     res.json({ ok: true, ...(await publicSettings(manifest, user)) })
   })

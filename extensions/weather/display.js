@@ -1,16 +1,14 @@
 // The weather, display part: a "Wetter" tab after the categories (when a place is chosen in the app) that opens a full-screen page with
 // measuring dials - temperature, humidity, wind speed, wind direction, pressure and rain. The dials are the SteelSeries gauges
 // (steelseries.js, BSD-2, see LICENSE-steelseries.md), which come with the extension, so the display draws them without the internet;
-// the values come from the API part (api.js) as often as the app says (every ten minutes unless set otherwise).
+// the values come from the API part (api.js), which the page asks every minute.
 
-const UNIT_MS = { seconds: 1000, minutes: 60 * 1000 }
-
-/** How often the open page asks for new values (every N seconds or minutes, as set): from 10 seconds to a day, 10 minutes when nothing is set. */
-export function intervalMs(settings) {
-  const every = Number(settings?.refreshEvery)
-  const ms = Number.isFinite(every) && every > 0 ? every * (UNIT_MS[settings?.refreshUnit] ?? UNIT_MS.minutes) : 10 * UNIT_MS.minutes
-  return Math.min(Math.max(Math.round(ms), 10 * 1000), 24 * 60 * 60 * 1000)
-}
+/**
+ * How often the open page asks the box: every minute. The weather servers give new answers in steps of their own (MET Norway about
+ * every half hour, Open-Meteo every quarter of an hour); the box keeps the answer until then and counts the values of MET Norway over
+ * to the minute, so a question a minute costs the weather server nothing.
+ */
+export const REFRESH_MS = 60 * 1000
 
 /** The first of the steps that holds the value, else the last: a scale that fits what the dial shows. */
 export function pickMax(value, steps) {
@@ -128,8 +126,10 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
   const windSpeed = wind(data.windSpeed)
   const windGust = wind(data.windGust)
   const windMax = pickMax(Math.max(windSpeed || 0, windGust || 0), U.wind.steps)
-  const rain24 = rain(data.rain24)
-  const rainMax = pickMax(rain24 || 0, U.rain.steps)
+  // (the rain of the last and of the next 24 hours: both are shown, in two displays; the pointer shows the last 24 hours when they are known)
+  const rainPast = rain(data.rainPast24)
+  const rainNext = rain(data.rainNext24)
+  const rainMax = pickMax(Math.max(rainPast || 0, rainNext || 0), U.rain.steps)
   // (a low and a high pressure are the red ends of the scale)
   const warn = 'rgba(225,30,0,0.55)'
   const pLow = press(975)
@@ -152,15 +152,49 @@ export function dialsFor(data, units = UNIT_DEFAULTS) {
     { id: 'dir', kind: 'direction', title: 'Windrichtung', latest: data.windDir, average: data.windDirAvg, caption: 'legend' },
     { id: 'baro', kind: 'radial', title: 'Luftdruck', unit: U.press.label, min: p.min, max: p.max, value: pressure, decimals: U.press.decimals, scaleDecimals: U.press.scaleDecimals ?? 0, sections: [], areas: [{ start: p.min, stop: pLow, color: warn }, { start: pHigh, stop: p.max, color: warn }], minMeasured: press(data.pressMin), maxMeasured: press(data.pressMax), trend: data.trend?.press ?? 0, caption: '' },
     {
-      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: `${U.rain.label} / ${data.rainKind === 'forecast' ? 'nächste 24 h' : '24 h'}`, min: 0, max: rainMax, value: rain24, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
+      id: 'rain', kind: 'radial', title: 'Regenmenge', unit: U.rain.label, min: 0, max: rainMax, value: Number.isFinite(rainPast) ? rainPast : rainNext, decimals: U.rain.decimals, scaleDecimals: U.rain.scaleDecimals ?? 0,
+      // (two displays instead of the one of the dial, as the wind direction has: the text above each of them and the value in it)
+      lcds: [
+        { title: 'last 24h', text: fmt(rainPast, U.rain.decimals) },
+        { title: 'next 24h', text: fmt(rainNext, U.rain.decimals) },
+      ],
+      caption: `Regenmenge in ${U.rain.label}`,
       sections: [
         { start: 0, stop: rainMax * 0.5, color: 'rgb(0,170,60)' },
         { start: rainMax * 0.5, stop: rainMax * 0.8, color: WARM },
         { start: rainMax * 0.8, stop: rainMax, color: RED },
       ],
-      areas: [], trend: null, caption: '',
+      areas: [], trend: null,
     },
   ]
+}
+
+// Two displays one above the other on a dial, as the wind direction has them: the first over the knob with its text above it, the second
+// under the knob with its text below it (sizes and places as parts of the dial). They are drawn into a picture that the dial takes as its
+// background layer (`customLayer`), so that the pointer moves over them.
+const DISPLAY = { width: 0.305, height: 0.12, tops: [0.32, 0.57], textY: [0.285, 0.725] }
+const LAYER_PART = 0.831775 // how much of the dial the library gives a background layer (centred)
+
+export function displaysLayer(ss, size, displays, lcdColor, textColor) {
+  const side = Math.round(size * LAYER_PART)
+  const offset = (size - side) / 2
+  const layer = document.createElement('canvas')
+  layer.width = side
+  layer.height = side
+  const ctx = layer.getContext('2d')
+  ctx.fillStyle = textColor
+  ctx.font = `${Math.round(size * 0.04)}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  displays.slice(0, 2).forEach((display, n) => {
+    const w = Math.round(size * DISPLAY.width)
+    const h = Math.round(size * DISPLAY.height)
+    const lcd = document.createElement('canvas')
+    new ss.DisplaySingle(lcd, { width: w, height: h, lcdColor, unitStringVisible: false, headerStringVisible: false, valuesNumeric: false }).setValue(display.text)
+    ctx.drawImage(lcd, Math.round((size - w) / 2 - offset), Math.round(size * DISPLAY.tops[n] - offset))
+    ctx.fillText(display.title, size / 2 - offset, size * DISPLAY.textY[n] - offset, w)
+  })
+  return layer
 }
 
 const GAP = 24 // between two dials
@@ -184,6 +218,28 @@ export function viewFor(width, height, total = 6) {
 
 const PROVIDERS = { openmeteo: 'Open-Meteo', metno: 'MET Norway' }
 
+// How the dials look (the settings name the library's own designs in lower case: "shiny_metal" is `FrameDesign.SHINY_METAL`).
+// A value the library does not know - an old setting, a newer library - gives the design the dials always had.
+export const LOOK_DEFAULTS = {
+  frameDesign: ['FrameDesign', 'METAL'],
+  backgroundColor: ['BackgroundColor', 'BEIGE'],
+  pointerType: ['PointerType', 'TYPE1'],
+  pointerColor: ['ColorDef', 'RED'],
+  knobType: ['KnobType', 'METAL_KNOB'],
+  knobStyle: ['KnobStyle', 'SILVER'],
+}
+
+/** The designs of the dials from the settings, as the library's values: `{ frameDesign, backgroundColor, pointerType, pointerColor, knobType, knobStyle }`. */
+export function designsOf(ss, settings) {
+  const designs = {}
+  for (const [key, [group, fallback]] of Object.entries(LOOK_DEFAULTS)) {
+    const wanted = typeof settings?.[key] === 'string' ? settings[key].toUpperCase() : ''
+    const table = ss[group] ?? {}
+    designs[key] = Object.hasOwn(table, wanted) ? table[wanted] : table[fallback]
+  }
+  return designs
+}
+
 export function activate(api) {
   const settings = api.settings()
   const configured = Number.isFinite(settings?.lat) && Number.isFinite(settings?.lon)
@@ -200,7 +256,19 @@ export function activate(api) {
       document.head.append(script)
     }))
 
+  // (the page is loaded again when settings change - and by "Änderungen übernehmen": it opens again if it was open, or if the box says so)
+  const OPEN_KEY = 'mupibox.weather.open'
+  const remember = (on) => {
+    try {
+      if (on) sessionStorage.setItem(OPEN_KEY, '1')
+      else sessionStorage.removeItem(OPEN_KEY)
+    } catch {
+      // (no storage: the page does not open again by itself)
+    }
+  }
+
   function open() {
+    remember(true)
     api.overlay.open({
       title: settings?.placeName ? `Wetter – ${settings.placeName}` : 'Wetter',
       // (the dials use the whole height; the back arrow floats in the corner, where the round dial leaves room)
@@ -226,6 +294,7 @@ export function activate(api) {
         const shown = new Map()
         let lastSize = 0
         let lastKey = ''
+        let lastValues = '' // the values the dials show, as text
         let total = 6 // how many dials there are (set when they are drawn)
 
         // (the dials side by side as large as the page allows: not higher than the page lets room for a line of text under the
@@ -261,21 +330,21 @@ export function activate(api) {
             caption.style.cssText = 'height:26px;display:flex;align-items:center;gap:14px;font:500 15px/1 var(--ion-font-family,inherit);opacity:.85;white-space:nowrap'
             cell.append(canvas, caption)
             row.append(cell)
+            const designs = designsOf(ss, settings)
             const look = {
               size,
-              frameDesign: ss.FrameDesign.METAL,
-              backgroundColor: ss.BackgroundColor.BEIGE,
+              frameDesign: designs.frameDesign,
+              backgroundColor: designs.backgroundColor,
               lcdColor: ss.LcdColor.STANDARD,
-              pointerColor: ss.ColorDef.RED,
               foregroundType: ss.ForegroundType.TYPE1,
-              knobType: ss.KnobType.METAL_KNOB,
-              knobStyle: ss.KnobStyle.SILVER,
+              knobType: designs.knobType,
+              knobStyle: designs.knobStyle,
               ledVisible: false,
               // (seconds of a swing over the whole scale: 5 as on the club's page, the library's own 2.5 is too quick)
               fullScaleDeflectionTime: 5,
             }
             if (dial.kind === 'direction') {
-              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColorAverage: ss.ColorDef.BLUE })
+              const gauge = new ss.WindDirection(canvas, { ...look, lcdTitleStrings: ['Aktuell', 'Mittelwert'], pointSymbols: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'], pointerColor: ss.ColorDef.RED, pointerColorAverage: ss.ColorDef.BLUE })
               const latest = Number.isFinite(dial.latest) ? dial.latest : 0
               const average = Number.isFinite(dial.average) ? dial.average : 0
               if (moving) {
@@ -304,15 +373,21 @@ export function activate(api) {
             }
             const gauge = new ss.Radial(canvas, {
               ...look,
+              pointerType: designs.pointerType,
+              pointerColor: designs.pointerColor,
               gaugeType: ss.GaugeType.TYPE4,
               minValue: dial.min,
               maxValue: dial.max,
-              titleString: dial.title,
-              unitString: dial.unit,
+              // (a dial with displays of its own - the rain - has its title and unit under it, and the displays in its background)
+              titleString: dial.lcds ? '' : dial.title,
+              unitString: dial.lcds ? '' : dial.unit,
+              ...(dial.lcds ? { customLayer: displaysLayer(ss, size, dial.lcds, look.lcdColor, designs.backgroundColor.labelColor.getRgbaColor()) } : {}),
               lcdDecimals: dial.decimals,
               // (a scale in inHg or inch has labels like 29.5, not 30)
               fractionalScaleDecimals: dial.scaleDecimals ?? 0,
               ...(dial.scaleDecimals ? { labelNumberFormat: ss.LabelNumberFormat.FRACTIONAL } : {}),
+              // (a dial with displays of its own - the rain - has not the one of the library)
+              lcdVisible: !dial.lcds,
               section: dial.sections,
               area: dial.areas,
               thresholdVisible: false,
@@ -374,9 +449,15 @@ export function activate(api) {
             foot.textContent = data ? 'Der Wetterserver antwortet nicht – letzte Werte' : 'Der Wetterserver antwortet nicht.'
             return
           }
+          // (asked every minute, the dials are drawn again only when a value has changed)
+          const { timeText, lastText, nextText, stale, ...values } = answer
+          const sig = JSON.stringify(values)
+          const changed = sig !== lastValues
+          lastValues = sig
           data = answer
-          draw(true)
-          foot.textContent = [answer.place, `Stand ${answer.timeText}`, PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
+          if (changed) draw(true)
+          // (the place is in the title already: here when the values came and when the server has new ones)
+          foot.textContent = [answer.lastText ? `Letzte Aktualisierung ${answer.lastText}` : '', answer.nextText ? `Nächste ${answer.nextText}` : '', PROVIDERS[answer.provider], answer.stale ? 'Server antwortet nicht – letzte Werte' : ''].filter(Boolean).join('  ·  ')
         }
 
         let resizeTimer = null
@@ -402,9 +483,10 @@ export function activate(api) {
             foot.textContent = 'Die Anzeigen konnten nicht geladen werden.'
           },
         )
-        const timer = setInterval(() => void refresh(), intervalMs(settings))
+        const timer = setInterval(() => void refresh(), REFRESH_MS)
         return () => {
           closed = true
+          remember(false)
           clearInterval(timer)
           clearTimeout(resizeTimer)
           observer?.disconnect()
@@ -415,4 +497,17 @@ export function activate(api) {
   }
 
   api.tabs.set({ id: 'weather', src: api.url('icon.svg'), visible: configured, onSelect: open })
+
+  if (configured) {
+    let wasOpen = false
+    try {
+      wasOpen = sessionStorage.getItem(OPEN_KEY) === '1'
+    } catch {
+      // (see above)
+    }
+    // (asked in any case: the answer is used up by the question, so that it holds for one start of the page only)
+    void Promise.resolve(api.fetchApi('/reopen')).then((answer) => {
+      if (wasOpen || answer?.open) open()
+    })
+  }
 }

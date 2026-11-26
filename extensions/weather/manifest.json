@@ -1,9 +1,9 @@
 {
   "id": "weather",
   "name": "Wetter",
-  "version": "1.5.2",
+  "version": "1.10.2",
   "description": "Das Wetter eines Ortes als Messuhren auf dem Display: Temperatur, Luftfeuchte, Wind, Luftdruck und Regen. Wetterserver und Ort wählst du in der Webapp.",
-  "hostApi": 3,
+  "hostApi": 19,
   "resources": {},
   "api": "api.js",
   "display": "display.js",
@@ -31,20 +31,6 @@
       "type": "number",
       "min": -180,
       "max": 180
-    },
-    "refreshEvery": {
-      "type": "number",
-      "default": 10,
-      "min": 1,
-      "max": 999
-    },
-    "refreshUnit": {
-      "type": "string",
-      "default": "minutes",
-      "options": [
-        "seconds",
-        "minutes"
-      ]
     },
     "tempUnit": {
       "type": "string",
@@ -85,13 +71,126 @@
     "order": {
       "type": "string",
       "default": "temp,hum,wind,dir,baro,rain",
-      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$"
+      "pattern": "^[a-z]{2,10}(,[a-z]{2,10}){0,11}$",
+      "quiet": true
+    },
+    "frameDesign": {
+      "type": "string",
+      "default": "metal",
+      "options": [
+        "black_metal",
+        "metal",
+        "shiny_metal",
+        "brass",
+        "steel",
+        "chrome",
+        "gold",
+        "anthracite",
+        "tilted_gray",
+        "tilted_black",
+        "glossy_metal"
+      ],
+      "quiet": true
+    },
+    "backgroundColor": {
+      "type": "string",
+      "default": "beige",
+      "options": [
+        "dark_gray",
+        "satin_gray",
+        "light_gray",
+        "white",
+        "black",
+        "beige",
+        "brown",
+        "red",
+        "green",
+        "blue",
+        "anthracite",
+        "mud",
+        "punched_sheet",
+        "carbon",
+        "stainless",
+        "brushed_metal",
+        "brushed_stainless",
+        "turned"
+      ],
+      "quiet": true
+    },
+    "pointerType": {
+      "type": "string",
+      "default": "type1",
+      "options": [
+        "type1",
+        "type2",
+        "type3",
+        "type4",
+        "type5",
+        "type6",
+        "type7",
+        "type8",
+        "type9",
+        "type10",
+        "type11",
+        "type12",
+        "type13",
+        "type14",
+        "type15",
+        "type16"
+      ],
+      "quiet": true
+    },
+    "pointerColor": {
+      "type": "string",
+      "default": "red",
+      "options": [
+        "red",
+        "green",
+        "blue",
+        "orange",
+        "yellow",
+        "cyan",
+        "magenta",
+        "white",
+        "gray",
+        "black",
+        "raith",
+        "jug_green",
+        "green_lcd"
+      ],
+      "quiet": true
+    },
+    "knobType": {
+      "type": "string",
+      "default": "metal_knob",
+      "options": [
+        "standard_knob",
+        "metal_knob"
+      ],
+      "quiet": true
+    },
+    "knobStyle": {
+      "type": "string",
+      "default": "silver",
+      "options": [
+        "black",
+        "brass",
+        "silver"
+      ],
+      "quiet": true
     }
   },
   "ui": {
     "title": "Wetter",
-    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet und aktualisiert sie alle zehn Minuten.",
+    "heading": "Wetter",
+    "place": "system",
+    "help": "Ist ein Ort gewählt, zeigt das Display oben den Reiter „Wetter“. Ein Tipp darauf öffnet die Messuhren. Die Box holt die Werte im Internet, sobald der Wetterserver neue hat.",
     "items": [
+      {
+        "type": "heading",
+        "label": "Wetterserver und Ort",
+        "card": true
+      },
       {
         "key": "provider",
         "label": "Wetterserver",
@@ -115,23 +214,20 @@
         "help": "Nach dem Namen suchen und einen Treffer antippen."
       },
       {
-        "key": "refreshEvery",
-        "label": "Aktualisieren alle …",
-        "help": "Wie oft die geöffnete Wetteranzeige neue Werte holt (Zahl eintragen, dann Speichern; mindestens alle 10 Sekunden). Die Wetterserver liefern neue Werte nur etwa stündlich, die Box fragt sie höchstens einmal pro Minute ab."
+        "type": "heading",
+        "label": "Aktualisierung",
+        "card": true
       },
       {
-        "key": "refreshUnit",
-        "label": "Einheit",
-        "choices": [
-          {
-            "value": "seconds",
-            "label": "Sekunden"
-          },
-          {
-            "value": "minutes",
-            "label": "Minuten"
-          }
-        ]
+        "type": "status",
+        "label": "Wetterdaten",
+        "state": "/api/ext/weather/state",
+        "help": "Die Wetterserver liefern nur in festen Abständen neue Werte: MET Norway etwa alle 30 Minuten (stündliche Modellwerte, die die Box auf die aktuelle Minute umrechnet), Open-Meteo alle 15 Minuten. Die Box fragt deshalb erst wieder, wenn eine neue Antwort fällig ist, und der Abstand lässt sich nicht einstellen."
+      },
+      {
+        "type": "heading",
+        "label": "Einheiten",
+        "card": true
       },
       {
         "key": "tempUnit",
@@ -206,6 +302,301 @@
         ]
       },
       {
+        "type": "heading",
+        "label": "Aussehen der Uhren",
+        "card": true,
+        "help": "Das Aussehen der Messuhren. Die Namen der Rahmen und Hintergründe stammen aus der SteelSeries-Bibliothek, die die Uhren zeichnet."
+      },
+      {
+        "key": "frameDesign",
+        "label": "Rahmen",
+        "choices": [
+          {
+            "value": "black_metal",
+            "label": "Black Metal"
+          },
+          {
+            "value": "metal",
+            "label": "Metal"
+          },
+          {
+            "value": "shiny_metal",
+            "label": "Shiny Metal"
+          },
+          {
+            "value": "brass",
+            "label": "Brass"
+          },
+          {
+            "value": "steel",
+            "label": "Steel"
+          },
+          {
+            "value": "chrome",
+            "label": "Chrome"
+          },
+          {
+            "value": "gold",
+            "label": "Gold"
+          },
+          {
+            "value": "anthracite",
+            "label": "Anthracite"
+          },
+          {
+            "value": "tilted_gray",
+            "label": "Tilted Gray"
+          },
+          {
+            "value": "tilted_black",
+            "label": "Tilted Black"
+          },
+          {
+            "value": "glossy_metal",
+            "label": "Glossy Metal"
+          }
+        ]
+      },
+      {
+        "key": "backgroundColor",
+        "label": "Hintergrund",
+        "choices": [
+          {
+            "value": "dark_gray",
+            "label": "Dark Gray"
+          },
+          {
+            "value": "satin_gray",
+            "label": "Satin Gray"
+          },
+          {
+            "value": "light_gray",
+            "label": "Light Gray"
+          },
+          {
+            "value": "white",
+            "label": "White"
+          },
+          {
+            "value": "black",
+            "label": "Black"
+          },
+          {
+            "value": "beige",
+            "label": "Beige"
+          },
+          {
+            "value": "brown",
+            "label": "Brown"
+          },
+          {
+            "value": "red",
+            "label": "Red"
+          },
+          {
+            "value": "green",
+            "label": "Green"
+          },
+          {
+            "value": "blue",
+            "label": "Blue"
+          },
+          {
+            "value": "anthracite",
+            "label": "Anthracite"
+          },
+          {
+            "value": "mud",
+            "label": "Mud"
+          },
+          {
+            "value": "punched_sheet",
+            "label": "Punched Sheet"
+          },
+          {
+            "value": "carbon",
+            "label": "Carbon"
+          },
+          {
+            "value": "stainless",
+            "label": "Stainless"
+          },
+          {
+            "value": "brushed_metal",
+            "label": "Brushed Metal"
+          },
+          {
+            "value": "brushed_stainless",
+            "label": "Brushed Stainless"
+          },
+          {
+            "value": "turned",
+            "label": "Turned"
+          }
+        ]
+      },
+      {
+        "key": "pointerType",
+        "label": "Zeigerform",
+        "help": "Gilt für die runden Uhren. Die Windrichtung behält ihre zwei Zeiger.",
+        "choices": [
+          {
+            "value": "type1",
+            "label": "1"
+          },
+          {
+            "value": "type2",
+            "label": "2"
+          },
+          {
+            "value": "type3",
+            "label": "3"
+          },
+          {
+            "value": "type4",
+            "label": "4"
+          },
+          {
+            "value": "type5",
+            "label": "5"
+          },
+          {
+            "value": "type6",
+            "label": "6"
+          },
+          {
+            "value": "type7",
+            "label": "7"
+          },
+          {
+            "value": "type8",
+            "label": "8"
+          },
+          {
+            "value": "type9",
+            "label": "9"
+          },
+          {
+            "value": "type10",
+            "label": "10"
+          },
+          {
+            "value": "type11",
+            "label": "11"
+          },
+          {
+            "value": "type12",
+            "label": "12"
+          },
+          {
+            "value": "type13",
+            "label": "13"
+          },
+          {
+            "value": "type14",
+            "label": "14"
+          },
+          {
+            "value": "type15",
+            "label": "15"
+          },
+          {
+            "value": "type16",
+            "label": "16"
+          }
+        ]
+      },
+      {
+        "key": "pointerColor",
+        "label": "Zeigerfarbe",
+        "choices": [
+          {
+            "value": "red",
+            "label": "Rot"
+          },
+          {
+            "value": "green",
+            "label": "Grün"
+          },
+          {
+            "value": "blue",
+            "label": "Blau"
+          },
+          {
+            "value": "orange",
+            "label": "Orange"
+          },
+          {
+            "value": "yellow",
+            "label": "Gelb"
+          },
+          {
+            "value": "cyan",
+            "label": "Cyan"
+          },
+          {
+            "value": "magenta",
+            "label": "Magenta"
+          },
+          {
+            "value": "white",
+            "label": "Weiß"
+          },
+          {
+            "value": "gray",
+            "label": "Grau"
+          },
+          {
+            "value": "black",
+            "label": "Schwarz"
+          },
+          {
+            "value": "raith",
+            "label": "Raith"
+          },
+          {
+            "value": "jug_green",
+            "label": "Jug Green"
+          },
+          {
+            "value": "green_lcd",
+            "label": "Green LCD"
+          }
+        ]
+      },
+      {
+        "key": "knobType",
+        "label": "Knopf",
+        "choices": [
+          {
+            "value": "standard_knob",
+            "label": "Standard"
+          },
+          {
+            "value": "metal_knob",
+            "label": "Metall"
+          }
+        ]
+      },
+      {
+        "key": "knobStyle",
+        "label": "Knopffarbe",
+        "choices": [
+          {
+            "value": "black",
+            "label": "Schwarz"
+          },
+          {
+            "value": "brass",
+            "label": "Messing"
+          },
+          {
+            "value": "silver",
+            "label": "Silber"
+          }
+        ]
+      },
+      {
         "key": "order",
         "label": "Reihenfolge der Uhren",
         "help": "Fasse eine Uhr am Griff an und schiebe sie an eine andere Stelle. Ein kleines Display zeigt zwei Uhren nebeneinander, ein breites so viele, wie hineinpassen.",
@@ -236,6 +627,12 @@
             "label": "Regenmenge"
           }
         ]
+      },
+      {
+        "type": "action",
+        "label": "Änderungen übernehmen",
+        "post": "/api/ext/weather/apply",
+        "help": "Die Änderungen an Aussehen und Reihenfolge der Uhren gelten erst, wenn du sie übernimmst. Dann lädt das Display neu und öffnet wieder „Wetter“."
       }
     ]
   }
